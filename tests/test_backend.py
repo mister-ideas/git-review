@@ -14,6 +14,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from git_review import api, gitx, select_store, select_tool
 
+
+def posix(path):
+    """Paths are reported with forward slashes; native strings differ on Windows."""
+    return str(path).replace("\\", "/")
+
+
 class BackendTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='git-review-audit-', dir=os.environ.get('TMPDIR'))
@@ -26,7 +32,7 @@ class BackendTests(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.repo = self.make_repo(self.root / 'workspace' / 'category' / 'repo')
-        (self.repo / 'file.txt').write_text('one\ntwo\n')
+        (self.repo / 'file.txt').write_text('one\ntwo\n', newline='\n')
         self.first = self.commit('root')
         app = FastAPI()
         app.include_router(api.router, prefix='/api/plugins/git-review')
@@ -50,17 +56,17 @@ class BackendTests(unittest.TestCase):
 
     def test_turn_base_snapshot(self):
         self.config(repos=str(self.repo))
-        (self.repo / 'pre.txt').write_text('pre\n')
+        (self.repo / 'pre.txt').write_text('pre\n', newline='\n')
         (self.repo / 'sub').mkdir()
-        (self.repo / 'sub' / 'pre2.txt').write_text('pre2\n')
-        (self.repo / '.gitignore').write_text('ignored.log\n')
-        (self.repo / 'ignored.log').write_text('x\n')
+        (self.repo / 'sub' / 'pre2.txt').write_text('pre2\n', newline='\n')
+        (self.repo / '.gitignore').write_text('ignored.log\n', newline='\n')
+        (self.repo / 'ignored.log').write_text('x\n', newline='\n')
         index = (self.repo / '.git' / 'index').read_bytes()
         objects = self.git('count-objects', '-v')
         response = self.post('turn-base', repo=str(self.repo / 'sub'))
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
-        self.assertEqual(body['repo'], str(self.repo))
+        self.assertEqual(posix(body['repo']), posix(self.repo))
         self.assertEqual(body['base'], self.first)
         self.assertEqual(sorted(body['untracked']), ['.gitignore', 'pre.txt', 'sub/pre2.txt'])
         self.assertFalse(body['untracked_truncated'])
@@ -69,19 +75,19 @@ class BackendTests(unittest.TestCase):
 
     def test_turn_diff_shows_commit_edit_and_new_untracked_not_preexisting(self):
         self.config(repos=str(self.repo))
-        (self.repo / 'other.txt').write_text('a\n')
+        (self.repo / 'other.txt').write_text('a\n', newline='\n')
         self.commit('other')
-        (self.repo / 'pre.txt').write_text('pre-existing\n')
+        (self.repo / 'pre.txt').write_text('pre-existing\n', newline='\n')
         snap = self.post('turn-base', repo=str(self.repo)).json()
         self.assertEqual(snap['untracked'], ['pre.txt'])
         # The agent turn: commit a change, edit a tracked file, create a new file.
-        (self.repo / 'other.txt').write_text('a\ncommitted\n')
+        (self.repo / 'other.txt').write_text('a\ncommitted\n', newline='\n')
         self.git('add', 'other.txt')
         self.git('commit', '-m', 'turn commit')
-        (self.repo / 'file.txt').write_text('one\ntwo\nedited\n')
-        (self.repo / 'pre.txt').write_text('pre-existing\nchanged during turn\n')
+        (self.repo / 'file.txt').write_text('one\ntwo\nedited\n', newline='\n')
+        (self.repo / 'pre.txt').write_text('pre-existing\nchanged during turn\n', newline='\n')
         (self.repo / 'new dir').mkdir()
-        (self.repo / 'new dir' / 'brand new.txt').write_text('fresh\nfile\n')
+        (self.repo / 'new dir' / 'brand new.txt').write_text('fresh\nfile\n', newline='\n')
         response = self.post('turn-diff', repo=str(self.repo), base=snap['base'],
                              preexisting_untracked=snap['untracked'])
         self.assertEqual(response.status_code, 200, response.text)
@@ -96,7 +102,7 @@ class BackendTests(unittest.TestCase):
         # Without the snapshot the pre-existing file appears.
         self.assertIn('+pre-existing', self.post('turn-diff', repo=str(self.repo), base=snap['base']).json()['patch'])
         # Whitespace-only tracked change is hidden with ignore_ws.
-        (self.repo / 'file.txt').write_text('one  \ntwo\n')
+        (self.repo / 'file.txt').write_text('one  \ntwo\n', newline='\n')
         body = self.post('turn-diff', repo=str(self.repo), base=self.git('rev-parse', 'HEAD'),
                          preexisting_untracked=['pre.txt', 'new dir/brand new.txt'], ignore_ws=True).json()
         self.assertEqual(body['patch'], '')
@@ -104,13 +110,13 @@ class BackendTests(unittest.TestCase):
     def test_turn_diff_unborn_repository(self):
         self.repo = self.make_repo(self.root / 'unborn')
         self.config(repos=str(self.repo))
-        (self.repo / 'old.txt').write_text('old\n')
+        (self.repo / 'old.txt').write_text('old\n', newline='\n')
         snap = self.post('turn-base', repo=str(self.repo)).json()
         self.assertIsNone(snap['base'])
         self.assertEqual(snap['untracked'], ['old.txt'])
-        (self.repo / 'staged.txt').write_text('staged\n')
+        (self.repo / 'staged.txt').write_text('staged\n', newline='\n')
         self.git('add', 'staged.txt')
-        (self.repo / 'new.txt').write_text('new\n')
+        (self.repo / 'new.txt').write_text('new\n', newline='\n')
         body = self.post('turn-diff', repo=str(self.repo), base=None,
                          preexisting_untracked=snap['untracked']).json()
         self.assertIn('+staged', body['patch'])
@@ -136,7 +142,7 @@ class BackendTests(unittest.TestCase):
     def test_turn_diff_bounds_untracked_count_and_bytes(self):
         self.config(repos=str(self.repo))
         for i in range(5):
-            (self.repo / f'n{i}.txt').write_text(f'{i}\n')
+            (self.repo / f'n{i}.txt').write_text(f'{i}\n', newline='\n')
         with patch.object(gitx, 'MAX_TURN_UNTRACKED', 3):
             body = gitx.turn_diff(self.repo, self.first, [])
         self.assertEqual(body['patch'].count('diff --git'), 3)
@@ -145,7 +151,7 @@ class BackendTests(unittest.TestCase):
             body = gitx.turn_diff(self.repo, self.first, [])
         self.assertLess(len(body['patch']), 200)
         self.assertIn('display limit', body['note'])
-        (self.repo / 'file.txt').write_text('x' * (gitx.MAX_DIFF_BYTES + 70000))
+        (self.repo / 'file.txt').write_text('x' * (gitx.MAX_DIFF_BYTES + 70000), newline='\n')
         body = gitx.turn_diff(self.repo, self.first, [])
         self.assertEqual(body['patch'], '')
         self.assertIn('limit', body['note'])
@@ -165,11 +171,11 @@ class BackendTests(unittest.TestCase):
 
     def test_file_lines_revisions_and_clamping(self):
         self.config(repos=str(self.repo))
-        (self.repo / 'long.txt').write_text(''.join(f'c{i}\n' for i in range(1, 11)))
+        (self.repo / 'long.txt').write_text(''.join(f'c{i}\n' for i in range(1, 11)), newline='\n')
         sha = self.commit('long')
-        (self.repo / 'long.txt').write_text(''.join(f'i{i}\n' for i in range(1, 6)))
+        (self.repo / 'long.txt').write_text(''.join(f'i{i}\n' for i in range(1, 6)), newline='\n')
         self.git('add', 'long.txt')
-        (self.repo / 'long.txt').write_text('w1\nw2\nw3')
+        (self.repo / 'long.txt').write_text('w1\nw2\nw3', newline='\n')
         r = self.file_lines(path='long.txt', rev='worktree', start=2, end=50)
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json(), {'lines': ['w2', 'w3'], 'start': 2, 'end': 3, 'total': 3})
@@ -208,7 +214,7 @@ class BackendTests(unittest.TestCase):
             self.assertEqual(response.status_code, 400)
             self.assertIn('binary', response.text)
         outside = self.root / 'secret.txt'
-        outside.write_text('secret\n')
+        outside.write_text('secret\n', newline='\n')
         (self.repo / 'escape').symlink_to(outside)
         (self.repo / 'linkdir').symlink_to(self.root)
         for path in ['escape', 'linkdir/secret.txt']:
@@ -219,13 +225,13 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(self.file_lines(**{**ok, 'path': 'inner'}).json()['lines'], ['one'])
         self.assertEqual(self.file_lines(**{**ok, 'path': 'subdir_missing/x'}).status_code, 404)
         big = self.repo / 'big.txt'
-        big.write_text('x\n' * (gitx.MAX_DIFF_BYTES // 2 + 10))
+        big.write_text('x\n' * (gitx.MAX_DIFF_BYTES // 2 + 10), newline='\n')
         self.assertEqual(self.file_lines(**{**ok, 'path': 'big.txt'}).status_code, 400)
         self.git('add', 'big.txt')
         self.assertEqual(self.file_lines(**{**ok, 'path': 'big.txt', 'rev': 'index'}).status_code, 400)
         # A directory at a commit is not a file.
         (self.repo / 'd').mkdir()
-        (self.repo / 'd' / 'f').write_text('f\n')
+        (self.repo / 'd' / 'f').write_text('f\n', newline='\n')
         sha = self.commit('dir')
         self.assertEqual(self.file_lines(**{**ok, 'path': 'd', 'rev': sha}).status_code, 404)
         self.assertEqual(self.file_lines(**{**ok, 'path': 'd', 'rev': 'worktree'}).status_code, 404)
@@ -249,7 +255,7 @@ class BackendTests(unittest.TestCase):
     def config(self, workspace='', repos='', roots=''):
         import yaml
         (self.home / 'config.yaml').write_text(yaml.safe_dump({'terminal': {'cwd': workspace},
-            'plugins': {'entries': {'git-review': {'settings': {'repos': repos, 'roots': roots}}}}}))
+            'plugins': {'entries': {'git-review': {'settings': {'repos': repos, 'roots': roots}}}}}), newline='\n')
 
     def get(self, route, **params):
         return self.client.get('/api/plugins/git-review/' + route, params=params)
@@ -258,7 +264,7 @@ class BackendTests(unittest.TestCase):
         response = self.get('worktrees', cwd=cwd)
         self.assertEqual(response.status_code, 200, response.text)
         paths = [r['path'] for r in response.json()['worktrees']]
-        self.assertIn(str(self.repo), paths)
+        self.assertIn(posix(self.repo), [posix(p) for p in paths])
         for path in paths:
             response = self.get('meta', repo=path, cwd=cwd)
             self.assertEqual(response.status_code, 200, response.text)
@@ -284,7 +290,7 @@ class BackendTests(unittest.TestCase):
         other = self.make_repo(self.root / 'arbitrary')
         self.assertEqual(self.get('meta', repo=str(other), cwd=str(other)).status_code, 403)
         self.assertEqual(self.get('meta', repo=str(self.repo), cwd=str(other)).status_code, 200)
-        self.assertNotIn(str(other), self.inventory(str(other)))
+        self.assertNotIn(posix(other), [posix(p) for p in self.inventory(str(other))])
 
     def test_http_selected_commits_supports_50_and_200_full_shas(self):
         self.config(repos=str(self.repo))
@@ -339,9 +345,10 @@ class BackendTests(unittest.TestCase):
             db.execute('UPDATE sessions SET cwd = ?', (str(other),))
             self.assertEqual(self.get('meta', repo=str(other), cwd=str(other)).status_code, 200)
             self.assertEqual(self.get('meta', repo=str(self.repo), cwd=str(self.repo)).status_code, 403)
-            self.assertEqual([item['path'] for item in self.get('worktrees', cwd=str(other)).json()['worktrees']],
-                             [str(other)])
+            self.assertEqual([posix(item['path']) for item in self.get('worktrees', cwd=str(other)).json()['worktrees']],
+                             [posix(other)])
 
+    @unittest.skipIf(os.name == 'nt', "'?' is invalid in Windows filenames")
     def test_session_database_special_uri_characters(self):
         path = self.root / 'state?#.db'
         with closing(sqlite3.connect(path, isolation_level=None)) as db:
@@ -352,10 +359,10 @@ class BackendTests(unittest.TestCase):
     def test_discovery_depth_skip_dedup(self):
         deep = self.make_repo(self.root / 'workspace' / 'a' / 'b' / 'deep')
         skipped = self.make_repo(self.root / 'workspace' / 'node_modules' / 'hidden')
-        discovered = gitx.discover(self.root / 'workspace')
-        self.assertIn(str(self.repo), discovered)
-        self.assertNotIn(str(deep), discovered)
-        self.assertNotIn(str(skipped), discovered)
+        discovered = [posix(p) for p in gitx.discover(self.root / 'workspace')]
+        self.assertIn(posix(self.repo), discovered)
+        self.assertNotIn(posix(deep), discovered)
+        self.assertNotIn(posix(skipped), discovered)
         self.assertEqual(gitx.discover(self.repo / '.git'), [])
         self.config(repos=str(self.repo), roots=str(self.root / 'workspace'))
         self.assertEqual(self.inventory().count(str(self.repo)), 1)
@@ -379,7 +386,7 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(self.get('meta', repo='relative').status_code, 400)
 
     def test_whitespace_all_relevant_scopes(self):
-        (self.repo / 'file.txt').write_text('one  \ntwo\n')
+        (self.repo / 'file.txt').write_text('one  \ntwo\n', newline='\n')
         self.assertTrue(gitx.diff(self.repo, 'uncommitted')['patch'])
         self.assertEqual(gitx.diff(self.repo, 'uncommitted', ignore_ws=True)['patch'], '')
         self.git('add', 'file.txt')
@@ -392,29 +399,29 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(multi['added'], 2)
 
     def test_context_is_foldable_and_bounded(self):
-        (self.repo / 'file.txt').write_text(''.join(f'line {i}\n' for i in range(160)))
+        (self.repo / 'file.txt').write_text(''.join(f'line {i}\n' for i in range(160)), newline='\n')
         self.commit('long')
         lines = (self.repo / 'file.txt').read_text().splitlines(True)
         lines[80] = 'changed\n'
-        (self.repo / 'file.txt').write_text(''.join(lines))
+        (self.repo / 'file.txt').write_text(''.join(lines), newline='\n')
         result = gitx.diff(self.repo, 'uncommitted')
         context = [l for l in result['patch'].splitlines() if l.startswith(' ')]
         self.assertEqual(len(context), 2 * gitx.DIFF_CONTEXT_LINES)
         self.assertEqual((result['added'], result['removed']), (1, 1))
 
     def test_all_commits_default_explicit_base(self):
-        (self.repo / 'file.txt').write_text('three\n')
+        (self.repo / 'file.txt').write_text('three\n', newline='\n')
         sha = self.commit('second')
         self.assertEqual([c['sha'] for c in gitx.commits(self.repo)['commits']], [sha, self.first])
         self.assertEqual([c['sha'] for c in gitx.commits(self.repo, self.first)['commits']], [sha])
         self.assertEqual(len(gitx.diff(self.repo, 'commits')['commits']), 2)
 
     def test_noncontiguous_commits_truthful_separate_patches(self):
-        (self.repo / 'file.txt').write_text('selected\n')
+        (self.repo / 'file.txt').write_text('selected\n', newline='\n')
         second = self.commit('selected')
-        (self.repo / 'unselected.txt').write_text('must not leak\n')
+        (self.repo / 'unselected.txt').write_text('must not leak\n', newline='\n')
         self.commit('unselected')
-        (self.repo / 'file.txt').write_text('final\n')
+        (self.repo / 'file.txt').write_text('final\n', newline='\n')
         fourth = self.commit('final')
         result = gitx.diff(self.repo, 'commits', ref=f'{fourth},{second},{second}')
         self.assertEqual([c['sha'] for c in result['commits']], [fourth, second])
@@ -430,25 +437,27 @@ class BackendTests(unittest.TestCase):
         for path in ['../file.txt', '/etc/passwd', '--output=x', 'a\x00b']:
             with self.subTest(path=path), self.assertRaises(gitx.GitError):
                 gitx.diff(self.repo, 'uncommitted', path=path)
+    @unittest.skipIf(os.name == 'nt', 'wildcards are invalid in Windows filenames')
+    def test_literal_glob_pathspec_is_not_expanded(self):
         for name in ['literal*.txt', 'literal-other.txt']:
-            (self.repo / name).write_text('before\n')
+            (self.repo / name).write_text('before\n', newline='\n')
         self.commit('literal')
         for name in ['literal*.txt', 'literal-other.txt']:
-            (self.repo / name).write_text('after\n')
+            (self.repo / name).write_text('after\n', newline='\n')
         result = gitx.diff(self.repo, 'uncommitted', path='literal*.txt')
         self.assertIn('literal*.txt', result['patch'])
         self.assertNotIn('literal-other.txt', result['patch'])
 
     def test_summary_header_like_content(self):
-        (self.repo / 'file.txt').write_text('--old\n')
+        (self.repo / 'file.txt').write_text('--old\n', newline='\n')
         self.commit('old')
-        (self.repo / 'file.txt').write_text('++new\n')
+        (self.repo / 'file.txt').write_text('++new\n', newline='\n')
         result = gitx.diff(self.repo, 'uncommitted')
         self.assertEqual((result['added'], result['removed']), (1, 1))
 
     def test_read_only_diff_no_checkout(self):
         self.git('branch', 'feature')
-        (self.repo / 'file.txt').write_text('working\n')
+        (self.repo / 'file.txt').write_text('working\n', newline='\n')
         before = (self.git('symbolic-ref', 'HEAD'), self.git('status', '--porcelain'),
                   (self.repo / '.git' / 'index').read_bytes())
         gitx.diff(self.repo, 'uncommitted')
@@ -508,7 +517,7 @@ class BackendTests(unittest.TestCase):
             self.assertIn('GLAB_CONFIG_DIR', capture.call_args.kwargs['env'])
 
     def test_large_diff_refused_not_partial(self):
-        (self.repo / 'file.txt').write_text('x' * (gitx.MAX_DIFF_BYTES + 70000))
+        (self.repo / 'file.txt').write_text('x' * (gitx.MAX_DIFF_BYTES + 70000), newline='\n')
         result = gitx.diff(self.repo, 'uncommitted')
         self.assertEqual(result['patch'], '')
         self.assertIn('limit', result['note'])
@@ -532,7 +541,7 @@ class BackendTests(unittest.TestCase):
 
     def test_history_cap_explicit(self):
         for i in range(3):
-            (self.repo / 'file.txt').write_text(f'{i}\n')
+            (self.repo / 'file.txt').write_text(f'{i}\n', newline='\n')
             self.commit(f'commit {i}')
         with patch.object(gitx, 'MAX_COMMITS', 2):
             history = gitx.commits(self.repo)
@@ -544,10 +553,10 @@ class BackendTests(unittest.TestCase):
 
     def test_merge_counts_match_patch(self):
         self.git('switch', '-c', 'feature')
-        (self.repo / 'new.txt').write_text('new\n')
+        (self.repo / 'new.txt').write_text('new\n', newline='\n')
         self.commit('feature')
         self.git('switch', 'main')
-        (self.repo / 'main.txt').write_text('main\n')
+        (self.repo / 'main.txt').write_text('main\n', newline='\n')
         self.commit('main')
         self.git('merge', '--no-ff', 'feature', '-m', 'merge')
         sha = self.git('rev-parse', 'HEAD')
@@ -557,15 +566,15 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(listed['added'], 1)
 
     def test_sha_filename_not_revision_ambiguity(self):
-        (self.repo / self.first).write_text('ambiguous\n')
-        (self.repo / 'HEAD').write_text('ambiguous\n')
+        (self.repo / self.first).write_text('ambiguous\n', newline='\n')
+        (self.repo / 'HEAD').write_text('ambiguous\n', newline='\n')
         self.commit('paths')
         self.assertTrue(gitx.diff(self.repo, 'commits', ref=self.first)['commits'][0]['patch'])
         self.assertEqual(len(gitx.commits(self.repo)['commits']), 2)
 
     def test_http_diff_status_commits_errors(self):
         self.config(repos=str(self.repo))
-        (self.repo / 'file.txt').write_text('change\n')
+        (self.repo / 'file.txt').write_text('change\n', newline='\n')
         self.assertEqual(self.get('status', repo=str(self.repo)).json()['files'][0]['status'], 'modified')
         response = self.get('diff', repo=str(self.repo), scope='uncommitted', ignore_ws='true')
         self.assertEqual(response.status_code, 200, response.text)
@@ -577,7 +586,7 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(self.get('pending-select', after=-1).status_code, 422)
 
     def test_malformed_settings_fail_closed(self):
-        (self.home / 'config.yaml').write_text('plugins:\n  entries:\n    git-review:\n      settings: [bad]\n')
+        (self.home / 'config.yaml').write_text('plugins:\n  entries:\n    git-review:\n      settings: [bad]\n', newline='\n')
         self.assertEqual(self.get('worktrees').status_code, 200)
         self.assertEqual(self.get('meta', repo=str(self.repo)).status_code, 403)
 
@@ -591,13 +600,13 @@ class BackendTests(unittest.TestCase):
     def test_external_diff_textconv_not_executed(self):
         marker = self.root / 'external-was-run'
         helper = self.root / 'external.py'
-        helper.write_text('from pathlib import Path\nPath(' + repr(str(marker)) + ').write_text("executed")\n')
+        helper.write_text('from pathlib import Path\nPath(' + repr(str(marker)) + ').write_text("executed")\n', newline='\n')
         command = '"' + sys.executable + '" "' + str(helper) + '"'
         self.git('config', 'diff.audit.textconv', command)
         self.git('config', 'diff.external', command)
-        (self.repo / '.gitattributes').write_text('file.txt diff=audit\n')
+        (self.repo / '.gitattributes').write_text('file.txt diff=audit\n', newline='\n')
         self.commit('attributes')
-        (self.repo / 'file.txt').write_text('change\n')
+        (self.repo / 'file.txt').write_text('change\n', newline='\n')
         self.assertTrue(gitx.diff(self.repo, 'uncommitted')['patch'])
         gitx.commits(self.repo)
         gitx.diff(self.repo, 'commits', ref=self.first)
@@ -605,9 +614,9 @@ class BackendTests(unittest.TestCase):
 
     def test_unborn_repository_tracked_working_tree_and_history(self):
         self.repo = self.make_repo(self.root / 'unborn')
-        (self.repo / 'new.txt').write_text('staged\n')
+        (self.repo / 'new.txt').write_text('staged\n', newline='\n')
         self.git('add', 'new.txt')
-        (self.repo / 'new.txt').write_text('working\n')
+        (self.repo / 'new.txt').write_text('working\n', newline='\n')
         index = (self.repo / '.git' / 'index').read_bytes()
         result = gitx.diff(self.repo, 'uncommitted')
         self.assertIn('+working', result['patch'])
@@ -623,7 +632,7 @@ class BackendTests(unittest.TestCase):
 
     def test_arbitrary_commit_from_other_branch(self):
         self.git('switch', '-c', 'other')
-        (self.repo / 'other.txt').write_text('other branch\n')
+        (self.repo / 'other.txt').write_text('other branch\n', newline='\n')
         sha = self.commit('other branch')
         self.git('switch', 'main')
         result = gitx.diff(self.repo, 'commits', ref=sha)
