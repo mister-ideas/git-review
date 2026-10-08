@@ -28,7 +28,7 @@ jobs:
         run: python -m pip install --upgrade pip fastapi httpx pyyaml
 
       - name: Byte-compile all backend sources
-        run: python -m py_compile __init__.py git_review/*.py dashboard/plugin_api.py
+        run: python -m compileall -q __init__.py git_review dashboard/plugin_api.py
 
       - name: Run offline unit tests
         run: python -m unittest discover -s tests -p "test_*.py" -v
