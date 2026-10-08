@@ -1,0 +1,22 @@
+name: git-review
+version: 0.1.0
+description: Read-only Git review pane for focused repositories and configured worktree roots.
+author: mister-ideas
+license: MIT
+manifest_version: 1
+requires_hermes: ">=0.21.3"
+kind: standalone
+provides_tools:
+  - git_review_select
+provides_hooks: []
+provides_middleware: []
+requires_env: []
+config_schema:
+  repos:
+    type: string
+    default: ""
+    description: Newline-separated absolute repository paths to offer.
+  roots:
+    type: string
+    default: ""
+    description: Newline-separated absolute directories to scan for worktrees (bounded two levels, at most 256 directories).
