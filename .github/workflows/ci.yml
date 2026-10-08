@@ -24,6 +24,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip fastapi httpx pyyaml
+
       - name: Byte-compile all backend sources
         run: python -m py_compile __init__.py git_review/*.py dashboard/plugin_api.py
 
@@ -84,7 +87,8 @@ jobs:
           # Publication rule: the plugin is setup-agnostic. Only generic machine
           # paths are checked here; a maintainer-specific name denylist must never
           # be committed (keep it in a gitignored local script).
-          if grep -RniE '/Users/|C:\\Users|\.cursor' --include='*.py' --include='*.js' --include='*.mjs' --include='*.yaml' --include='*.yml' --include='*.md' . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist; then
+          # ci.yml itself contains this pattern, so it is excluded from the scan.
+          if grep -RniE '/Users/|C:\\Users|\.cursor' --include='*.py' --include='*.js' --include='*.mjs' --include='*.yaml' --include='*.yml' --include='*.md' . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist --exclude=ci.yml; then
             echo "::error::Machine-specific identifiers found"; exit 1
           fi
 
