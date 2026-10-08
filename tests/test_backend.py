@@ -365,7 +365,7 @@ class BackendTests(unittest.TestCase):
         self.assertNotIn(posix(skipped), discovered)
         self.assertEqual(gitx.discover(self.repo / '.git'), [])
         self.config(repos=str(self.repo), roots=str(self.root / 'workspace'))
-        self.assertEqual(self.inventory().count(str(self.repo)), 1)
+        self.assertEqual([posix(p) for p in self.inventory()].count(posix(self.repo)), 1)
 
     def test_profile_change_revokes_authorization(self):
         self.config(repos=str(self.repo))
