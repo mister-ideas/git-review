@@ -8,19 +8,36 @@ Author: **mister-ideas**. MIT-licensed Hermes native plugin.
 
 A read-only Git review pane for Hermes Desktop. It shows what changed in the repository you are working in — the agent's last turn, uncommitted, staged or unstaged work, or any selection of commits — in unified or split layout, and lets you cite changed lines into the chat composer. It depends on nothing beyond Hermes itself and `git`.
 
-## What it looks like
-
-Unified layout — every changed file stacked, unchanged runs folded away:
-
 ![The pane in unified layout](docs/pane-unified.png)
 
-Split layout — the same diff side by side, word wrap always on:
+## What it looks like
 
-![The pane in split layout](docs/pane-split.png)
+Unified layout — every changed file stacked, unchanged runs folded away. Split
+layout — the same diff side by side, word wrap always on. Narrow docks keep the
+toolbar on one line and hand the width to the diff.
 
-Narrow docks keep the toolbar on one line and hand the width to the diff:
+| Split | Narrow |
+|---|---|
+| ![The pane in split layout](docs/pane-split.png) | ![The pane in a narrow dock](docs/pane-narrow.png) |
 
-![The pane in a narrow dock](docs/pane-narrow.png)
+## Watch it work
+
+The agent points the pane at a scope, and the pane follows:
+
+![The agent selects a scope and the pane follows](docs/gifs/agent-reveal.gif)
+
+Fold the unchanged runs, then expand the lines outside the patch:
+
+![Folding unchanged lines and expanding the gap around the patch](docs/gifs/fold-gap.gif)
+
+Cite the lines that matter straight into the draft:
+
+![Selecting lines and citing them into the composer](docs/gifs/cite-line.gif)
+
+More states — the scope menu, the commit picker, filters, search, the empty
+state, the last-agent-turn scope — live in
+[docs/screenshots](docs/screenshots). The clips have MP4 twins in
+[docs/video](docs/video) for anywhere that prefers video over GIF.
 
 ## Requirements
 
@@ -123,13 +140,13 @@ Settings are stored under `plugins.entries.git-review.settings`. None of them ar
 npm ci
 npm test                 # unit, smoke and import-allowlist checks
 npm run test:layout      # browser layout suite
-npm run shots            # regenerate the README images in docs/
+npm run media            # regenerate docs/: stills, clips (GIF + MP4) and the banner
 python -m unittest discover -s tests -v
 hermes plugins validate . --install-deps
 python scripts/package.py
 ```
 
-The browser suite needs Chromium (`npx playwright install chromium`) and a Hermes Desktop source checkout. Set `HERMES_DESKTOP_SOURCE=/path/to/apps/desktop` if it is not in the default location. It renders the real SDK components and styles with mocked host services, at narrow, medium and wide pane widths, and it can point at any fixture module through `HERMES_FIXTURES` — `npm run shots` uses that to render the documentation images from a realistic dataset. Python tests use temporary real repositories and the actual FastAPI router.
+The browser suite needs Chromium (`npx playwright install chromium`) and a Hermes Desktop source checkout. Set `HERMES_DESKTOP_SOURCE=/path/to/apps/desktop` if it is not in the default location. It renders the real SDK components and styles with mocked host services, at narrow, medium and wide pane widths, and it can point at any fixture module through `HERMES_FIXTURES` — `npm run media` uses that to render every image and clip in `docs/` from a realistic dataset, driving the real pane and asserting what it shows as it goes. Python tests use temporary real repositories and the actual FastAPI router.
 
 ## Support, issues and releases
 
