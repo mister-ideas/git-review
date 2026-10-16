@@ -137,9 +137,18 @@ def _run(repo: str | Path, *args: str, timeout: int = TIMEOUT, limit: int = MAX_
                          "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"})
 
 
+# Environment a repo CLI needs to find the user's own login. The POSIX names are
+# prefixes (HOME/PATH/LANG…); the Windows ones are exact (APPDATA holds gh/glab
+# config there, SYSTEMROOT is needed to start a console tool at all).
+_TOOL_ENV_PREFIXES = ("LC_", "LANG", "HOME", "PATH", "GITLAB_", "GITHUB", "GH_", "GLAB_", "XDG_")
+_TOOL_ENV_NAMES = frozenset({"APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "USERPROFILE", "SYSTEMROOT",
+                            "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "TEMP", "TMP", "HOMEDRIVE", "HOMEPATH"})
+
+
 def _run_tool(cmd: list[str], *, cwd: str | Path, timeout: int = 12) -> str:
     """Run a read-only repo tool (glab/gh) with a clean, bounded environment."""
-    env = {k: v for k, v in os.environ.items() if k.startswith(("LC_", "LANG", "HOME", "PATH", "GITLAB_", "GITHUB", "GH_", "GLAB_", "XDG_"))}
+    env = {k: v for k, v in os.environ.items()
+           if k.startswith(_TOOL_ENV_PREFIXES) or k.upper() in _TOOL_ENV_NAMES}
     # Never wait for a person: unattended runs must fail fast, not hang on a prompt.
     env.update({"GH_PROMPT_DISABLED": "1", "GIT_TERMINAL_PROMPT": "0", "NO_PROMPT": "1"})
     return _capture(cmd, cwd=str(cwd), env=env, timeout=timeout, limit=256 * 1024)

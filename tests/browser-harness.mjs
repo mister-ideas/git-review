@@ -11,7 +11,11 @@ export const project = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 export async function startLayoutHarness() {
   const desktop = process.env.HERMES_DESKTOP_SOURCE || path.join(os.homedir(), '.hermes/hermes-agent/apps/desktop')
   const src = path.join(desktop, 'src')
-  await fs.access(path.join(src, 'components/ui/search-field.tsx'))
+  try {
+    await fs.access(path.join(src, 'components/ui/search-field.tsx'))
+  } catch {
+    throw new Error(`Desktop sources not found at ${desktop}. Set HERMES_DESKTOP_SOURCE to your apps/desktop checkout.`)
+  }
   const coreRequire = createRequire(path.join(desktop, 'package.json'))
   const serviceId = '\0fixture-services'
   const sdkId = '\0fixture-sdk'
