@@ -41,11 +41,30 @@ class NotFound(GitError):
     """The requested file or blob does not exist at that revision."""
 
 
+_WHICH: dict[tuple[str, str], str] = {}
+
+
+def _which(name: str) -> str:
+    """Absolute path of a tool on the current PATH, memoized per PATH value."""
+    if os.path.isabs(name):
+        return name
+    key = (name, os.environ.get("PATH", ""))
+    if key not in _WHICH:
+        import shutil
+        _WHICH[key] = shutil.which(name) or name
+    return _WHICH[key]
+
+
 def _capture(cmd: list[str], *, cwd=None, env=None, timeout=TIMEOUT, limit=MAX_DIFF_BYTES + 65536,
              ok=(0,), binary: bool = False):
     """Bound output and time on every platform without relying on pipe selectors."""
+    # An absolute executable plus close_fds=False lets CPython use posix_spawn
+    # (several times cheaper than fork/exec). Safe: Python-created descriptors
+    # are non-inheritable by default (PEP 446), so nothing leaks to the child.
+    exe = _which(cmd[0])
     try:
-        proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+        proc = subprocess.Popen([exe, *cmd[1:]], cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                stdin=subprocess.DEVNULL, close_fds=False)
     except ValueError as exc:
         raise GitError("invalid command argument") from exc
     except FileNotFoundError as exc:
@@ -115,12 +134,14 @@ def _run(repo: str | Path, *args: str, timeout: int = TIMEOUT, limit: int = MAX_
          ok=(0,), binary: bool = False):
     return _capture(["git", "-C", str(repo), *args], timeout=timeout, limit=limit, ok=ok, binary=binary,
                     env={**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_PAGER": "cat", "PAGER": "cat",
-                         "GIT_CONFIG_NOSYSTEM": "1"})
+                         "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"})
 
 
 def _run_tool(cmd: list[str], *, cwd: str | Path, timeout: int = 12) -> str:
     """Run a read-only repo tool (glab/gh) with a clean, bounded environment."""
     env = {k: v for k, v in os.environ.items() if k.startswith(("LC_", "LANG", "HOME", "PATH", "GITLAB_", "GITHUB", "GH_", "GLAB_", "XDG_"))}
+    # Never wait for a person: unattended runs must fail fast, not hang on a prompt.
+    env.update({"GH_PROMPT_DISABLED": "1", "GIT_TERMINAL_PROMPT": "0", "NO_PROMPT": "1"})
     return _capture(cmd, cwd=str(cwd), env=env, timeout=timeout, limit=256 * 1024)
 
 
@@ -161,14 +182,28 @@ def discover(base: Path, depth: int = 2) -> list[str]:
                 if e.is_symlink() or not e.is_dir() or e.name in skip or e.name.startswith("."):
                     continue
                 visited += 1
-                if is_worktree(e):
-                    found.append(normalize(e))
+                # A stat per directory, not a git process: discovery runs on every
+                # request and may start from a large directory such as $HOME.
+                if (e / ".git").exists():
+                    found.append(e)
                 else:
                     nxt.append(e)
         current = nxt
         if visited >= 256 or len(found) >= 128:
             break
-    return sorted(set(found))
+    # A directory holding .git is its own worktree root; resolve() matches the
+    # symlink-free form `rev-parse --show-toplevel` reports.
+    return sorted({str(e.resolve()) for e in found})
+
+
+def parallel(fn, items, workers: int = 8) -> list:
+    """Map fn over items with a small thread pool; each git call costs a process spawn."""
+    items = list(items)
+    if len(items) < 2:
+        return [fn(i) for i in items]
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(workers, len(items))) as pool:
+        return list(pool.map(fn, items))
 
 
 def session_cwds(db_path: Path | None = None, limit: int = 15) -> list[str]:
@@ -178,11 +213,24 @@ def session_cwds(db_path: Path | None = None, limit: int = 15) -> list[str]:
     cwd every chat ran in, so the repos the user actually works in surface in
     the pane with zero configuration. Read-only connection; any failure → [].
     """
+    def scan(cwd) -> list[str]:
+        try:
+            path = Path(str(cwd)).expanduser()
+            if path.is_absolute() and path.is_dir():
+                return discover(path)
+        except (GitError, OSError):
+            pass
+        return []
+    return [repo for found in parallel(scan, session_cwd_rows(db_path, limit), workers=4) for repo in found]
+
+
+def session_cwd_rows(db_path: Path | None = None, limit: int = 15) -> tuple[str, ...]:
+    """The most-used session cwds (a cheap read-only query, no discovery)."""
     if db_path is None:
         home = Path(os.environ.get("HERMES_HOME", "") or Path.home() / ".hermes").expanduser()
         db_path = home / "state.db"
     if not db_path.exists():
-        return []
+        return ()
     try:
         import sqlite3
 
@@ -196,16 +244,8 @@ def session_cwds(db_path: Path | None = None, limit: int = 15) -> list[str]:
         finally:
             conn.close()
     except Exception:
-        return []
-    out = []
-    for (cwd,) in rows:
-        try:
-            path = Path(str(cwd)).expanduser()
-            if path.is_absolute() and path.is_dir():
-                out.extend(discover(path))
-        except (GitError, OSError):
-            continue
-    return out
+        return ()
+    return tuple(str(row[0]) for row in rows)
 
 
 def extra_repos(config) -> list[str]:
@@ -224,6 +264,23 @@ def extra_repos(config) -> list[str]:
             except GitError:
                 continue
     return out
+
+
+def current_branch(repo: str | Path) -> str:
+    """Checked-out branch read from HEAD without spawning git ("" when detached)."""
+    dotgit = Path(repo) / ".git"
+    try:
+        if dotgit.is_file():
+            pointer = dotgit.read_text(encoding="utf-8", errors="replace").strip()
+            if not pointer.startswith("gitdir:"):
+                raise GitError("not a git work tree")
+            gitdir = Path(pointer[len("gitdir:"):].strip())
+            dotgit = gitdir if gitdir.is_absolute() else (Path(repo) / gitdir)
+        head = (dotgit / "HEAD").read_text(encoding="utf-8", errors="replace").strip()
+    except OSError as exc:
+        raise GitError("not a git work tree") from exc
+    prefix = "ref: refs/heads/"
+    return head[len(prefix):] if head.startswith(prefix) else ""
 
 
 def branches(repo: str | Path) -> dict:
