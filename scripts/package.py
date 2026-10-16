@@ -1,8 +1,7 @@
 """Build an installable zip containing only runtime files and user docs.
 
-Usage: python scripts/package.py  → dist/git-review.zip
-Mirrors hermes-session-diff's packaging shape: runtime halves + docs, never
-caches, tests, CI or VCS files.
+Usage: python scripts/package.py  → dist/git-review-<version>.zip
+Ships the runtime halves and docs; never caches, tests, CI or VCS files.
 """
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED

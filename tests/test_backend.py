@@ -367,6 +367,17 @@ class BackendTests(unittest.TestCase):
         self.config(repos=str(self.repo), roots=str(self.root / 'workspace'))
         self.assertEqual([posix(p) for p in self.inventory()].count(posix(self.repo)), 1)
 
+    def test_inventory_does_not_spawn_git_per_directory(self):
+        for i in range(20):
+            (self.root / 'workspace' / f'plain-{i}').mkdir()
+        self.config(roots=str(self.root / 'workspace'))
+        api._allowed_cache.clear()
+        with patch.object(gitx, '_capture', wraps=gitx._capture) as capture:
+            response = self.get('worktrees')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn(posix(self.repo), [posix(w['path']) for w in response.json()['worktrees']])
+        self.assertLessEqual(capture.call_count, 2, [c.args[0][:4] for c in capture.call_args_list])
+
     def test_profile_change_revokes_authorization(self):
         self.config(repos=str(self.repo))
         self.assertEqual(self.get('meta', repo=str(self.repo)).status_code, 200)

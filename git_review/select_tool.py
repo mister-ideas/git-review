@@ -39,7 +39,7 @@ SCHEMA = {
         },
         "base": {
             "type": "string",
-            "description": "Unused; kept for schema compatibility.",
+            "description": "Optional base ref for the commits scope: the pane then lists only base..HEAD history.",
         },
     },
     "required": [],

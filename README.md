@@ -1,65 +1,75 @@
 # git-review for Hermes Desktop
 
-Read-only Git review pane for trusted Hermes workspaces and configured repositories. Supports unstaged, staged, uncommitted, branch versus base, single commit, selected commits, and two-/three-dot ranges. Includes grouped repository discovery, branch inspection without checkout, file search, Deleted/Test filters, whitespace filtering, local PR/MR lookup, and unified/split layouts.
-
-**Unpublished development draft.** Unit/integration checks and an isolated Chromium harness exercise the actual installed Hermes UI components and stylesheet. Browser host services and API fixtures are mocked; this is not certification of every live Electron installation.
+A read-only Git review pane for Hermes Desktop. It shows what changed in the repository you are working in — the agent's last turn, uncommitted, staged or unstaged work, or any selection of commits — in unified or split layout, and lets you cite changed lines into the chat composer.
 
 ## Requirements
 
-Hermes Agent >=0.21.3 with Desktop and the plugin dashboard router; Git on PATH. Optional locally authenticated `gh`/`glab` enables PR/MR lookup. No credentials are supplied by this plugin. It never fetches remotes, checks out branches, stages files, or changes repository content.
+- Hermes Agent `>=0.21.5` with Desktop.
+- `git` on `PATH`.
+- Optional: an authenticated `gh` (GitHub) or `glab` (GitLab) CLI, for the pull/merge request badge.
 
-## Configuration and discovery
+## What it does
 
-Discovery uses trusted profile/session workspace records, explicitly configured `repos`/`roots`, and the latest validated agent selection. HTTP callers cannot authorize a repository by providing its own `cwd`.
+- **Scopes:** Last agent turn · Uncommitted · Staged · Unstaged · Commits (multi-select, all loaded commits checked by default, up to 200).
+- **Last agent turn** shows everything since the agent's current turn began in this repo, committed and uncommitted, terminal edits and new files included. When the focused session goes busy, the pane snapshots `HEAD` and the untracked file list, then diffs against that baseline. Uncommitted edits that predate the turn still appear, because Git cannot attribute them.
+- **Diffs:** unified or split layout (split always wraps), whitespace filtering, and GitHub-style folding of unchanged lines with ↑20 / ↓20 / all expanders, including above the first hunk and below the last.
+- **Files:** a right-hand tree with per-file churn, file search, and Deleted / Test filters. Click a file to jump to it; drag a file into the composer to attach it.
+- **Line citations:** click a line, then another, and choose **Cite in message** to insert an `@line:` reference into the focused composer draft, or drag lines into the composer. Only lines that exist in the current working tree can be cited (Last agent turn, Uncommitted and Unstaged scopes). Nothing is ever sent automatically.
+- **Agent tool `git_review_select`:** lets the agent point the pane at a repository and scope (`repo`, `scope`, `ref`, `base`, `path`, `ignore_ws`). It validates the diff first, then queues the selection for the pane.
 
-In Settings → Plugins → git-review, configure newline-separated absolute repository paths in `repos` or parent directories in `roots`. Discovery is recursively bounded; do not configure a whole home directory unnecessarily. Settings are non-secret and belong in `plugins.entries.git-review.settings`, not environment credentials. No setup-specific paths are embedded in this plugin.
+## Configuration
 
-The agent tool `git_review_select` accepts `repo`, `scope`, `ref`, `base`, `path`, and `ignore_ws`. It validates the diff before sending a profile-scoped SQLite selection request. The pane skips a preexisting request on mount, then applies new requests; its cursor resets when profile/backend identity changes.
+The pane follows the focused chat's workspace automatically. To offer other repositories, open Settings → Plugins → git-review:
 
-## Pane behavior
+| Setting | Meaning |
+|---|---|
+| `repos` | Newline-separated absolute repository paths. |
+| `roots` | Newline-separated absolute directories to scan for worktrees (two levels deep, at most 256 directories). |
 
-- All changed files and architecture folders start expanded. Per-file collapse survives live diff polling; the file list is on the right and its visibility persists.
-- Word wrap responds to the diff area's width. Split layout pairs changed lines and pads unequal replacement groups, keeping wrapped rows aligned; split always wraps (the switch is disabled there).
-- Git metadata rows (diff --git, index, ---/+++, mode/rename lines) are never rendered; +/- markers are stripped (colors carry the change type).
-- Unchanged lines: exactly three kept beside each change; every gap gets an expander bar (expand ↑20 / ↓20 / all), including above the first hunk and below the last, backed by a bounded read-only line reader.
-- File search and the Deleted/Test filter button share one row. Repository/branch labels share all toolbar width (no reserved spacer). Right-side toolbar order: PR badge · ⋯ display options · Collapse all · Show/Hide file list.
-- Click a line, then another, to highlight the range; **Cite in message** inserts the native `@line:` reference into the focused chat composer draft (draft only, never auto-sends). Any code line can also be dragged into the composer (native in-app drag payload) to land as the same citation.
-- Commits scope selects all loaded history by default, up to the explicit 200-commit display limit, with multiselect. Omitted older history is disclosed. Selected commits retain separate patches rather than a fabricated net diff.
-- **Last agent turn** shows everything since the agent's current turn began in this repo (committed + uncommitted, terminal edits included): the pane snapshots HEAD + untracked files when the focused session goes busy, then diffs against that baseline — the same semantics as the core review pane. Uncommitted edits that predate the turn still appear (Git cannot attribute them).
-- PR/MR lookup refers to the checked-out branch and requires CLI authentication. Clipboard Copy path is local. There are no Find issues or Send to chat actions.
+Settings are stored under `plugins.entries.git-review.settings`. None of them are secrets.
 
-## Development checks
+## Privacy and disclosure
+
+- **Shell commands.** The backend runs `git` as a subprocess, read-only: `rev-parse`, `status`, `diff`, `log`, `show`, `cat-file`, `ls-files`, `for-each-ref`, `branch`, `remote`, `rev-list` and `hash-object` (without `-w`, to compute the empty tree). It never fetches, checks out, stages, commits or changes repository content. External diff and textconv drivers are disabled. Every call has a timeout and an output cap.
+- **Network.** Only for the PR/MR badge. The backend runs your local `gh pr list` or `glab mr list` for the checked-out branch, so those CLIs contact GitHub or GitLab with your existing login. They get only your `GH_*`, `GITHUB*`, `GLAB_*` and `GITLAB_*` environment, with prompts disabled. The plugin itself makes no network requests.
+- **Reads outside its own data.**
+  - Files and history inside authorized repositories: the focused workspace, configured `repos`/`roots`, and the latest agent selection.
+  - This profile's `config.yaml`, for the plugin settings and `terminal.cwd`.
+  - The `cwd` column of the `sessions` table in this profile's `state.db`, opened read-only, so that recent chat workspaces appear without configuration.
+  - A caller-supplied path never grants access to a repository.
+- **Writes.** `$HERMES_HOME/plugin-data/git-review/select.sqlite3` holds agent selection requests. Desktop plugin storage holds display settings and turn baselines. Nothing is written to your repositories.
+- **Background activity.** While the pane is open it polls the local backend: every 3 s for agent selections, and every 5 s for the diff on live scopes. There are no background processes.
+- **Credentials and telemetry.** None. The plugin stores no credentials and reports no usage.
+- **Sensitive code.** Diffs stay in the pane. The only way code reaches the chat is a citation or drag that you make yourself.
+
+## Limits
+
+- Diffs above 2 MiB are refused with a note rather than silently truncated.
+- History is capped at 200 commits, and older history is reported as omitted.
+- Each unchanged-line expansion reads at most 2000 lines.
+- New untracked files in a turn diff are capped at 200.
+
+## Development
 
 ```sh
 npm ci
-npm test
-npm run test:layout
+npm test                 # unit, smoke and import-allowlist checks
+npm run test:layout      # browser layout suite
 python -m unittest discover -s tests -v
-node --check desktop/plugin.js
-hermes plugins doctor /path/to/git-review --ci
-hermes plugins validate /path/to/git-review
+hermes plugins validate . --install-deps
 python scripts/package.py
 ```
 
-The browser suite requires Chromium (`npx playwright install chromium`) and an installed Hermes Desktop source checkout with dependencies. Set `HERMES_DESKTOP_SOURCE=/path/to/apps/desktop` when it is not in the default local checkout. It uses actual SDK component sources/styles with mocked host services, at narrow/medium/wide pane widths. It does not attach to or restart the user's app. Node interaction tests use explicitly identified SDK doubles.
-
-Python tests use temporary real repositories and the actual FastAPI router. They cover authorization, ref/path boundaries, commit limits, whitespace behavior, read-only branch inspection, discovery, and profile-scoped selection transport. CI also runs smoke/import-allowlist checks and builds the runtime package; source-dependent browser checks require the desktop checkout.
-
-## Security and limitations
-
-Git commands have explicit repository paths, timeouts, bounded output, resolved revisions and literal pathspecs. External diff/textconv commands are disabled. Repository HTTP routes reject targets outside trusted discovery sources. The desktop plugin runs with Hermes app authority, not in a sandbox.
-
-Diff output above 2 MiB is refused rather than silently truncated. Untracked files are not included in Git patches. History display is capped at 200 commits. Context expansion reveals only supplied patch context. Diffs can contain sensitive code; they remain in the pane, with no chat-submission action. PR lookup uses network access through the user's locally authenticated CLI.
+The browser suite needs Chromium (`npx playwright install chromium`) and a Hermes Desktop source checkout. Set `HERMES_DESKTOP_SOURCE=/path/to/apps/desktop` if it is not in the default location. It renders the real SDK components and styles with mocked host services, at narrow, medium and wide pane widths. Python tests use temporary real repositories and the actual FastAPI router.
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| No worktrees found / HTTP 403 | Verify the trusted profile/session workspace, or configure `repos`/`roots`. A caller-provided `cwd` is not sufficient authorization. |
-| Backend unavailable | Ensure the backend is running and the plugin is enabled. Backend source updates require its process to reload. |
-| Could not compute this diff | Verify base/ref and range syntax (`a..b` or `a...b`); single-commit selections require a valid SHA. |
-| Diff exceeds display limit | Narrow the scope, selected commits, or path filter. |
-| PR button missing | Authenticate `gh`/`glab` and verify the checked-out branch has an open PR/MR on the configured remote. |
-| Pane missing / stale UI | Enable the plugin, then use the palette command Reload desktop plugins. |
+| No worktrees found / HTTP 403 | Open a chat whose workspace is a Git repository, or configure `repos`/`roots`. |
+| Backend unavailable | Make sure the plugin is enabled and the backend is running. Backend updates need a backend restart. |
+| Diff exceeds display limit | Narrow the scope, the selected commits or the file filter. |
+| PR button missing | Authenticate `gh`/`glab` and check that the branch has an open PR/MR. |
+| Pane missing or stale | Enable the plugin, then run **Reload desktop plugins** from the command palette. |
 
-No release, commit, push, or catalog publication is performed by these checks. See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [MIT](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [MIT](LICENSE).

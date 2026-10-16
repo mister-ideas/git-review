@@ -8,6 +8,8 @@ explicitly configured repos/roots, or validated local agent selections. HTTP
 from __future__ import annotations
 
 import os
+import threading
+import time
 from pathlib import Path
 import yaml
 
@@ -63,12 +65,46 @@ def profile_workspace() -> str:
         return ''
 
 
+_ALLOWED_TTL = 30.0
+_allowed_cache: dict[tuple, tuple[float, frozenset[str]]] = {}
+_allowed_lock = threading.Lock()
+
+
+def _allowed_key() -> tuple:
+    """Everything authorization depends on: any change recomputes it."""
+    home = Path(os.environ.get('HERMES_HOME') or Path.home() / '.hermes').expanduser()
+    latest = select_store.latest()
+    return (str(home), _stamp(home / 'config.yaml'), gitx.session_cwd_rows(), latest['id'] if latest else 0)
+
+
+def _stamp(path: Path) -> int:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
 def _allowed_repos(cwd: str) -> frozenset[str]:
     """One discovery policy for both inventory and authorization.
 
-    Resolve per request: a profile/config/agent-selection change must not reuse
-    another profile's cached authorization. No implicit home-directory scan.
+    Discovery spawns git per candidate, so the result is reused for a few seconds
+    per profile home, config version and agent selection; any of those changing
+    recomputes it, so another profile's authorization is never reused.
     """
+    key = _allowed_key()
+    now = time.monotonic()
+    with _allowed_lock:
+        hit = _allowed_cache.get(key)
+        if hit and now - hit[0] < _ALLOWED_TTL:
+            return hit[1]
+    result = _compute_allowed_repos()
+    with _allowed_lock:
+        _allowed_cache.clear()
+        _allowed_cache[key] = (time.monotonic(), result)
+    return result
+
+
+def _compute_allowed_repos() -> frozenset[str]:
     allowed: set[str] = set()
     config = settings()
     # The HTTP caller controls cwd and repo together: discovering cwd would
@@ -120,15 +156,13 @@ def worktrees(cwd: str = Query(default="", max_length=1024)):
 
     cwd is accepted for client compatibility but cannot expand discovery.
     """
-    found = _allowed_repos(cwd)
-    worktrees_out = []
-    for r in sorted(set(found))[:128]:
+    def entry(r: str) -> dict | None:
         try:
-            b = gitx.branches(r)
-            worktrees_out.append({"path": r, "name": Path(r).name, "branch": b["current"]})
+            return {"path": r, "name": Path(r).name, "branch": gitx.current_branch(r)}
         except gitx.GitError:
-            continue
-    return {"worktrees": worktrees_out, "version": "0.1.0"}
+            return None
+    found = sorted(_allowed_repos(cwd))[:128]
+    return {"worktrees": [w for w in gitx.parallel(entry, found) if w], "version": "0.1.0"}
 
 
 @router.get("/meta")
