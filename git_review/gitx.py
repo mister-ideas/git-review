@@ -169,10 +169,23 @@ def normalize(repo: str | Path) -> str:
     return out
 
 
+def _home() -> Path:
+    return Path.home()
+
+
+def is_broad_base(base: Path) -> bool:
+    """A filesystem root is never a workspace; a home directory only counts as one
+    when it is the declared workspace, not merely a historical chat directory."""
+    base = Path(base)
+    return base.parent == base or base == _home()
+
+
 def discover(base: Path, depth: int = 2) -> list[str]:
-    """Scan only an explicitly configured root, at bounded depth and breadth."""
+    """Scan one workspace/configured root, at bounded depth and breadth."""
     base = Path(base).expanduser()
     found: list[str] = []
+    if base.parent == base:
+        return []
     if is_worktree(base):
         return [normalize(base)]
     skip = {".git", "node_modules", ".venv", "venv", "__pycache__", ".next", "dist", "build"}
@@ -235,7 +248,7 @@ def session_cwds(db_path: Path | None = None, limit: int = 15) -> list[str]:
     def scan(cwd) -> list[str]:
         try:
             path = Path(str(cwd)).expanduser()
-            if path.is_absolute() and path.is_dir():
+            if path.is_absolute() and path.is_dir() and not is_broad_base(path):
                 return discover(path)
         except (GitError, OSError):
             pass

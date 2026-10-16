@@ -37,6 +37,7 @@ Settings are stored under `plugins.entries.git-review.settings`. None of them ar
   - This profile's `config.yaml`, for the plugin settings and `terminal.cwd`.
   - The `cwd` column of the `sessions` table in this profile's `state.db`, opened read-only, so that recent chat workspaces appear without configuration.
   - A caller-supplied path never grants access to a repository.
+- **Discovery scope.** Repositories are found by scanning, at most two levels deep, the focused workspace and the working directories of recent chats, plus any configured `repos`/`roots`. A scan visits at most 256 directories and returns at most 128 repositories, never follows symlinks, and skips hidden directories — so `~/.ssh`, `~/.aws`, `~/.config` and similar are never entered. A filesystem root is never scanned, and a home directory is scanned only when it is the declared workspace: a chat that merely ran in your home directory does not expose every repository beneath it.
 - **Writes.** `$HERMES_HOME/plugin-data/git-review/select.sqlite3` holds agent selection requests. Desktop plugin storage holds display settings and turn baselines. Nothing is written to your repositories.
 - **Background activity.** While the pane is open it polls the local backend: every 3 s for agent selections, and every 5 s for the diff on live scopes. There are no background processes.
 - **Credentials and telemetry.** None. The plugin stores no credentials and reports no usage.

@@ -118,6 +118,10 @@ def _compute_allowed_repos() -> frozenset[str]:
         path = Path(anchor).expanduser()
         if not path.is_absolute():
             continue
+        # The declared workspace may legitimately be broad (a home directory); a
+        # filesystem root never is.
+        if path.parent == path:
+            continue
         try:
             allowed.update(gitx.discover(path if path.is_dir() else path.parent))
         except (gitx.GitError, OSError):
