@@ -527,6 +527,24 @@ class BackendTests(unittest.TestCase):
             self.assertIn('GH_TOKEN', capture.call_args.kwargs['env'])
             self.assertIn('GLAB_CONFIG_DIR', capture.call_args.kwargs['env'])
 
+    def test_pr_environment_carries_windows_cli_names_and_nothing_else(self):
+        # gh/glab keep their login in APPDATA on Windows, so a POSIX-only
+        # allowlist would silently lose the PR badge there.
+        with patch.dict(os.environ, {'APPDATA': r'C:\example\Roaming', 'USERPROFILE': r'C:\example',
+                                     'AWS_SECRET_ACCESS_KEY': 'unrelated'}), \
+                patch.object(gitx, '_capture', return_value='[]') as capture:
+            gitx._run_tool(['gh', 'pr', 'list'], cwd=self.repo)
+            env = capture.call_args.kwargs['env']
+            self.assertIn('APPDATA', env)
+            self.assertIn('USERPROFILE', env)
+            self.assertNotIn('AWS_SECRET_ACCESS_KEY', env)
+
+    def test_config_with_non_ascii_path_is_read(self):
+        workspace = self.root / 'wörk' / 'répo'
+        workspace.mkdir(parents=True)
+        (self.home / 'config.yaml').write_text(f"terminal:\n  cwd: '{workspace}'\n", encoding='utf-8', newline='\n')
+        self.assertEqual(api.profile_workspace(), str(workspace))
+
     def test_large_diff_refused_not_partial(self):
         (self.repo / 'file.txt').write_text('x' * (gitx.MAX_DIFF_BYTES + 70000), newline='\n')
         result = gitx.diff(self.repo, 'uncommitted')

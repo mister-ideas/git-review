@@ -41,7 +41,7 @@ def settings() -> dict:
     """Only this plugin's explicit non-secret settings; never scan home implicitly."""
     home = Path(os.environ.get('HERMES_HOME') or Path.home() / '.hermes').expanduser()
     try:
-        config = yaml.safe_load((home / 'config.yaml').read_text()) or {}
+        config = yaml.safe_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
         entry = config.get('plugins', {}).get('entries', {}).get('git-review', {})
         value = entry.get('settings', entry.get('config', {})) or {}
         return value if isinstance(value, dict) else {}
@@ -58,7 +58,7 @@ def profile_workspace() -> str:
     """
     home = Path(os.environ.get('HERMES_HOME') or Path.home() / '.hermes').expanduser()
     try:
-        config = yaml.safe_load((home / 'config.yaml').read_text()) or {}
+        config = yaml.safe_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
         value = (config.get('terminal') or {}).get('cwd')
         return str(value).strip() if value and str(value).strip() not in ('', '.') else ''
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError):
