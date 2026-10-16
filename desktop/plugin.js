@@ -1,6 +1,4 @@
 // Git review — a read-only pane over the focused repository and configured roots.
-// v3: scope dropdown with live counts, per-commit MULTI-SELECT, ignore-whitespace,
-// collapsed unmodified-context folds, PR link, all-files stacked view, theme tokens.
 // Plain ESM loaded uncompiled — jsx() calls, not JSX syntax. Imports restricted to the
 // loader allowlist: @hermes/plugin-sdk, react, react/jsx-runtime.
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
@@ -68,9 +66,8 @@ function diffRows(patch, collapse = true) {
     if (text.startsWith("diff --git ")) { hunkIndex = -1; continue; }
     const hunk = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(text);
     if (hunk) {
-      // Groups: 1=old start, 2=old count, 3=new start, 4=new count. Reading
-      // hunk[2] as the new start corrupts every new-side number — the bug that
-      // shifted all gutters by the old count.
+      // Groups: 1=old start, 2=old count, 3=new start, 4=new count — hunk[2]
+      // is the OLD count, so new-side numbering must read hunk[3].
       before = Number(hunk[1]); after = Number(hunk[3]);
       hunkIndex = hunks.length;
       hunks.push({ index: hunkIndex, oldStart: before, oldCount: Number(hunk[2] ?? 1), newStart: after, newCount: Number(hunk[4] ?? 1) });
@@ -180,8 +177,7 @@ const SCOPES = [
   { id: "commits", label: "Commits" },
 ];
 
-// Cursor's "Show:" tree filters (screenshot 2): hide deletions / test files.
-// (SETTINGS_KEY defined just below.)
+// Cursor's "Show:" tree filters: hide deletions / test files.
 
 // Pane-scoped settings persisted via plugin storage (namespaced to the plugin).
 const SETTINGS_KEY = "display.v1";
@@ -358,7 +354,7 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot }) {
             event.dataTransfer.effectAllowed = "copy";
             event.dataTransfer.setData("application/x-hermes-paths", JSON.stringify([{ isDirectory: false, path: abs }]));
             event.dataTransfer.setData("text/plain", abs);
-          } catch { /* older shells */ }
+          } catch { /* DataTransfer may be unavailable; a failed drag payload is non-fatal */ }
         },
         "aria-pressed": file === selected, onClick: () => onSelect(file), children: [
         jsx(Codicon, { className: cn("shrink-0", glyph.tone), name: glyph.icon, size: "0.8rem" }),
@@ -688,8 +684,8 @@ function GitReview({ ctx }) {
   }, [sections]);
 
   const q = filter.trim().toLowerCase();
-  // Cursor's "Show:" filters (screenshot 2): deleted files and test files can be
-  // hidden from the tree. Deleted = every hunk is a whole-file deletion.
+  // Cursor's "Show:" filters: deleted files and test files can be hidden from
+  // the tree. Deleted = every hunk is a whole-file deletion.
   const isTestPath = (p) => /(^|[/\\])(test|tests|__tests__|spec)([/\\]|$)|\.(test|spec)\.[^.]+$|\btest_[^/]*\.py$/i.test(p);
   const visibleFiles = sections.filter((s) => {
     if (q && !s.path.toLowerCase().includes(q)) return false;
@@ -771,7 +767,7 @@ function GitReview({ ctx }) {
           event.dataTransfer.setData(LINE_DRAG_MIME, JSON.stringify([{ path: absPath, line: start, ...(end > start ? { lineEnd: end } : {}) }]));
           event.dataTransfer.setData("text/plain", citeRefText(file, start, end));
           event.dataTransfer.effectAllowed = "copy";
-        } catch { /* older shells */ }
+        } catch { /* DataTransfer may be unavailable; a failed drag payload is non-fatal */ }
       },
     };
   };
@@ -801,7 +797,6 @@ function GitReview({ ctx }) {
     else host.notify({ kind: "info", message: path });
   };
 
-  // Send-to-chat removed (pane keeps everything local); no composer use.
 
   const toggleCommit = (sha) => { commitSelectionExplicit.current = true; setPicked((prev) => {
     const next = new Set(prev);
@@ -820,7 +815,7 @@ function GitReview({ ctx }) {
 
   return jsxs("section", { className: "grd", "aria-label": "git-review", children: [
     jsx("style", { children: css }),
-    // ── toolbar row 1: scope · repo · spacer · PR · find issues · send · display menu
+    // ── toolbar: scope · repo/branch · right group (PR · display ⋯ · collapse all · file list)
     jsxs("div", { className: "toolbar", children: [
       jsxs(DropdownMenu, { children: [
         jsx(DropdownMenuTrigger, { asChild: true, children:
@@ -891,7 +886,7 @@ function GitReview({ ctx }) {
           ] }) }, b))
         })
       ] }),
-      // Right-side controls group (PR · files · display · collapse); margin-left:
+      // Right-side controls group (PR · display · collapse all · file list); margin-left:
       // auto pushes it right WITHOUT a spacer stealing flex space from the
       // repo/branch buttons.
       jsxs("div", { className: "toolbar-end", children: [
@@ -931,7 +926,6 @@ function GitReview({ ctx }) {
       jsx(Tip, { label: visible.files ? "Hide file list" : "Show file list", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": visible.files ? "Hide file list" : "Show file list", "aria-pressed": visible.files, onClick: () => { setVisible((v) => { persist({ files: !v.files }); return { ...v, files: !v.files }; }); }, children: jsx(Codicon, { name: visible.files ? "layout-sidebar-right" : "layout-sidebar-right-off", size: "0.9rem" }) }) })
       ] })
     ] }),
-    // (row 2 removed: branch/commit/range pickers dropped with their scopes)
     pathFilter && jsx(Button, { variant: "ghost", size: "sm", onClick: () => setPathFilter(""), children: `File: ${pathFilter} ×` }),
     lineSelection && lineSelection.anchor == null && jsxs("div", { className: "cite-bar", role: "toolbar", "aria-label": "Line selection actions", children: [
       jsx(Codicon, { name: "symbol-string", size: "0.85rem" }),

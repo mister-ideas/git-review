@@ -131,7 +131,6 @@ test('branch picker is informational only: checkmark on current, never changes s
   const branchMenu = root.findAll(n => n.props.className === 'repo-menu' && text(n).includes('main'))[0]
   assert.ok(branchMenu, 'branch menu missing')
   assert.ok(!requests.some(r => /checkout|switch/.test(r.url)))
-  // The old Branch vs base scope is gone from the scope menu.
   const scopeMenuItems = root.findAll(n => typeof n.props.onSelect === 'function' && text(n) === 'Branch vs base')
   assert.equal(scopeMenuItems.length, 0, 'Branch vs base must be removed from the scope menu')
 })
