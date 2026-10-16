@@ -1,5 +1,9 @@
 # git-review for Hermes Desktop
 
+[![CI](https://github.com/mister-ideas/git-review/actions/workflows/ci.yml/badge.svg)](https://github.com/mister-ideas/git-review/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mister-ideas/git-review)](https://github.com/mister-ideas/git-review/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A read-only Git review pane for Hermes Desktop. It shows what changed in the repository you are working in — the agent's last turn, uncommitted, staged or unstaged work, or any selection of commits — in unified or split layout, and lets you cite changed lines into the chat composer.
 
 ## Requirements

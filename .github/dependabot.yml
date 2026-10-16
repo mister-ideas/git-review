@@ -1,0 +1,29 @@
+# Keep the workflow actions and the test-only npm packages current. The plugin
+# itself has no runtime dependencies: the Python half uses only what Hermes
+# ships, and the npm packages exist for the test harnesses.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+    labels:
+      - dependencies
+    ignore:
+      # The plugin ships jsx() calls built by the desktop app's own React 18.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-test-renderer"
+        update-types: ["version-update:semver-major"]
