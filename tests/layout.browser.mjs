@@ -36,6 +36,9 @@ try {
         assert.ok(await page.locator('button[data-slot="button"]').count() > 0, 'actual SDK Button markup missing; do not test SDK stubs')
         assert.equal(await page.locator('.af-file').count(), files.length)
       })
+      // Capture the pane in its default state (every file expanded, real diff rows
+      // visible) before the checks below mutate it; PR assets come from here.
+      await page.screenshot({ path: path.join(artifactDir, `${width}-${layout}.png`) })
       await check(`${label}: wrap long unbroken text without clipping/overflow`, async () => {
         const metrics = await page.evaluate(() => {
           const code = [...document.querySelectorAll('.linecode')].find(n => n.textContent.includes('unbroken_'))
@@ -224,7 +227,7 @@ try {
         assert.equal(result.gutter, 'stable', 'scrollbar-gutter:stable keeps the separator flush without a gap when scrolling')
         assert.ok(parseFloat(result.borderRight) >= 1)
       })
-      await page.screenshot({ path: path.join(artifactDir, `${width}-${layout}.png`) })
+      await page.screenshot({ path: path.join(artifactDir, `${width}-${layout}-collapsed.png`) })
       await page.evaluate(() => window.unmountFixture())
     } catch (error) { failures.push({ name: label + ' harness', error: error.message }); console.error('FAIL', label, error.message); consoleErrors.push(...errors) }
     finally { await page.close() }
