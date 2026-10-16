@@ -371,11 +371,13 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot }) {
 // Checkable commit rows inside the Commits submenu (multi-select)
 function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone }) {
   return jsxs(Fragment, { children: [
-    jsx(DropdownMenuItem, { onSelect: onAll, children: "Select all" }),
-    jsx(DropdownMenuItem, { onSelect: onNone, children: "Clear" }),
+    // preventDefault keeps the menu open: picking commits is a multi-select, and
+    // a closing dropdown would cost one reopen per commit.
+    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onAll() }, children: "Select all" }),
+    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onNone() }, children: "Clear" }),
     jsx(DropdownMenuSeparator, {}),
     commits.length
-      ? commits.map((c) => jsxs(DropdownMenuItem, { onSelect: () => onToggle(c.sha), children: [
+      ? commits.map((c) => jsxs(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onToggle(c.sha) }, children: [
         jsx(Codicon, { name: selected.has(c.sha) ? "check" : "", size: "0.75rem" }),
         jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.subject || c.short }),
         jsx(DeltaCounts, { added: c.added, removed: c.removed })
@@ -943,7 +945,7 @@ function GitReview({ ctx }) {
     !worktrees.length && !error
       ? jsx(EmptyState, { title: "No worktrees found", description: "Focus a chat in a Git repository or configure explicit repos/roots in plugin settings." })
       : !diff
-        ? jsx(EmptyState, { title: error || (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — use Pick commits to select commits" : "No commits ahead of base") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…") })
+        ? jsx(EmptyState, { title: error || (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits ahead of base") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…") })
         : !sections.length && !diff.note
           ? jsx(EmptyState, { title: "No changes in this scope", description: "Try a different scope or worktree." })
           : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), children: [
@@ -1003,6 +1005,31 @@ function GitReview({ ctx }) {
                 const g = gaps.find((g) => g.key === `mid${beforeRowHunk}`);
                 return g || null;
               };
+              // Split layout pairs the rows, so the gap bars are interleaved
+              // here the same way renderStream does for the unified stream.
+              const splitStream = (pairs) => {
+                const out = [];
+                const top = gaps.find((g) => g.key === "top");
+                if (top) out.push(fold({ key: "gaptop", count: top.count, rows: [] }, top));
+                let lastHunk = null;
+                pairs.forEach((pair, i) => {
+                  if (pair.shared?.kind === "fold") { out.push(fold(pair.shared, null)); return; }
+                  const hunk = pair.shared?.hunk ?? pair.left?.hunk;
+                  if (hunk != null && lastHunk != null && hunk !== lastHunk) {
+                    const g = gapFor(hunk);
+                    if (g) out.push(fold({ key: `gap${g.key}`, count: g.count, rows: [] }, g));
+                  }
+                  if (hunk != null) lastHunk = hunk;
+                  out.push(pair.shared
+                    ? renderUnifiedRow(pair.shared, `shared:${i}`, clickFor, selectedLines, dragFor)
+                    : jsxs("div", { className: "split-row", "data-diff-row": i, children: [
+                        renderSplitRow(pair.left, i, "left", clickFor, selectedLines, dragFor), renderSplitRow(pair.right, i, "right", clickFor, selectedLines, dragFor),
+                      ] }, i));
+                });
+                const bottom = gaps.find((g) => g.key === "bottom");
+                if (bottom) out.push(fold({ key: "gapbottom", count: null, rows: [] }, bottom));
+                return out;
+              };
               const renderStream = (rows, split) => {
                 const out = [];
                 // FullBar (mode full/hidden) always leads the stream.
@@ -1053,13 +1080,7 @@ function GitReview({ ctx }) {
                 !collapsed && (layout === "split"
                   ? jsx("div", { className: cn("splitwrap", "wordw"), tabIndex: 0, "aria-label": `Split diff of ${s.path}`, children: [
                       ...bars,
-                      ...splitRows(srows).pairs.map((pair, i) => pair.shared
-                        ? pair.shared.kind === "fold"
-                          ? fold(pair.shared, null)
-                          : renderUnifiedRow(pair.shared, `shared:${i}`, clickFor, selectedLines, dragFor)
-                        : jsxs("div", { className: "split-row", "data-diff-row": i, children: [
-                            renderSplitRow(pair.left, i, "left", clickFor, selectedLines, dragFor), renderSplitRow(pair.right, i, "right", clickFor, selectedLines, dragFor),
-                          ] }, i)),
+                      ...splitStream(splitRows(srows).pairs),
                     ] })
                   : jsx("div", { className: cn("diff", wordWrap && "wordw"), tabIndex: 0, "aria-label": `Diff of ${s.path}`, children:
                       renderStream(srows, false) }))
