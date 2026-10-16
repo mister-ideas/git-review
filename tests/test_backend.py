@@ -367,6 +367,29 @@ class BackendTests(unittest.TestCase):
         self.config(repos=str(self.repo), roots=str(self.root / 'workspace'))
         self.assertEqual([posix(p) for p in self.inventory()].count(posix(self.repo)), 1)
 
+    def test_is_broad_base_flags_roots_and_home(self):
+        self.assertTrue(gitx.is_broad_base(Path(self.root.anchor)))
+        with patch.object(gitx, '_home', return_value=self.root / 'home'):
+            self.assertTrue(gitx.is_broad_base(self.root / 'home'))
+            self.assertFalse(gitx.is_broad_base(self.repo))
+        self.assertEqual(gitx.discover(Path(self.root.anchor)), [])
+
+    def test_home_is_scanned_only_when_it_is_the_declared_workspace(self):
+        home = self.root / 'home'
+        repo = self.make_repo(home / 'code' / 'proj')
+        with patch.object(gitx, '_home', return_value=home):
+            # A chat that merely ran in the home directory must not expose every
+            # repository beneath it.
+            with closing(sqlite3.connect(self.home / 'state.db', isolation_level=None)) as db:
+                db.execute('CREATE TABLE sessions(cwd TEXT)')
+                db.execute('INSERT INTO sessions VALUES (?)', (str(home),))
+            api._allowed_cache.clear()
+            self.assertNotIn(posix(repo), [posix(p) for p in api._compute_allowed_repos()])
+            # Declaring it as the workspace is explicit intent, so it is scanned.
+            self.config(workspace=str(home))
+            api._allowed_cache.clear()
+            self.assertIn(posix(repo), [posix(p) for p in api._compute_allowed_repos()])
+
     def test_inventory_does_not_spawn_git_per_directory(self):
         for i in range(20):
             (self.root / 'workspace' / f'plain-{i}').mkdir()
