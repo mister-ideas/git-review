@@ -10,6 +10,22 @@ A read-only Git review pane for Hermes Desktop. It shows what changed in the rep
 
 ![The pane in unified layout](docs/pane-unified.png)
 
+## Why this exists
+
+An agent that edits code leaves you reviewing the diff somewhere else: you switch
+to a terminal, reconstruct what the turn touched, and lose the conversation's
+context. The last turn is the hardest case — it is committed and uncommitted at
+once, and no Git client groups it that way.
+
+This pane puts that review where the work happened, and makes the result usable:
+the same changed lines go back into the draft as `@line:` citations, so "this is
+wrong, here" costs a drag instead of a paragraph.
+
+**What it is not.** It is read-only by design — it never fetches, stages, commits
+or checks out, so it cannot fix anything for you. It also cannot attribute edits
+it did not observe: uncommitted work that predates the turn still appears in the
+turn scope, because Git cannot say who wrote it.
+
 ## What it looks like
 
 Unified layout — every changed file stacked, unchanged runs folded away. Split
@@ -47,18 +63,20 @@ state, the last-agent-turn scope — live in
 
 ## Install
 
-From the Hermes plugin catalog:
+Straight from this repository, which works today — `hermes plugins install` takes a catalog name, a Git URL or `owner/repo`, and `--ref` pins one exact commit:
+
+```sh
+hermes plugins install mister-ideas/git-review
+```
+
+Once the catalog entry is published, the bare name works too:
 
 ```sh
 hermes plugins install git-review
 ```
 
-From a clone, for a development build:
-
-```sh
-git clone https://github.com/mister-ideas/git-review.git
-hermes plugins install ./git-review
-```
+Cloned it yourself? `hermes plugins adopt git-review` reads the directory's git
+origin and makes it a tracked install, so `check-updates` and `update` work on it.
 
 Then:
 
@@ -71,6 +89,21 @@ To remove it:
 ```sh
 hermes plugins uninstall git-review
 ```
+
+## What happens on first install
+
+- The pane follows the focused chat's workspace. If that workspace is not a Git
+  repository, the pane says so instead of guessing.
+- Nothing is blocked, rewritten or staged. Only the focused repository is read,
+  plus anything you configure under `repos`/`roots`.
+- `gh`/`glab` are optional: without them the PR badge is simply absent, and the
+  rest of the pane works.
+- The agent tool `git_review_select` is registered, so a chat can point the pane
+  at a repository and scope.
+- **Confirm it loaded:** **Capabilities → Plugins** lists **git-review**, and the
+  command palette offers **Open git review**.
+- New backend routes only answer after a backend restart; the desktop half
+  hot-reloads as soon as the app copies it.
 
 ## What it does
 

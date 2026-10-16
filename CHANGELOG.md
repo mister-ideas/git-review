@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 — 2026-10-16
+
+README pass, compared against the most-starred Hermes plugin READMEs. Adds a
+"Why this exists" section, a "What happens on first install" section, and the
+`hermes plugins adopt` path for a self-cloned directory. Fixes a wrong install
+command: `hermes plugins install` takes a catalog name, a Git URL or
+`owner/repo`, so the documented filesystem path never worked. Documentation only.
+
 ## 0.1.3 — 2026-10-16
 
 Media and fixes. The repository gains the screenshots, motion clips and catalog
