@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import tailwind from '@tailwindcss/vite'
 export const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+// The suite runs against the synthetic fixtures; the docs screenshots pass a
+// realistic dataset instead (see scripts/screenshots.mjs).
+const fixturesModule = process.env.HERMES_FIXTURES || path.join(project, 'tests/fixtures.mjs')
 export async function startLayoutHarness() {
   const desktop = process.env.HERMES_DESKTOP_SOURCE || path.join(os.homedir(), '.hermes/hermes-agent/apps/desktop')
   const src = path.join(desktop, 'src')
@@ -40,7 +43,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import ${JSON.stringify(path.join(src, 'styles.css'))};
 import {GitReview} from ${JSON.stringify(path.join(project, 'desktop/plugin.js'))};
-import {makeContext} from ${JSON.stringify(path.join(project, 'tests/fixtures.mjs'))};
+import {makeContext} from ${JSON.stringify(fixturesModule)};
 const params = new URLSearchParams(location.search);
 const storage = new Map([['display.v1',{layout:params.get('layout')||'unified',wordWrap:params.get('wrap')==='true',files:true}]]);
 window.fixture = makeContext({storage});

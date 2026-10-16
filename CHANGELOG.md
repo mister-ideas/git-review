@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 — 2026-10-16
+
+Documentation release: no plugin behavior changed. The README now opens with what the pane looks like and covers install, how to open it, a usage walkthrough, and where to report and read releases. `npm run shots` renders those images through the layout harness against a realistic dataset, so they stay in step with the pane.
+
 ## 0.1.1 — 2026-10-16
 
 Open-source scaffolding release: no plugin behavior changed. The repository gains what a public project is expected to carry — a code of conduct, a security policy, issue and pull-request templates, Dependabot for the workflow actions and test-only npm packages, README badges — and CONTRIBUTING becomes the single source of truth for reporting, scope and releases.
