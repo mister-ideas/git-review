@@ -191,9 +191,19 @@ def discover(base: Path, depth: int = 2) -> list[str]:
         current = nxt
         if visited >= 256 or len(found) >= 128:
             break
-    # A directory holding .git is its own worktree root; resolve() matches the
-    # symlink-free form `rev-parse --show-toplevel` reports.
-    return sorted({str(e.resolve()) for e in found})
+    # A directory holding .git is its own worktree root; ask git for the canonical
+    # form (one spawn per repository, never per directory).
+    return sorted({r for r in parallel(_canonical_or_none, found) if r})
+
+
+def _canonical_or_none(path: Path) -> str | None:
+    """git's --show-toplevel form: free when the path has no symlinks, else ask git."""
+    try:
+        if str(path) == os.path.realpath(path):
+            return path.as_posix()
+        return normalize(path)
+    except (GitError, OSError):
+        return None
 
 
 def parallel(fn, items, workers: int = 8) -> list:
