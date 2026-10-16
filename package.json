@@ -1,6 +1,6 @@
 {
   "name": "git-review",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Read-only Git review pane plugin for Hermes Desktop (development repository)",
@@ -9,7 +9,8 @@
     "test": "npm run test:unit && node tests/desktop_plugin_smoke.mjs desktop/plugin.js && node tests/import_allowlist.mjs desktop/plugin.js",
     "test:unit": "node --test tests/*.test.mjs",
     "test:layout": "node tests/layout.browser.mjs",
-    "test:all": "npm test && npm run test:layout"
+    "test:all": "npm test && npm run test:layout",
+    "shots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

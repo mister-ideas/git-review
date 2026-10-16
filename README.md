@@ -4,13 +4,56 @@
 [![Release](https://img.shields.io/github/v/release/mister-ideas/git-review)](https://github.com/mister-ideas/git-review/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A read-only Git review pane for Hermes Desktop. It shows what changed in the repository you are working in — the agent's last turn, uncommitted, staged or unstaged work, or any selection of commits — in unified or split layout, and lets you cite changed lines into the chat composer.
+Author: **mister-ideas**. MIT-licensed Hermes native plugin.
+
+A read-only Git review pane for Hermes Desktop. It shows what changed in the repository you are working in — the agent's last turn, uncommitted, staged or unstaged work, or any selection of commits — in unified or split layout, and lets you cite changed lines into the chat composer. It depends on nothing beyond Hermes itself and `git`.
+
+## What it looks like
+
+Unified layout — every changed file stacked, unchanged runs folded away:
+
+![The pane in unified layout](docs/pane-unified.png)
+
+Split layout — the same diff side by side, word wrap always on:
+
+![The pane in split layout](docs/pane-split.png)
+
+Narrow docks keep the toolbar on one line and hand the width to the diff:
+
+![The pane in a narrow dock](docs/pane-narrow.png)
 
 ## Requirements
 
 - Hermes Agent `>=0.21.5` with Desktop.
 - `git` on `PATH`.
 - Optional: an authenticated `gh` (GitHub) or `glab` (GitLab) CLI, for the pull/merge request badge.
+
+## Install
+
+From the Hermes plugin catalog:
+
+```sh
+hermes plugins install git-review
+```
+
+From a clone, for a development build:
+
+```sh
+git clone https://github.com/mister-ideas/git-review.git
+hermes plugins install ./git-review
+```
+
+Then:
+
+1. Enable **git-review** under **Capabilities → Plugins**. The Desktop app copies the pane from the package's `desktop/` folder into `$HERMES_HOME/desktop-plugins/git-review/` and hot-loads it.
+2. Restart the backend — or quit and reopen the app — so the plugin's routes mount.
+3. Open it from the command palette (**Open git review**), or toggle the **Git review** pane, which docks right by default.
+
+To remove it:
+
+```sh
+hermes plugins uninstall git-review
+```
 
 ## What it does
 
@@ -20,6 +63,16 @@ A read-only Git review pane for Hermes Desktop. It shows what changed in the rep
 - **Files:** a right-hand tree with per-file churn, file search, and Deleted / Test filters. Click a file to jump to it; drag a file into the composer to attach it.
 - **Line citations:** click a line, then another, and choose **Cite in message** to insert an `@line:` reference into the focused composer draft, or drag lines into the composer. Only lines that exist in the current working tree can be cited (Last agent turn, Uncommitted and Unstaged scopes). Nothing is ever sent automatically.
 - **Agent tool `git_review_select`:** lets the agent point the pane at a repository and scope (`repo`, `scope`, `ref`, `base`, `path`, `ignore_ws`). It validates the diff first, then queues the selection for the pane.
+
+## Using the pane
+
+1. **Pick a change set** with the toolbar's first control: Last agent turn, Uncommitted, Staged, Unstaged or Commits.
+2. **Read it.** Fold unchanged runs with ↑20 / ↓20 / all, expand the lines above the first hunk or below the last, switch to split, filter whitespace, or search and filter the file tree.
+3. **Cite what matters.** Click a line, then another, and choose **Cite in message** — or drag the lines straight into the composer. The pane inserts a reference into the draft and never sends it:
+
+   ```
+   @line:src/invoice/totals.ts:15-21
+   ```
 
 ## Configuration
 
@@ -41,7 +94,7 @@ Settings are stored under `plugins.entries.git-review.settings`. None of them ar
   - This profile's `config.yaml`, for the plugin settings and `terminal.cwd`.
   - The `cwd` column of the `sessions` table in this profile's `state.db`, opened read-only, so that recent chat workspaces appear without configuration.
   - A caller-supplied path never grants access to a repository.
-- **Discovery scope.** Repositories are found by scanning, at most two levels deep, the focused workspace and the working directories of recent chats, plus any configured `repos`/`roots`. A scan visits at most 256 directories and returns at most 128 repositories, never follows symlinks, and skips hidden directories — so `~/.ssh`, `~/.aws`, `~/.config` and similar are never entered. A filesystem root is never scanned, and a home directory is scanned only when it is the declared workspace: a chat that merely ran in your home directory does not expose every repository beneath it.
+- **Discovery scope.** Repositories are found by scanning, at most two levels deep, the focused workspace and the working directories of recent chats, plus any configured `repos`/`roots`. A scan visits at most 256 directories and returns at most 128 repositories, never follows symlinks, and skips hidden directories, so credential and config directories are never entered. A filesystem root is never scanned, and a home directory is scanned only when it is the declared workspace: a chat that merely ran in your home directory does not expose every repository beneath it.
 - **Writes.** `$HERMES_HOME/plugin-data/git-review/select.sqlite3` holds agent selection requests. Desktop plugin storage holds display settings and turn baselines. Nothing is written to your repositories.
 - **Background activity.** While the pane is open it polls the local backend: every 3 s for agent selections, and every 5 s for the diff on live scopes. There are no background processes.
 - **Credentials and telemetry.** None. The plugin stores no credentials and reports no usage.
@@ -54,19 +107,6 @@ Settings are stored under `plugins.entries.git-review.settings`. None of them ar
 - Each unchanged-line expansion reads at most 2000 lines.
 - New untracked files in a turn diff are capped at 200.
 
-## Development
-
-```sh
-npm ci
-npm test                 # unit, smoke and import-allowlist checks
-npm run test:layout      # browser layout suite
-python -m unittest discover -s tests -v
-hermes plugins validate . --install-deps
-python scripts/package.py
-```
-
-The browser suite needs Chromium (`npx playwright install chromium`) and a Hermes Desktop source checkout. Set `HERMES_DESKTOP_SOURCE=/path/to/apps/desktop` if it is not in the default location. It renders the real SDK components and styles with mocked host services, at narrow, medium and wide pane widths. Python tests use temporary real repositories and the actual FastAPI router.
-
 ## Troubleshooting
 
 | Symptom | Check |
@@ -77,4 +117,30 @@ The browser suite needs Chromium (`npx playwright install chromium`) and a Herme
 | PR button missing | Authenticate `gh`/`glab` and check that the branch has an open PR/MR. |
 | Pane missing or stale | Enable the plugin, then run **Reload desktop plugins** from the command palette. |
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [MIT](LICENSE).
+## Development
+
+```sh
+npm ci
+npm test                 # unit, smoke and import-allowlist checks
+npm run test:layout      # browser layout suite
+npm run shots            # regenerate the README images in docs/
+python -m unittest discover -s tests -v
+hermes plugins validate . --install-deps
+python scripts/package.py
+```
+
+The browser suite needs Chromium (`npx playwright install chromium`) and a Hermes Desktop source checkout. Set `HERMES_DESKTOP_SOURCE=/path/to/apps/desktop` if it is not in the default location. It renders the real SDK components and styles with mocked host services, at narrow, medium and wide pane widths, and it can point at any fixture module through `HERMES_FIXTURES` — `npm run shots` uses that to render the documentation images from a realistic dataset. Python tests use temporary real repositories and the actual FastAPI router.
+
+## Support, issues and releases
+
+- Bugs and feature requests: the [issue forms](https://github.com/mister-ideas/git-review/issues/new/choose). The bug form asks for your versions, the scope you had selected and the `git-review` log lines — that evidence is what makes a report reproducible.
+- Questions and ideas: [Discussions](https://github.com/mister-ideas/git-review/discussions).
+- Security: [SECURITY.md](SECURITY.md) — reported privately, never in a public issue.
+- Community expectations: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) — what is in and out of scope, and how releases are cut.
+
+Releases are SemVer tags with a GitHub Release whose zip the release workflow builds only after the suite passes. There is no fixed cadence: fixes ship when they are ready. The Hermes plugin catalog pins an exact commit SHA, and moving that pin is a reviewed pull request against `NousResearch/hermes-agent`, so catalog users only ever receive reviewed code.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
