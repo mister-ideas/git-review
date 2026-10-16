@@ -1,9 +1,9 @@
 """Pending pane-selection requests, shared between the agent and HTTP processes.
 
 The git_review_select tool (agent process) pushes a request here; the desktop
-pane polls the /pending-select route (gateway process) and applies it. SQLite
-in the plugin-data dir is the transport — the same pattern hermes-session-diff
-uses for its journal.
+pane polls the /pending-select route (gateway process) and applies it. SQLite in
+this plugin's own data dir is the transport: the two processes share no memory,
+and a request must survive a pane that is not open yet.
 """
 
 from __future__ import annotations
