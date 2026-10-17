@@ -50,11 +50,6 @@ Cite the lines that matter straight into the draft:
 
 ![Selecting lines and citing them into the composer](docs/gifs/cite-line.gif)
 
-More states — the scope menu, the commit picker, filters, search, the empty
-state, the last-agent-turn scope — live in
-[docs/screenshots](docs/screenshots). The clips have MP4 twins in
-[docs/video](docs/video) for anywhere that prefers video over GIF.
-
 ## Requirements
 
 - Hermes Agent `>=0.21.5` with Desktop.
@@ -172,14 +167,12 @@ Settings are stored under `plugins.entries.git-review.settings`. None of them ar
 ```sh
 npm ci
 npm test                 # unit, smoke and import-allowlist checks
-npm run test:layout      # browser layout suite
-npm run test:e2e         # real backend + real git repos, driven in Chromium
 python -m unittest discover -s tests -v
 hermes plugins validate . --install-deps
 python scripts/package.py
 ```
 
-The browser suite needs Chromium (`npx playwright install chromium`) and a Hermes Desktop source checkout. Set `HERMES_DESKTOP_SOURCE=/path/to/apps/desktop` if it is not in the default location. The layout suite renders the real SDK components and styles with mocked host services at narrow, medium and wide pane widths. The E2E suite (`npm run test:e2e`, also needs `GIT_REVIEW_PYTHON` pointing at a Python with `fastapi`, `httpx`, `pyyaml` and `uvicorn`) drives the real pane against the real backend and temporary git repositories. Python tests use temporary real repositories and the actual FastAPI router.
+Python tests use temporary real repositories and the actual FastAPI router.
 
 ## Support, issues and releases
 
