@@ -295,6 +295,8 @@ const css = `
 .grd .fold{width:100%;border:0;background:transparent;font-family:inherit;white-space:normal}
 .grd .fold:focus-visible{outline:2px solid var(--ui-accent);outline-offset:-2px}
 @container(max-width:560px){.grd .body{grid-template-columns:minmax(0,1fr) minmax(150px,30%)}.grd .toolbar{gap:4px;padding-inline:6px}}
+.grd .fold,.grd .fold-inner{white-space:nowrap}
+@container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
 `;
 
 // Repo/branch triggers share all available toolbar space via pure flex

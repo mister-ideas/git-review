@@ -19,6 +19,11 @@ export async function startLayoutHarness() {
     throw new Error(`Desktop sources not found at ${desktop}. Set HERMES_DESKTOP_SOURCE to your apps/desktop checkout.`)
   }
   const coreRequire = createRequire(path.join(desktop, 'package.json'))
+  // Tailwind only scans the project root by default; the real app's utility classes live in the
+  // desktop sources, so point it there or menus/icons render unstyled.
+  const entryCss = path.join(os.homedir(), '.hermes/cache/scratch/git-review-vite', 'fixture.css')
+  await fs.mkdir(path.dirname(entryCss), { recursive: true })
+  await fs.writeFile(entryCss, `@import ${JSON.stringify(path.join(src, 'styles.css'))};\n@source ${JSON.stringify(src)};\n`)
   const serviceId = '\0fixture-services'
   const sdkId = '\0fixture-sdk'
   const entryId = '\0fixture-entry'
@@ -44,7 +49,7 @@ window.__setBusy = v => host.state.busy.set(v);`
   const entry = `
 import React from 'react';
 import {createRoot} from 'react-dom/client';
-import ${JSON.stringify(path.join(src, 'styles.css'))};
+import ${JSON.stringify(entryCss)};
 import {GitReview} from ${JSON.stringify(path.join(project, 'desktop/plugin.js'))};
 import * as fixtures from ${JSON.stringify(fixturesModule)};
 import {host} from '@hermes/plugin-sdk';
@@ -86,7 +91,7 @@ window.unmountFixture=()=>root.unmount();`
       configureServer(server) { server.middlewares.use((req, res, next) => {
         if (req.url?.split('?')[0] !== '/') return next()
         res.setHeader('Content-Type', 'text/html')
-        res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,#root{height:100%;width:100%;margin:0}body{background:var(--ui-bg-primary);overflow:hidden}</style></head><body><div id="root"></div><script type="module" src="/fixture-entry.mjs"></script></body></html>')
+        res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,#root{height:100%;width:100%;margin:0}body{background:var(--ui-surface-background);overflow:hidden}</style></head><body><div id="root"></div><script type="module" src="/fixture-entry.mjs"></script></body></html>')
       }) },
     }],
     optimizeDeps: { exclude: ['@hermes/plugin-sdk'], include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'clsx', 'tailwind-merge', 'class-variance-authority', 'radix-ui', '@tabler/icons-react', '@nanostores/react', 'nanostores'] },
