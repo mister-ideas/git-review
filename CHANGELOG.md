@@ -8,6 +8,11 @@ README pass, compared against the most-starred Hermes plugin READMEs. Adds a
 command: `hermes plugins install` takes a catalog name, a Git URL or
 `owner/repo`, so the documented filesystem path never worked. Documentation only.
 
+## Unreleased
+
+- Detached HEAD now shows `HEAD@<sha>` as the branch label and skips the PR lookup.
+- Added an end-to-end suite (`npm run test:e2e`) that drives the pane against the real backend and real git repositories; removed the screenshot/media scripts.
+
 ## 0.1.3 — 2026-10-16
 
 Media and fixes. The repository gains the screenshots, motion clips and catalog
