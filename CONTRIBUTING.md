@@ -11,7 +11,7 @@ Thanks for looking. This is a single-maintainer project, so a little structure g
 | Report a vulnerability | [SECURITY.md](SECURITY.md) — privately, never a public issue |
 | Report unacceptable behaviour | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 
-A pane bug is much cheaper to fix when it reproduces in the browser layout suite (`npm run test:layout`), so please try that and say what it showed. Without the pane's error text, your Hermes and plugin versions, and the relevant `git-review` log lines, a report usually cannot be reproduced, and it will be closed with a request for that evidence rather than left open.
+A pane bug is much cheaper to fix when it reproduces in a test, so please say what you tried and what the pane showed. Without the pane's error text, your Hermes and plugin versions, and the relevant `git-review` log lines, a report usually cannot be reproduced, and it will be closed with a request for that evidence rather than left open.
 
 ## Scope: what this plugin will and will not do
 
@@ -34,7 +34,6 @@ Keep it read-only and generic: no vendor-specific workspace paths, no credential
 ```sh
 npm ci
 npm test                 # unit, desktop smoke harness, import allowlist
-npm run test:layout      # browser layout suite (Chromium + desktop sources)
 python -m unittest discover -s tests -v
 node --check desktop/plugin.js
 hermes plugins doctor . --ci
@@ -42,7 +41,7 @@ hermes plugins validate .
 python scripts/package.py
 ```
 
-The browser suite renders the real SDK components and stylesheet with mocked host services, at narrow, medium and wide pane widths; set `HERMES_DESKTOP_SOURCE` when the desktop checkout is not in the default location. Python tests use temporary real repositories and the actual FastAPI router.
+Python tests use temporary real repositories and the actual FastAPI router.
 
 ## Tests to add for behavior changes
 
