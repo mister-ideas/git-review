@@ -12,6 +12,8 @@ command: `hermes plugins install` takes a catalog name, a Git URL or
 
 - Detached HEAD now shows `HEAD@<sha>` as the branch label and skips the PR lookup.
 - Added an end-to-end suite (`npm run test:e2e`) that drives the pane against the real backend and real git repositories; removed the screenshot/media scripts.
+- Narrow docks (container ≤480px): the file tree moves below the diff and the toolbar wraps to two rows, so scope, repository and branch labels stay readable instead of truncating to icons.
+- Test harness: paints the pane on `--ui-surface-background` and scans the desktop sources for Tailwind utilities, so screenshots match the real app (no blue tint, correctly sized icons, styled menus). All README screenshots, clips and the banner were re-rendered from the real pane.
 
 ## 0.1.3 — 2026-10-16
 
