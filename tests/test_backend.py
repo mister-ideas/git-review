@@ -107,6 +107,18 @@ class BackendTests(unittest.TestCase):
                          preexisting_untracked=['pre.txt', 'new dir/brand new.txt'], ignore_ws=True).json()
         self.assertEqual(body['patch'], '')
 
+    def test_detached_head_reports_short_sha_and_skips_pr_lookup(self):
+        self.repo = self.make_repo(self.root / 'detached')
+        self.config(repos=str(self.repo))
+        (self.repo / 'a.txt').write_text('a\n', newline='\n')
+        self.git('add', 'a.txt'); self.git('commit', '-m', 'one')
+        sha = self.git('rev-parse', '--short', 'HEAD').strip()
+        self.git('checkout', '--detach')
+        info = gitx.branches(self.repo)
+        self.assertTrue(info['detached'])
+        self.assertEqual(info['current'], 'HEAD@' + sha)
+        self.assertIsNone(self.client.get('/api/plugins/git-review/pr', params={'repo': str(self.repo)}).json())
+
     def test_turn_diff_unborn_repository(self):
         self.repo = self.make_repo(self.root / 'unborn')
         self.config(repos=str(self.repo))

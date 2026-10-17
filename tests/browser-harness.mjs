@@ -8,8 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import tailwind from '@tailwindcss/vite'
 export const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-// The suite runs against the synthetic fixtures; the docs screenshots pass a
-// realistic dataset instead (see scripts/screenshots.mjs).
+// HERMES_FIXTURES swaps the fixture module (the E2E suite injects a real-backend context).
 const fixturesModule = process.env.HERMES_FIXTURES || path.join(project, 'tests/fixtures.mjs')
 export async function startLayoutHarness() {
   const desktop = process.env.HERMES_DESKTOP_SOURCE || path.join(os.homedir(), '.hermes/hermes-agent/apps/desktop')

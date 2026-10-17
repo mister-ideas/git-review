@@ -324,7 +324,13 @@ def branches(repo: str | Path) -> dict:
         if name and not name.endswith("/HEAD"):
             remote.append(name)
     current = _run(repo, "branch", "--show-current").strip()
-    return {"current": current, "local": local[:200], "remote": remote[:400]}
+    detached = not current
+    if detached:
+        try:
+            current = "HEAD@" + _run(repo, "rev-parse", "--short", "HEAD").strip()
+        except GitError:
+            current = "HEAD"
+    return {"current": current, "detached": detached, "local": local[:200], "remote": remote[:400]}
 
 
 def status(repo: str | Path) -> dict:
