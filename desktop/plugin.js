@@ -113,6 +113,25 @@ function fileSections(patch) {
   return out;
 }
 
+// Why a file has no hunks: say what git actually reported instead of one generic line.
+function noHunkMessage(lines, ignoreWs) {
+  const find = (re) => { for (const l of lines) { const m = re.exec(l); if (m) return m; } return null; };
+  const from = find(/^rename from (.*)$/);
+  if (from) {
+    const was = unquoteGitPath(from[1].replace(/^"|"$/g, ""));
+    const sim = find(/^similarity index (\d+)%/);
+    if (ignoreWs && !(sim && sim[1] === "100")) return `Renamed from ${was} — remaining changes are whitespace only (hidden by Ignore whitespace).`;
+    return `Renamed from ${was} — no content changes.`;
+  }
+  if (find(/^(Binary files .* differ|GIT binary patch)/)) return "Binary file changed — no text diff available.";
+  const mode = [find(/^old mode (\d+)/), find(/^new mode (\d+)/)];
+  if (mode[0] && mode[1]) return `Mode changed ${mode[0][1]} → ${mode[1][1]} — no content changes.`;
+  if (find(/^new file mode/)) return "Empty file added.";
+  if (find(/^deleted file mode/)) return "Empty file deleted.";
+  if (ignoreWs) return "Only whitespace changes — hidden by Ignore whitespace.";
+  return "No line changes to show.";
+}
+
 const basename = (p) => p.split(/[\\/]/).pop();
 
 // Group file paths into a folder tree with aggregated churn (mirrors core
@@ -219,6 +238,7 @@ const css = `
 .grd .search-field > svg{color:var(--ui-text-secondary);flex-shrink:0}
 .grd .search .filter-wrap{flex:0 0 auto;display:inline-flex}
 .grd .search .filter-wrap.active{color:var(--ui-accent)}
+.grd .search .filter-wrap.active .filter-btn{color:var(--ui-accent);background:color-mix(in srgb,var(--ui-accent) 12%,transparent)}
 .grd .tree{overflow:auto;flex:1;min-height:0;padding-bottom:10px}
 .grd .folder{display:flex;align-items:center;gap:5px;padding:4px 10px;color:var(--ui-text-secondary);font-size:12px;cursor:pointer;user-select:none}
 .grd .folder:hover{background:var(--ui-row-hover-background)}
@@ -687,9 +707,10 @@ function GitReview({ ctx }) {
     for (const s of sections) {
       const added = s.lines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length;
       const removed = s.lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
-      const isNew = s.lines.some((l) => l === "--- /dev/null");
-      const isDeleted = s.lines.some((l) => l === "+++ /dev/null");
-      m.set(s.path, { added, removed, isNew, status: isNew ? "added" : isDeleted ? "deleted" : "modified" });
+      const isNew = s.lines.some((l) => l === "--- /dev/null" || l.startsWith("new file mode"));
+      const isDeleted = s.lines.some((l) => l === "+++ /dev/null" || l.startsWith("deleted file mode"));
+      const isRenamed = s.lines.some((l) => l.startsWith("rename from "));
+      m.set(s.path, { added, removed, isNew, status: isNew ? "added" : isDeleted ? "deleted" : isRenamed ? "renamed" : "modified" });
     }
     return m;
   }, [sections]);
@@ -705,6 +726,7 @@ function GitReview({ ctx }) {
     if (!showTests && isTestPath(s.path)) return false;
     return true;
   });
+  const hiddenByFilters = sections.filter((s) => (!showDeleted && stats.get(s.path)?.status === "deleted") || (!showTests && isTestPath(s.path))).length;
   const tree = useMemo(() => compactTree(buildTree(visibleFiles.map((s) => s.path))), [visibleFiles]);
   const active = visibleFiles.find((s) => s.path === selected) || visibleFiles[0];
   // Click a line, then click another: the range between the two clicks highlights
@@ -878,7 +900,7 @@ function GitReview({ ctx }) {
                 jsx(Codicon, { name: w.path === chosen ? "check" : "repo", size: "0.8rem", className: "shrink-0" }),
                 jsxs("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
                   w.name, " ",
-                  jsx("span", { style: { color: "var(--ui-text-tertiary)" }, children: `${inGroup ? `${inGroup} · ` : ""}${w.branch || "(detached)"}` })
+                  jsx("span", { style: { color: "var(--ui-text-tertiary)" }, children: `${inGroup ? `/${inGroup} · ` : ""}${w.branch || "(detached)"}` })
                 ] })
               ] }) }, w.path));
             }
@@ -946,6 +968,11 @@ function GitReview({ ctx }) {
       jsx(Button, { variant: "outline", size: "sm", "aria-label": "Cite selected lines in focused message draft", onClick: citeSelection, children: "Cite in message" }),
       jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Clear line selection", onClick: () => setLineSelection(null), children: jsx(Codicon, { name: "close", size: "0.85rem" }) }),
     ] }),
+    lineSelection && lineSelection.anchor != null && jsxs("div", { className: "cite-bar", role: "status", children: [
+      jsx(Codicon, { name: "symbol-string", size: "0.85rem" }),
+      jsx("span", { className: "cite-ref", children: `${lineSelection.file}:${lineSelection.start} — click another line to finish the range` }),
+      jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Clear line selection", onClick: () => setLineSelection(null), children: jsx(Codicon, { name: "close", size: "0.85rem" }) }),
+    ] }),
     (scope === "commits" && historyNote) && jsx("div", { className: "notice", role: "status", children: historyNote }),
     (error || diff?.note) && jsxs("div", { className: "notice", role: "alert", children: [
       jsx(Codicon, { className: "text-(--ui-orange) shrink-0", name: "warning", size: "0.85rem" }),
@@ -954,12 +981,13 @@ function GitReview({ ctx }) {
     !worktrees.length && !error
       ? jsx(EmptyState, { title: "No worktrees found", description: "Focus a chat in a Git repository or configure explicit repos/roots in plugin settings." })
       : !diff
-        ? jsx(EmptyState, { title: error || (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits ahead of base") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…") })
+        ? jsx(EmptyState, { title: error ? "Nothing to show" : (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits ahead of base") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…"), description: error ? "See the message above, then retry or switch scope." : undefined })
         : !sections.length && !diff.note
           ? jsx(EmptyState, { title: "No changes in this scope", description: "Try a different scope or worktree." })
           : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), children: [
             // MAIN: every changed file's diff stacked (Cursor Changes), scroll to the last one.
             jsxs("div", { className: "allfiles", children: [
+              !visibleFiles.length && jsx(EmptyState, { title: q ? `No files match “${filter.trim()}”` : "All files are hidden by filters", description: sections.length ? "Clear the search or adjust the filters." : "" }),
               visibleFiles.map((s) => {
               const collapsed = !!collapsedFiles[s.path];
               const { rows: rawRows, hunks } = diffRows(s.lines.join("\n"), false);
@@ -1070,7 +1098,7 @@ function GitReview({ ctx }) {
               // Files whose patch carries no hunks (binary, mode-only, pure rename)
               // render a single muted note instead of an empty body.
               const note = !hunks.length
-                ? [jsx("div", { className: "notice", role: "note", children: "No line changes shown — binary file, mode change, or pure rename." }, `${s.path}:note`)]
+                ? [jsx("div", { className: "notice", role: "note", children: noHunkMessage(s.lines, ignoreWs) }, `${s.path}:note`)]
                 : [];
               return jsxs("section", { className: cn("af-file", collapsed && "af-collapsed"), "data-path": s.path, style: { "--gr-gutter-width": gutterWidth }, children: [
                 jsxs("div", { className: "af-head", children: [
@@ -1099,7 +1127,7 @@ function GitReview({ ctx }) {
             // RIGHT: the file tree list, hide/show via the toolbar toggle.
             visible.files ? jsxs("aside", { className: "tree-side", children: [
               jsxs("div", { className: "search", children: [
-                jsx(SearchField, { containerClassName: "search-field", inputClassName: "search-input", value: filter, onChange: setFilter, placeholder: `Search ${sections.length} files`, "aria-label": "Search files" }),
+                jsx(SearchField, { containerClassName: "search-field", inputClassName: "search-input", value: filter, onChange: setFilter, placeholder: `Search ${sections.length} ${sections.length === 1 ? "file" : "files"}${hiddenByFilters ? ` (${hiddenByFilters} hidden)` : ""}`, "aria-label": "Search files" }),
                 jsx("div", { className: cn("filter-wrap", (!showDeleted || !showTests) && "active"), children:
         jsxs(DropdownMenu, { children: [
           jsx(DropdownMenuTrigger, { asChild: true, children:
