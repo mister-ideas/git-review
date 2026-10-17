@@ -238,6 +238,7 @@ const css = `
 .grd .line{display:flex;min-width:max-content;white-space:pre;padding:0 6px;align-items:baseline;cursor:pointer}
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
+.grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
 .grd .cite-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
 .grd .cite-bar .cite-ref{font-family:var(--font-mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .grd .lineno{flex:0 0 calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);text-align:right;padding:0;color:var(--ui-text-tertiary);user-select:none;font-variant-numeric:tabular-nums;font:inherit;opacity:0.75}
@@ -296,8 +297,14 @@ const css = `
 .grd .fold:focus-visible{outline:2px solid var(--ui-accent);outline-offset:-2px}
 @container(max-width:560px){.grd .body{grid-template-columns:minmax(0,1fr) minmax(150px,30%)}.grd .toolbar{gap:4px;padding-inline:6px}}
 .grd .fold,.grd .fold-inner{white-space:nowrap}
+.check-slot{display:inline-flex;align-items:center;justify-content:center;width:1rem;flex:0 0 1rem}
 @container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
 `;
+
+// Fixed-width check column: unchecked rows keep the same indent as checked ones, so labels align.
+function CheckSlot({ on, size }) {
+  return jsx("span", { className: "check-slot", "aria-hidden": true, children: on ? jsx(Codicon, { name: "check", size }) : null });
+}
 
 // Repo/branch triggers share all available toolbar space via pure flex
 // (flex:1 1 0): equal widths when both labels are long, spare flows to the
@@ -380,7 +387,7 @@ function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone }) {
     jsx(DropdownMenuSeparator, {}),
     commits.length
       ? commits.map((c) => jsxs(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onToggle(c.sha) }, children: [
-        jsx(Codicon, { name: selected.has(c.sha) ? "check" : "", size: "0.75rem" }),
+        jsx(CheckSlot, { on: selected.has(c.sha), size: "0.75rem" }),
         jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.subject || c.short }),
         jsx(DeltaCounts, { added: c.added, removed: c.removed })
       ] }, c.sha))
@@ -832,7 +839,7 @@ function GitReview({ ctx }) {
         }),
         jsxs(DropdownMenuContent, { children: [
           SCOPES.map((s) => jsx(DropdownMenuItem, { onSelect: () => setScope(s.id), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-            jsx(Codicon, { name: s.id === scope ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+            jsx(CheckSlot, { on: s.id === scope, size: "0.8rem" }),
             s.label
           ] }) }, s.id)),
           // Commits is a multi-select dropdown, not a page: checkable commits
@@ -910,11 +917,11 @@ function GitReview({ ctx }) {
           ] }),
           jsx(DropdownMenuSeparator, {}),
           jsx(DropdownMenuItem, { onSelect: () => { setLayout("unified"); persist({ layout: "unified" }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-            jsx(Codicon, { name: layout === "unified" ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+            jsx(CheckSlot, { on: layout === "unified", size: "0.8rem" }),
             "Layout: Unified"
           ] }) }),
           jsx(DropdownMenuItem, { onSelect: () => { setLayout("split"); persist({ layout: "split" }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-            jsx(Codicon, { name: layout === "split" ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+            jsx(CheckSlot, { on: layout === "split", size: "0.8rem" }),
             "Layout: Split"
           ] }) })
         ] })
@@ -1101,11 +1108,11 @@ function GitReview({ ctx }) {
           }),
           jsxs(DropdownMenuContent, { align: "end", children: [
             jsx(DropdownMenuItem, { onSelect: () => { setShowDeleted((v) => { persist({ showDeleted: !v }); return !v; }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-              jsx(Codicon, { name: showDeleted ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+              jsx(CheckSlot, { on: showDeleted, size: "0.8rem" }),
               "Deleted files"
             ] }) }),
             jsx(DropdownMenuItem, { onSelect: () => { setShowTests((v) => { persist({ showTests: !v }); return !v; }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-              jsx(Codicon, { name: showTests ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+              jsx(CheckSlot, { on: showTests, size: "0.8rem" }),
               "Test files"
             ] }) })
           ] })
