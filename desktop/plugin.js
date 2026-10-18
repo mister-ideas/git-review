@@ -263,8 +263,9 @@ const css = `
   .dark .grd .detailhead{border-color:#2b2b2d}
   .dark .grd .detailtitle .fdir{color:#6b6b6b}
   .dark .grd .search{border-bottom-color:#2b2b2d}
-  .dark .grd .search-field{background:#141416;color:#fff;border-color:#2b2b2d;border-radius:6px;padding:0 6px}
-  .dark .grd .search-field input{background:#212124;color:#e8e8e8;font-size:12px}
+  .dark .grd .search-field{background:#1c1c1f;color:#e8e8e8;border-color:#2b2b2d;border-radius:6px;padding:0 6px}
+  .dark .grd .search-field input{background:transparent;color:#e8e8e8;font-size:12px}
+  .dark .grd .search-field:focus-within{border-color:var(--ui-accent)}
   .dark .grd .search-field input::placeholder{color:#9b9b9b;opacity:.9}
   .dark .grd .search-field > svg{color:#9b9b9b}
   .dark .grd .filter-wrap.active{color:#e8e8e8}
