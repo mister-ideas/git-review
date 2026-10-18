@@ -456,8 +456,16 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot }) {
 }
 
 // Checkable commit rows inside the Commits submenu (multi-select)
-function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone, hasMore, loadingMore, onMore, onOpen }) {
+function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone, hasMore, loadingMore, onMore, onOpen, range, onRange }) {
+  const row = (label, on, pick, key) => jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); pick(); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on, size: "0.8rem" }), jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: label })] }) }, key);
   return jsxs(Fragment, { children: [
+    range ? jsxs(Fragment, { children: [
+      jsx("div", { className: "menu-group", role: "presentation", children: "Which commits" }),
+      range.base ? row(`Since ${range.base}`, true, () => {}, "r-base") : row(range.auto ? `Since ${range.auto}` : "This branch's own commits", !range.all, () => onRange({ all: false, base: "" }), "r-auto"),
+      row("Whole history of this branch", range.all && !range.base, () => onRange({ all: true, base: "" }), "r-all"),
+      jsx(DropdownMenuSeparator, {}),
+      jsx("div", { className: "menu-group", role: "presentation", children: "Pick commits" }),
+    ] }) : null,
     // preventDefault keeps the menu open: picking commits is a multi-select, and
     // a closing dropdown would cost one reopen per commit.
     jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onAll() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Select all"] }) }),
@@ -957,6 +965,8 @@ function GitReview({ ctx }) {
           scope === "commits" ? jsxs(Fragment, { children: [
             jsx(DropdownMenuSeparator, {}),
             jsx(CommitsSubmenu, { commits, selected: picked, onToggle: toggleCommit, hasMore, loadingMore, onMore: loadOlder, onOpen: goCommit,
+              range: { all: allHistory, base, auto: autoBase },
+              onRange: ({ all, base: b }) => { setAllHistory(all); setBase(b); commitSelectionExplicit.current = false; },
               onAll: () => { commitSelectionExplicit.current = true; setPicked(new Set(commits.map((c) => c.sha))); },
               onNone: () => { commitSelectionExplicit.current = true; setPicked(new Set()); } })
           ] }) : null,
@@ -1001,11 +1011,7 @@ function GitReview({ ctx }) {
           jsx(RepoButton, { icon: "git-branch", label: meta?.current || "branch…" })
         }),
         jsx(DropdownMenuContent, { className: "repo-menu", children: [
-          jsx("div", { className: "menu-group", role: "presentation", children: "Commits to list" }, "hdr"),
-          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(true); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: allHistory && !base, size: "0.8rem" }), "Whole history of this branch"] }) }, "all"),
-          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: !base && !allHistory, size: "0.8rem" }), autoBase ? `Only since ${autoBase}` : "Only this branch's own commits"] }) }, "auto"),
-          jsx(DropdownMenuSeparator, {}, "sep"),
-          jsx("div", { className: "menu-group", role: "presentation", children: "Or only since another branch" }, "hdr2"),
+          jsx("div", { className: "menu-group", role: "presentation", children: "Commits since…" }, "hdr"),
           ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(b); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
             jsx(CheckSlot, { on: base === b, size: "0.8rem" }),
             jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: b }),
@@ -1109,7 +1115,9 @@ function GitReview({ ctx }) {
                 }
                 const last = hunks.at(-1);
                 const tailFrom = last.newStart + last.newCount;
-                gaps.push({ key: "bottom", from: tailFrom, to: Number.MAX_SAFE_INTEGER, count: null, delta: (last.newStart + last.newCount) - (last.oldStart + last.oldCount), open: true });
+                let trailing = 0;
+                for (let i = rawRows.length - 1; i >= 0 && rawRows[i].kind === "context" && rawRows[i].hunk === last.index; i--) trailing++;
+                if (trailing >= PATCH_CONTEXT) gaps.push({ key: "bottom", from: tailFrom, to: Number.MAX_SAFE_INTEGER, count: null, delta: (last.newStart + last.newCount) - (last.oldStart + last.oldCount), open: true });
               }
               const realPath = s.filePath || s.path;
               const fetchLines = (r, start, end) => ctx.rest("/file-lines", { method: "POST", timeoutMs: 15000, body: { repo: chosen, path: realPath, rev: r, start, end } });
@@ -1260,11 +1268,21 @@ const EXPAND_STEP = 20;
 // Pure gap math (exported as _gapInternals for regression tests): the next
 // bounded window to fetch and the old/new line-number mapping for gap rows
 // (delta = newStart - oldStart, so old = new - delta).
+// The top gap grows upward from the first change (nearest lines first); every
+// other gap grows downward from the change above it.
 const nextGapWindow = (state, gap, step = EXPAND_STEP) => {
+  if (gap.key === "top") {
+    const end = state?.ls != null ? state.ls - 1 : gap.to;
+    if (end < gap.from) return null;
+    return { start: Math.max(gap.from, end - step + 1), end };
+  }
   const start = state?.le != null ? state.le + 1 : gap.from;
   if (start > gap.to) return null;
   return { start, end: Math.min(gap.to, start + step - 1) };
 };
+// git -U<n> only emits fewer trailing context lines when the file ended, so a
+// last hunk with less than that has nothing below it to reveal.
+const PATCH_CONTEXT = 40;
 const gapOldNumber = (n, delta) => n - (delta || 0);
 
 const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }) => {
@@ -1281,9 +1299,13 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
   // backend reports — never against loaded counts or whole-file totals alone.
   // In-patch folds pass no gap: guard before touching gap.to.
   const gapLimit = isGap ? (gapState?.total != null ? Math.min(gap.to, gapState.total) : gap.to) : 0;
+  const isTop = isGap && gap.key === "top";
   const remaining = isGap
-    ? (gapState ? Math.max(0, gapLimit - gapState.le) : (gap.count ?? null))
+    ? (gapState
+        ? (isTop ? Math.max(0, gapState.ls - gap.from) : Math.max(0, gapLimit - gapState.le))
+        : (gap.count ?? null))
     : midHidden;
+  const stepCount = remaining == null ? EXPAND_STEP : Math.min(EXPAND_STEP, remaining);
   // GitHub-style: hide the bar once everything is revealed (or the gap is done).
   const barVisible = isGap ? !(gapState?.done) : midHidden > 0;
 
@@ -1298,13 +1320,15 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
       const r = await onFetch(rev, w.start, w.end);
       setGapState((prev) => {
         const numbered = [...(prev?.numbered || []), ...r.lines.map((text, i) => ({ n: w.start + i, text }))]
+          .sort((a, b) => a.n - b.n)
           .filter((l, i, arr) => i === 0 || l.n > arr[i - 1].n); // dedupe by line number
         const le = Math.max(prev?.le ?? gap.from - 1, r.end ?? w.end); // server-clamped end
         const total = r.total ?? prev?.total;
+        const ls = numbered[0]?.n ?? gap.from;
         return {
-          ls: numbered[0]?.n ?? gap.from, le, numbered, total,
+          ls, le, numbered, total,
           loading: false, failed: false,
-          done: r.end >= Math.min(gap.to, total ?? r.end) || r.lines.length < (w.end - w.start + 1),
+          done: isTop ? ls <= gap.from : (r.end >= Math.min(gap.to, total ?? r.end) || r.lines.length < (w.end - w.start + 1)),
         };
       });
     } catch { setGapState((p) => ({ ...(p || { le: gap.from - 1, numbered: [] }), loading: false, failed: true })); }
@@ -1332,8 +1356,10 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
   const btn = (label, mode, aria, disabled) => jsx("button", { type: "button", className: "fold-inline",
     "aria-label": aria, disabled, onClick: (e) => { e.stopPropagation(); expand(mode); }, children: label });
   const renderLine = (l, key) => renderContextRow({ before: gapOldNumber(l.n, gap.delta), after: l.n, text: l.text }, key);
+  const loadedRows = isGap && gapState ? gapState.numbered.map((l) => renderLine(l, `${path}:${row.key}:gap${l.n}`)) : [];
   return jsxs(Fragment, { children: [
     upRows.map((r, i) => renderContextRow(r, `${path}:${row.key}:up${i}`)),
+    ...(!isTop ? loadedRows : []),
     jsxs("span", { className: "fold", "data-fold-key": `${path}:${row.key}`, "data-gap": isGap ? "1" : undefined, children: [
       jsx("span", { className: "fold-strip", "aria-hidden": "true" }),
       barVisible ? jsxs("span", { className: "fold-inner", children: [
@@ -1341,15 +1367,15 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
         // In-patch folds reveal their own hidden rows in both directions
         // (disabled in split layout — partial reveal breaks row pairing).
         // Gap bars fetch lines outside the patch, growing toward the file end.
-        !isGap && !compact ? btn("⌃ 20", "up", `Expand 20 unchanged lines above for ${path}`) : null,
-        !isGap && !compact ? btn("⌄ 20", "down", `Expand 20 unchanged lines below for ${path}`) : null,
+        !isGap && !compact ? btn(`⌃ ${Math.min(EXPAND_STEP, midHidden)}`, "up", `Expand ${Math.min(EXPAND_STEP, midHidden)} unchanged lines above for ${path}`) : null,
+        !isGap && !compact ? btn(`⌄ ${Math.min(EXPAND_STEP, midHidden)}`, "down", `Expand ${Math.min(EXPAND_STEP, midHidden)} unchanged lines below for ${path}`) : null,
         isGap ? (gapState?.failed
           ? btn("Retry", "down", `Retry expanding lines (${gap.key}) for ${path}`, gapState?.loading)
-          : btn(gapState?.loading ? "…" : "⌄ 20", "down", `Expand 20 lines (${gap.key}) for ${path}`, gapState?.loading)) : null,
+          : btn(gapState?.loading ? "…" : `${isTop ? "⌃" : "⌄"} ${stepCount}`, "down", `Expand ${stepCount} lines (${gap.key}) for ${path}`, gapState?.loading)) : null,
         remaining > 0 ? btn(`all (${remaining})`, "all", isGap ? `Expand all gap lines (${gap.key}) for ${path}` : `Expand all remaining unchanged lines for ${path}`, gapState?.loading) : null,
       ] }) : null,
     ] }, `${path}:${row.key}`),
-    ...(isGap && gapState ? gapState.numbered.map((l) => renderLine(l, `${path}:${row.key}:gap${l.n}`)) : []),
+    ...(isTop ? loadedRows : []),
     downRows.map((r, i) => renderContextRow(r, `${path}:${row.key}:down${i}`)),
   ] }, `${path}:${row.key}:bar`);
 };

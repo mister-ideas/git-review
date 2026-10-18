@@ -216,6 +216,16 @@ test('unified: gap expander fetches outside-patch lines from /file-lines', async
   await click(expander)
   const post = requests.find(r => r.url === '/file-lines' && r.options?.method === 'POST')
   assert.ok(post, 'gap expander must POST /file-lines')
-  assert.deepEqual(post.options.body, { repo, path: files[0], rev: 'worktree', start: 1, end: 20 })
-  assert.ok(byClass(target(), 'linecode').some(n => text(n) === 'filler-1'), 'fetched gap line must render')
+  // the top gap grows UPWARD from the first change: the 20 nearest lines, not lines 1-20
+  assert.equal(post.options.body.end - post.options.body.start, 19)
+  assert.deepEqual({ ...post.options.body, start: 0, end: 0 }, { repo, path: files[0], rev: 'worktree', start: 0, end: 0 })
+  assert.ok(post.options.body.start > 1, 'top gap must fetch nearest-first')
+  assert.ok(byClass(target(), 'linecode').some(n => text(n) === `filler-${post.options.body.end}`), 'fetched gap line must render')
+})
+
+
+test('unified: no "below" expander when the last hunk ends before the full context window', async t => {
+  const { root } = await mount(t)
+  const labels = byClass(root, 'fold-inline').map(n => n.props['aria-label'] || '')
+  assert.ok(!labels.some(l => l.includes('(bottom)')), 'bottom gap bar must not show when the file already ended')
 })
