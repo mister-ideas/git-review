@@ -22,7 +22,7 @@ MAX_FILE_LINES = 2000
 # Bytes sniffed for NUL when deciding a file is binary (git uses the same size).
 BINARY_SNIFF = 8000
 # Enough unchanged lines for meaningful UI folds, still bounded by MAX_DIFF_BYTES.
-DIFF_CONTEXT_LINES = 40
+DIFF_CONTEXT_LINES = 3
 TIMEOUT = 15
 
 _SHA = re.compile(r"^[0-9a-fA-F]{7,64}$")
