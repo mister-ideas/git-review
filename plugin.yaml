@@ -1,5 +1,5 @@
 name: git-review
-version: 0.1.6
+version: 0.1.7
 description: Read-only Git review pane for focused repositories and configured worktree roots.
 author: mister-ideas
 license: MIT
