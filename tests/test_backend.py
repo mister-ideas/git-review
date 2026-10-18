@@ -462,6 +462,20 @@ class BackendTests(unittest.TestCase):
         self.assertEqual([c['sha'] for c in gitx.commits(self.repo, self.first)['commits']], [sha])
         self.assertEqual(len(gitx.diff(self.repo, 'commits')['commits']), 2)
 
+    def test_commits_default_to_branch_since_default_branch(self):
+        import subprocess as sp
+        def g(*a): return sp.run(['git', '-C', str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()
+        base_branch = g('branch', '--show-current')
+        before = len(gitx.commits(self.repo)['commits'])
+        g('checkout', '-q', '-b', 'feature-x')
+        (self.repo / 'feat.txt').write_text('x\n')
+        g('add', 'feat.txt'); g('-c', 'user.name=a', '-c', 'user.email=a@b.c', 'commit', '-qm', 'feat')
+        result = gitx.commits(self.repo)
+        self.assertEqual(len(result['commits']), 1)
+        self.assertIsNone(result['base'])
+        g('checkout', '-q', base_branch)
+        self.assertEqual(len(gitx.commits(self.repo)['commits']), before)
+
     def test_noncontiguous_commits_truthful_separate_patches(self):
         (self.repo / 'file.txt').write_text('selected\n', newline='\n')
         second = self.commit('selected')
