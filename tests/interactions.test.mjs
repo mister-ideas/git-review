@@ -224,8 +224,17 @@ test('unified: gap expander fetches outside-patch lines from /file-lines', async
 })
 
 
-test('unified: no "below" expander when the last hunk ends before the full context window', async t => {
-  const { root } = await mount(t)
-  const labels = byClass(root, 'fold-inline').map(n => n.props['aria-label'] || '')
-  assert.ok(!labels.some(l => l.includes('(bottom)')), 'bottom gap bar must not show when the file already ended')
+// Real `git diff -U3` output: a hunk that ends with fewer than 3 trailing context lines
+// means the file ended, so there is nothing below to reveal; exactly 3 means it may go on.
+const realPatch = (trailing) => ({ patch: ['diff --git a/a.txt b/a.txt', '--- a/a.txt', '+++ b/a.txt', `@@ -10,5 +10,5 @@`, ' c1', ' c2', ' c3', '-old', '+new', ...Array.from({ length: trailing }, (_, i) => ` t${i}`)].join('\n'), added: 1, removed: 1, note: '' })
+const belowBars = (root) => byClass(root, 'fold-inline').map(n => n.props['aria-label'] || '').filter(l => l.includes('(bottom)'))
+
+test('no "below" bar when the last hunk ends before 3 trailing lines (file ended)', async t => {
+  const { root } = await mount(t, { diffOverride: realPatch(1) })
+  assert.deepEqual(belowBars(root), [])
+})
+
+test('"below" bar shows when the last hunk has the full 3 trailing lines (file may continue)', async t => {
+  const { root } = await mount(t, { diffOverride: realPatch(3) })
+  assert.equal(belowBars(root).length, 1)
 })

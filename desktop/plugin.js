@@ -1280,9 +1280,9 @@ const nextGapWindow = (state, gap, step = EXPAND_STEP) => {
   if (start > gap.to) return null;
   return { start, end: Math.min(gap.to, start + step - 1) };
 };
-// git -U<n> only emits fewer trailing context lines when the file ended, so a
-// last hunk with less than that has nothing below it to reveal.
-const PATCH_CONTEXT = 40;
+// The backend sends exactly 3 lines of context (git -U3): a last hunk with fewer
+// trailing lines than that means the file ended, so there is nothing below to reveal.
+const PATCH_CONTEXT = 3;
 const gapOldNumber = (n, delta) => n - (delta || 0);
 
 const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }) => {

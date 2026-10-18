@@ -10,7 +10,8 @@ export const files = ['src/architecture/deep/main.ts', 'src/architecture/deep/ot
 export const mainPatch = patch(files[0], [...contexts.slice(0, 12), '-old-short', '-old-second', `+${longLine}`, '+new-second', '+new-third', ...contexts.slice(12)])
 export const diff = { patch: [mainPatch, patch(files[1], [' shared', '+other']), patch(files[2], ['+test']), patch(files[3], ['-deleted'], true)].join('\n'), added: 5, removed: 3, note: '' }
 export const commits = Array.from({ length: 27 }, (_, i) => ({ sha: (i + 1).toString(16).padStart(8, '0') + 'a'.repeat(32), short: (i + 1).toString(16).padStart(8, '0'), subject: `Commit ${i + 1}`, added: 1, removed: 0 }))
-export function makeContext({ storage = new Map(), fail = '', pr = null } = {}) {
+export function makeContext({ storage = new Map(), fail = '', pr = null, diffOverride = null } = {}) {
+  const served = diffOverride || diff
   const requests = [], clipboard = [], external = []
   const ctx = {
     register() {},
@@ -24,7 +25,7 @@ export function makeContext({ storage = new Map(), fail = '', pr = null } = {}) 
         case '/meta': return { repo, name: repo.split('/').at(-1), current: branch, local: [branch, 'main'], remote: ['origin/main'] }
         case '/pending-select': return { request: null }
         case '/turn-base': return { repo, base: 'b'.repeat(40), untracked: [], untracked_truncated: false }
-        case '/turn-diff': return diff
+        case '/turn-diff': return served
         case '/pr': return pr
         case '/file-lines': {
           const body = options?.body || {}
@@ -36,7 +37,7 @@ export function makeContext({ storage = new Map(), fail = '', pr = null } = {}) 
         case '/commits': return { commits, base: 'origin/main' }
         case '/diff': return u.searchParams.get('scope') === 'commits' ? {
           commits: (u.searchParams.get('ref') || '').split(',').filter(Boolean).map(sha => ({ sha, patch: mainPatch })), added: 27, removed: 0,
-        } : diff
+        } : served
         default: throw new Error('Unexpected fixture route: ' + url)
       }
     },
