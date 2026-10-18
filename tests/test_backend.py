@@ -320,7 +320,7 @@ class BackendTests(unittest.TestCase):
         history = self.get('commits', repo=str(self.repo)).json()
         self.assertEqual(len(history['commits']), 200)
         self.assertTrue(history['truncated'])
-        self.assertIn('older history', history['note'])
+        self.assertIn('Load older', history['note'])
         response = self.get('diff', repo=str(self.repo), scope='commits')
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(len(response.json()['commits']), 200)
@@ -476,6 +476,14 @@ class BackendTests(unittest.TestCase):
         g('checkout', '-q', base_branch)
         self.assertEqual(len(gitx.commits(self.repo)['commits']), before)
 
+    def test_commits_all_history_and_skip(self):
+        full = gitx.commits(self.repo, all_history=True)
+        self.assertIsNone(full['base_label'])
+        n = len(full['commits'])
+        self.assertGreaterEqual(n, 1)
+        paged = gitx.commits(self.repo, all_history=True, skip=n)
+        self.assertEqual(paged['commits'], [])
+
     def test_noncontiguous_commits_truthful_separate_patches(self):
         (self.repo / 'file.txt').write_text('selected\n', newline='\n')
         second = self.commit('selected')
@@ -627,7 +635,7 @@ class BackendTests(unittest.TestCase):
             self.assertTrue(history['truncated'])
             result = gitx.diff(self.repo, 'commits')
             self.assertEqual(len(result['commits']), 2)
-            self.assertIn('older history', result['note'])
+            self.assertIn('Load older', result['note'])
 
     def test_merge_counts_match_patch(self):
         self.git('switch', '-c', 'feature')
