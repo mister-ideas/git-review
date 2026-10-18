@@ -10,6 +10,8 @@ command: `hermes plugins install` takes a catalog name, a Git URL or
 
 ## Unreleased
 
+- Show more lines: the bar now offers the real remaining count (`⌃ 7`, not always 20), the lines above the first change load nearest-first (they used to load from line 1 of the file), and no "below" bar appears when the file already ends inside the diff.
+- Menus have one job each: the Commits dropdown chooses which commits (since the default branch / whole history) and picks them; the branch dropdown only lists branches to compare against.
 - Detached HEAD now shows `HEAD@<sha>` as the branch label and skips the PR lookup.
 - Narrow docks (container ≤480px): the file tree moves below the diff and the toolbar wraps to two rows, so labels stay readable.
 - Selected lines keep a visible highlight on added/removed rows; checkmark columns in menus reserve their width so labels align.
