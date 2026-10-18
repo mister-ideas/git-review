@@ -97,6 +97,22 @@ function unquoteGitPath(value) {
   });
 }
 
+const isHidden = () => typeof document !== "undefined" && document.hidden;
+// Structural sharing for polled data: an unchanged response keeps the previous reference,
+// so React skips the re-render instead of re-parsing and repainting every file.
+function sameData(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
+// Parsed rows per file, keyed by the (stable) lines array: parsing a diff is the expensive part of render.
+const parsedRows = new WeakMap();
+function cachedDiffRows(lines) {
+  let hit = parsedRows.get(lines);
+  if (!hit) { hit = diffRows(lines.join("\n"), false); parsedRows.set(lines, hit); }
+  return hit;
+}
+
 function fileSections(patch) {
   const out = [];
   let current = null;
@@ -111,6 +127,25 @@ function fileSections(patch) {
     if (current) current.lines.push(line);
   }
   return out;
+}
+
+// Why a file has no hunks: say what git actually reported instead of one generic line.
+function noHunkMessage(lines, ignoreWs) {
+  const find = (re) => { for (const l of lines) { const m = re.exec(l); if (m) return m; } return null; };
+  const from = find(/^rename from (.*)$/);
+  if (from) {
+    const was = unquoteGitPath(from[1].replace(/^"|"$/g, ""));
+    const sim = find(/^similarity index (\d+)%/);
+    if (ignoreWs && !(sim && sim[1] === "100")) return `Renamed from ${was} — remaining changes are whitespace only (hidden by Ignore whitespace).`;
+    return `Renamed from ${was} — no content changes.`;
+  }
+  if (find(/^(Binary files .* differ|GIT binary patch)/)) return "Binary file changed — no text diff available.";
+  const mode = [find(/^old mode (\d+)/), find(/^new mode (\d+)/)];
+  if (mode[0] && mode[1]) return `Mode changed ${mode[0][1]} → ${mode[1][1]} — no content changes.`;
+  if (find(/^new file mode/)) return "Empty file added.";
+  if (find(/^deleted file mode/)) return "Empty file deleted.";
+  if (ignoreWs) return "Only whitespace changes — hidden by Ignore whitespace.";
+  return "No line changes to show.";
 }
 
 const basename = (p) => p.split(/[\\/]/).pop();
@@ -216,9 +251,51 @@ const css = `
 .grd .search-field:focus-within{border-color:var(--ui-accent)}
 .grd .search-field input{width:0;min-width:0;flex:1 1 0;field-sizing:fixed;color:var(--ui-text-primary);background:transparent;font-size:12px}
 .grd .search-field input::placeholder{color:var(--ui-text-secondary);opacity:1}
+  .dark .grd{background:#141416;color:#e8e8e8}
+  .dark .grd .toolbar{border-color:#2b2b2d}
+  .dark .grd .toolbar .repo-name{color:#9a9a9a}
+  .dark .grd .folder{color:#c9c9c9}
+  .dark .grd .folder:hover{background:#1c1c20}
+  .dark .grd .file{color:#e8e8e8}
+  .dark .grd .file:hover{background:#1c1c20}
+  .dark .grd .file[aria-pressed=true]{background:#242426}
+  .dark .grd .fname{color:#e8e8e8}
+  .dark .grd .detailhead{border-color:#2b2b2d}
+  .dark .grd .detailtitle .fdir{color:#6b6b6b}
+  .dark .grd .search{border-bottom-color:#2b2b2d}
+  .dark .grd .search-field{background:#141416;color:#fff;border-color:#2b2b2d;border-radius:6px;padding:0 6px}
+  .dark .grd .search-field input{background:#212124;color:#e8e8e8;font-size:12px}
+  .dark .grd .search-field input::placeholder{color:#9b9b9b;opacity:.9}
+  .dark .grd .search-field > svg{color:#9b9b9b}
+  .dark .grd .filter-wrap.active{color:#e8e8e8}
+  .dark .grd .filter-wrap.active .filter-btn{background:#2b2b2d}
+  .dark .grd .lineno{color:#6b6b6b}
+  .dark .grd .line.hunk{color:#9a9a9a;background:#161618}
+  .dark .grd .fold{color:#6b6b6b}
+  .dark .grd .fold:hover{color:#c9c9c9}
+  .dark .grd .fold-strip{background:#161618}
+  .dark .grd .menu-group{background:#161618;color:#6b6b6b}
+  .dark .grd .af-head{background:#161618}
+  .dark .grd .af-head:hover{background:#1c1c20}
+  .dark .grd .af-head .fdir{color:#6b6b6b}
+  .dark .grd .af-copy{color:#6b6b6b}
+  .dark .grd .af-copy:hover{color:#c9c9c9}
+  .dark .grd .notice{background:#161618;color:#9a9a9a}
+  .dark .grd .fold-inline{background:#161618}
+  .dark .grd .fold-inline:hover{background:#242426}
+  .dark .grd .line.add{background:#123a24}
+  .dark .grd .line.add .lineno{color:#4ade80}
+  .dark .grd .line.remove{background:#3a1c1c}
+  .dark .grd .line.remove .lineno{color:#f87171}
+  .dark .grd .line.line-selected{background:#242426}
+  .dark .grd .split-row > .line + .line{border-color:#2b2b2d}
+  .dark .grd .allfiles::-webkit-scrollbar-thumb{background:#2b2b2d}
+  .dark .grd .allfiles::-webkit-scrollbar-thumb:hover{background:#3b3b3b}
+
 .grd .search-field > svg{color:var(--ui-text-secondary);flex-shrink:0}
 .grd .search .filter-wrap{flex:0 0 auto;display:inline-flex}
 .grd .search .filter-wrap.active{color:var(--ui-accent)}
+.grd .search .filter-wrap.active .filter-btn{color:var(--ui-accent);background:color-mix(in srgb,var(--ui-accent) 12%,transparent)}
 .grd .tree{overflow:auto;flex:1;min-height:0;padding-bottom:10px}
 .grd .folder{display:flex;align-items:center;gap:5px;padding:4px 10px;color:var(--ui-text-secondary);font-size:12px;cursor:pointer;user-select:none}
 .grd .folder:hover{background:var(--ui-row-hover-background)}
@@ -238,6 +315,7 @@ const css = `
 .grd .line{display:flex;min-width:max-content;white-space:pre;padding:0 6px;align-items:baseline;cursor:pointer}
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
+.grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
 .grd .cite-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
 .grd .cite-bar .cite-ref{font-family:var(--font-mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .grd .lineno{flex:0 0 calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);text-align:right;padding:0;color:var(--ui-text-tertiary);user-select:none;font-variant-numeric:tabular-nums;font:inherit;opacity:0.75}
@@ -295,7 +373,15 @@ const css = `
 .grd .fold{width:100%;border:0;background:transparent;font-family:inherit;white-space:normal}
 .grd .fold:focus-visible{outline:2px solid var(--ui-accent);outline-offset:-2px}
 @container(max-width:560px){.grd .body{grid-template-columns:minmax(0,1fr) minmax(150px,30%)}.grd .toolbar{gap:4px;padding-inline:6px}}
+.grd .fold,.grd .fold-inner{white-space:nowrap}
+.check-slot{display:inline-flex;align-items:center;justify-content:center;width:1rem;flex:0 0 1rem}
+@container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
 `;
+
+// Fixed-width check column: unchecked rows keep the same indent as checked ones, so labels align.
+function CheckSlot({ on, size }) {
+  return jsx("span", { className: "check-slot", "aria-hidden": true, children: on ? jsx(Codicon, { name: "check", size }) : null });
+}
 
 // Repo/branch triggers share all available toolbar space via pure flex
 // (flex:1 1 0): equal widths when both labels are long, spare flows to the
@@ -369,20 +455,22 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot }) {
 }
 
 // Checkable commit rows inside the Commits submenu (multi-select)
-function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone }) {
+function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone, hasMore, loadingMore, onMore, onOpen }) {
   return jsxs(Fragment, { children: [
     // preventDefault keeps the menu open: picking commits is a multi-select, and
     // a closing dropdown would cost one reopen per commit.
-    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onAll() }, children: "Select all" }),
-    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onNone() }, children: "Clear" }),
+    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onAll() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Select all"] }) }),
+    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onNone() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Clear"] }) }),
+    jsx(DropdownMenuItem, { disabled: !commits.length, onSelect: () => onOpen(0), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Browse commit by commit"] }) }),
     jsx(DropdownMenuSeparator, {}),
     commits.length
       ? commits.map((c) => jsxs(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onToggle(c.sha) }, children: [
-        jsx(Codicon, { name: selected.has(c.sha) ? "check" : "", size: "0.75rem" }),
+        jsx(CheckSlot, { on: selected.has(c.sha), size: "0.75rem" }),
         jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.subject || c.short }),
         jsx(DeltaCounts, { added: c.added, removed: c.removed })
       ] }, c.sha))
-      : jsx(DropdownMenuItem, { disabled: true, children: "No commits ahead of base" })
+      : jsx(DropdownMenuItem, { disabled: true, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "No commits to show"] }) }),
+    hasMore ? jsx(DropdownMenuItem, { disabled: loadingMore, onSelect: (event) => { event.preventDefault(); onMore() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), loadingMore ? "Loading older commits…" : "Load older commits"] }) }) : null
   ] });
 }
 
@@ -428,6 +516,12 @@ function GitReview({ ctx }) {
   const [showTests, setShowTests] = useState(() => ctx.storage.get(SETTINGS_KEY, {}).showTests !== false);
   const [copied, setCopied] = useState("");
   const [collapsedFiles, setCollapsedFiles] = useState({});
+  const [autoBase, setAutoBase] = useState("");
+  const [allHistory, setAllHistory] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [navIndex, setNavIndex] = useState(-1); // >=0: single-commit mode on commits[navIndex]
+  const [fullFiles, setFullFiles] = useState({}); // files whose every unchanged line is being opened
   // Last-agent-turn baselines live in STATE (mirror of storage) so recording a
   // new snapshot re-renders the pane immediately.
   const [turnBases, setTurnBases] = useState(() => ctx.storage.get(TURN_BASE_KEY, {}));
@@ -459,9 +553,9 @@ function GitReview({ ctx }) {
     ++generation.current; ++focusGeneration.current;
     setWorktrees([]); setChosen(""); setMeta(null); setDiff(null); setPr(null);
     setScope("uncommitted"); setBase(""); setRef(""); setPathFilter("");
-    setCommits([]); setPicked(new Set()); setCommitsLoading(false); setHistoryNote("");
+    setCommits([]); setPicked(new Set()); setCommitsLoading(false); setHistoryNote(""); setAllHistory(false); setNavIndex(-1); setHasMore(false);
     commitSelectionOwner.current = ""; commitSelectionExplicit.current = false;
-    setSelected(""); setFilter(""); setExpanded({}); setContextModes({});
+    setSelected(""); setFilter(""); setExpanded({}); setContextModes({}); setFullFiles({});
     setError(""); setRepositoryIdentity(identity);
   }, [identity, repositoryReady]);
 
@@ -530,7 +624,7 @@ function GitReview({ ctx }) {
           }
         }
       } catch { /* backend unreachable — retry on the next tick */ }
-      if (!gone) timer = setTimeout(poll, 3000);
+      if (!gone) timer = setTimeout(poll, isHidden() ? 10000 : 3000);
     }
     poll();
     return () => { gone = true; clearTimeout(timer); };
@@ -539,7 +633,7 @@ function GitReview({ ctx }) {
   useEffect(() => {
     if (!repositoryReady || !chosen) return;
     let gone = false;
-    setMeta(null); setSelected(""); setDiff(null); setExpanded({}); setContextModes({}); setPr(null);
+    setMeta(null); setSelected(""); setDiff(null); setExpanded({}); setContextModes({}); setFullFiles({}); setPr(null);
     ctx.rest(`/meta?repo=${encodeURIComponent(chosen)}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 10000 }).then((r) => { if (!gone) setMeta(r); }).catch(() => {});
     return () => { gone = true; };
   }, [ctx, chosen, tick, identity, repositoryReady]);
@@ -559,10 +653,11 @@ function GitReview({ ctx }) {
     if (!repositoryReady || !chosen || (scope !== "commit" && scope !== "commits")) return;
     let gone = false;
     setCommitsLoading(true); setHistoryNote("");
-    ctx.rest(`/commits?repo=${encodeURIComponent(chosen)}&base=${encodeURIComponent(base)}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 15000 })
+    ctx.rest(`/commits?repo=${encodeURIComponent(chosen)}&base=${encodeURIComponent(base)}${allHistory ? "&all=true" : ""}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 15000 })
       .then((r) => { if (!gone) {
         const list = r.commits || [];
-        setCommits(list);
+        if (!list.length && !base && !allHistory) { setAllHistory(true); return; }
+        setCommits(list); setAutoBase(r.base_label || ""); setHasMore(!!r.has_more); setNavIndex(-1);
         setHistoryNote(r.note || (r.truncated ? "Older history is omitted from this commit list." : ""));
         if (scope === "commits" && !commitSelectionExplicit.current) {
           setPicked(new Set(list.map((c) => c.sha)));
@@ -570,7 +665,22 @@ function GitReview({ ctx }) {
         }
       } }).catch(() => {}).finally(() => { if (!gone) setCommitsLoading(false); });
     return () => { gone = true; };
-  }, [ctx, chosen, scope, base, tick, identity, repositoryReady]);
+  }, [ctx, chosen, scope, base, allHistory, tick, identity, repositoryReady]);
+
+  const loadOlder = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const r = await ctx.rest(`/commits?repo=${encodeURIComponent(chosen)}&base=${encodeURIComponent(base)}${allHistory ? "&all=true" : ""}&skip=${commits.length}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 20000 });
+      const more = (r.commits || []).filter((c) => !commits.some((x) => x.sha === c.sha));
+      setCommits((prev) => prev.concat(more)); setHasMore(!!r.has_more);
+    } catch { /* keep the list as is */ } finally { setLoadingMore(false); }
+  };
+  // Single-commit navigation: show exactly commits[i]; -1 returns to the multi-select.
+  const goCommit = (i) => {
+    if (i < 0 || i >= commits.length) return;
+    commitSelectionExplicit.current = true; setNavIndex(i); setPicked(new Set([commits[i].sha]));
+  };
 
   // The commits-scope ref param: selected shas in commit order
   const commitsRef = useMemo(() => [...picked].join(","), [picked]);
@@ -604,14 +714,17 @@ function GitReview({ ctx }) {
     const current = ++generation.current;
     let gone = false;
     let timer;
+    let loaded = false;
     async function load() {
+      if (loaded && isHidden()) { timer = setTimeout(load, 5000); return; } // no polling while hidden
       try {
         const r = await ctx.rest("/turn-diff", { method: "POST", timeoutMs: 20000, body: {
           repo: chosen, base: turnBase.base ?? null, preexisting_untracked: turnBase.untracked || [], ignore_ws: ignoreWs,
         } });
-        if (!gone && current === generation.current) { setDiff(r); setError(""); }
+        if (!gone && current === generation.current) { setDiff((prev) => (sameData(prev, r) ? prev : r)); setError(""); loaded = true; }
       } catch {
-        if (!gone && current === generation.current) setDiff(null);
+        // keep the last good diff on a transient failure; only blank on the very first load
+        if (!gone && current === generation.current && !loaded) setDiff(null);
       }
       if (!gone) timer = setTimeout(load, 5000);
     }
@@ -636,7 +749,9 @@ function GitReview({ ctx }) {
     const current = ++generation.current;
     let timer;
     let gone = false;
+    let loaded = false;
     async function load() {
+      if (loaded && isHidden()) { if (!gone && live) timer = setTimeout(load, 5000); return; } // no polling while hidden
       if (scope === "commits" && !commitsRef) { setDiff(null); return; }
       let url = `/diff?repo=${encodeURIComponent(chosen)}&scope=${encodeURIComponent(scope)}&ignore_ws=${ignoreWs}&cwd=${encodeURIComponent(cwd || "")}`;
       if (base && scope === "commits") url += `&base=${encodeURIComponent(base)}`;
@@ -644,10 +759,10 @@ function GitReview({ ctx }) {
       if (scope === "commits" && commitsRef) url += `&ref=${encodeURIComponent(commitsRef)}`;
       try {
         const r = await ctx.rest(url, { timeoutMs: 20000 });
-        if (!gone && current === generation.current) { setDiff(r); setError(""); }
+        if (!gone && current === generation.current) { setDiff((prev) => (sameData(prev, r) ? prev : r)); setError(""); loaded = true; }
       } catch (err) {
         if (!gone && current === generation.current) {
-          setDiff(null);
+          if (!loaded) setDiff(null); // keep the last good diff during a live refresh failure
           const status = err?.status || err?.response?.status;
           setError(status === 404
             ? "Backend route not found — restart the Hermes Desktop app so its backend picks up this plugin"
@@ -678,9 +793,10 @@ function GitReview({ ctx }) {
     for (const s of sections) {
       const added = s.lines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length;
       const removed = s.lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
-      const isNew = s.lines.some((l) => l === "--- /dev/null");
-      const isDeleted = s.lines.some((l) => l === "+++ /dev/null");
-      m.set(s.path, { added, removed, isNew, status: isNew ? "added" : isDeleted ? "deleted" : "modified" });
+      const isNew = s.lines.some((l) => l === "--- /dev/null" || l.startsWith("new file mode"));
+      const isDeleted = s.lines.some((l) => l === "+++ /dev/null" || l.startsWith("deleted file mode"));
+      const isRenamed = s.lines.some((l) => l.startsWith("rename from "));
+      m.set(s.path, { added, removed, isNew, status: isNew ? "added" : isDeleted ? "deleted" : isRenamed ? "renamed" : "modified" });
     }
     return m;
   }, [sections]);
@@ -696,6 +812,8 @@ function GitReview({ ctx }) {
     if (!showTests && isTestPath(s.path)) return false;
     return true;
   });
+  const hiddenByFilters = sections.filter((s) => (!showDeleted && stats.get(s.path)?.status === "deleted") || (!showTests && isTestPath(s.path))).length;
+  const allCollapsed = visibleFiles.length > 0 && visibleFiles.every((s) => collapsedFiles[s.path]);
   const tree = useMemo(() => compactTree(buildTree(visibleFiles.map((s) => s.path))), [visibleFiles]);
   const active = visibleFiles.find((s) => s.path === selected) || visibleFiles[0];
   // Click a line, then click another: the range between the two clicks highlights
@@ -830,19 +948,19 @@ function GitReview({ ctx }) {
         }),
         jsxs(DropdownMenuContent, { children: [
           SCOPES.map((s) => jsx(DropdownMenuItem, { onSelect: () => setScope(s.id), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-            jsx(Codicon, { name: s.id === scope ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+            jsx(CheckSlot, { on: s.id === scope, size: "0.8rem" }),
             s.label
           ] }) }, s.id)),
           // Commits is a multi-select dropdown, not a page: checkable commits
           // inline in the scope menu (all checked by default).
           scope === "commits" ? jsxs(Fragment, { children: [
             jsx(DropdownMenuSeparator, {}),
-            jsx(CommitsSubmenu, { commits, selected: picked, onToggle: toggleCommit,
+            jsx(CommitsSubmenu, { commits, selected: picked, onToggle: toggleCommit, hasMore, loadingMore, onMore: loadOlder, onOpen: goCommit,
               onAll: () => { commitSelectionExplicit.current = true; setPicked(new Set(commits.map((c) => c.sha))); },
               onNone: () => { commitSelectionExplicit.current = true; setPicked(new Set()); } })
           ] }) : null,
           jsx(DropdownMenuSeparator, {}),
-          jsx(DropdownMenuItem, { onSelect: () => setTick((n) => n + 1), children: "Refresh" })
+          jsx(DropdownMenuItem, { onSelect: () => setTick((n) => n + 1), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Refresh"] }) })
         ] })
       ] }),
       jsxs(DropdownMenu, { children: [
@@ -866,10 +984,10 @@ function GitReview({ ctx }) {
               const rel = w.path.split("/").slice(0, -1).filter(Boolean);
               const inGroup = rel[rel.length - 1] === group ? rel.slice(0, -1).join("/") : rel.join("/");
               out.push(jsx(DropdownMenuItem, { onSelect: () => chooseRepository(w.path), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-                jsx(Codicon, { name: w.path === chosen ? "check" : "repo", size: "0.8rem", className: "shrink-0" }),
+                jsx("span", { className: "check-slot", children: jsx(Codicon, { name: w.path === chosen ? "check" : "repo", size: "0.8rem" }) }),
                 jsxs("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
                   w.name, " ",
-                  jsx("span", { style: { color: "var(--ui-text-tertiary)" }, children: `${inGroup ? `${inGroup} · ` : ""}${w.branch || "(detached)"}` })
+                  jsx("span", { style: { color: "var(--ui-text-tertiary)" }, children: `${inGroup ? `/${inGroup} · ` : ""}${w.branch || "(detached)"}` })
                 ] })
               ] }) }, w.path));
             }
@@ -881,12 +999,16 @@ function GitReview({ ctx }) {
         jsx(DropdownMenuTrigger, { asChild: true, children:
           jsx(RepoButton, { icon: "git-branch", label: meta?.current || "branch…" })
         }),
-        jsx(DropdownMenuContent, { className: "repo-menu", children:
-          (meta?.local || []).concat(meta?.remote || []).map((b) => jsx("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "4px 10px" }, children: jsxs("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
-            jsx(Codicon, { name: b === (meta?.current) ? "check" : "git-branch", size: "0.8rem", className: "shrink-0" }),
-            " ", b
+        jsx(DropdownMenuContent, { className: "repo-menu", children: [
+          jsx("div", { className: "menu-group", role: "presentation", children: "Compare Commits against" }, "hdr"),
+          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(true); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: allHistory && !base, size: "0.8rem" }), "All history (whole branch)"] }) }, "all"),
+          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: !base && !allHistory, size: "0.8rem" }), `Automatic (${autoBase || "default branch"})`] }) }, "auto"),
+          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(b); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
+            jsx(CheckSlot, { on: base === b, size: "0.8rem" }),
+            jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: b }),
+            b === meta?.current ? jsx("span", { style: { color: "var(--ui-text-tertiary)", fontSize: 11 }, children: "current" }) : null
           ] }) }, b))
-        })
+        ] })
       ] }),
       // Right-side controls group (PR · display · collapse all · file list); margin-left:
       // auto pushes it right WITHOUT a spacer stealing flex space from the
@@ -908,22 +1030,18 @@ function GitReview({ ctx }) {
           ] }),
           jsx(DropdownMenuSeparator, {}),
           jsx(DropdownMenuItem, { onSelect: () => { setLayout("unified"); persist({ layout: "unified" }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-            jsx(Codicon, { name: layout === "unified" ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+            jsx(CheckSlot, { on: layout === "unified", size: "0.8rem" }),
             "Layout: Unified"
           ] }) }),
           jsx(DropdownMenuItem, { onSelect: () => { setLayout("split"); persist({ layout: "split" }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-            jsx(Codicon, { name: layout === "split" ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+            jsx(CheckSlot, { on: layout === "split", size: "0.8rem" }),
             "Layout: Split"
           ] }) })
         ] })
       ] }),
-      jsx(Tip, { label: "Collapse all", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Collapse all",
-        onClick: () => { setExpanded({}); setContextModes({}); setCollapsedFiles((c) => {
-          const all = {};
-          for (const s of visibleFiles) all[s.path] = true;
-          return all;
-        }); },
-        children: jsx(Codicon, { name: "collapse-all", size: "0.9rem" }) }) }),
+      jsx(Tip, { label: allCollapsed ? "Expand all" : "Collapse all", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": allCollapsed ? "Expand all" : "Collapse all",
+        onClick: () => { setExpanded({}); setContextModes({}); setFullFiles({}); setCollapsedFiles(allCollapsed ? {} : Object.fromEntries(visibleFiles.map((s) => [s.path, true]))); },
+        children: jsx(Codicon, { name: allCollapsed ? "expand-all" : "collapse-all", size: "0.9rem" }) }) }),
       // Order per spec: ⋯ display · Collapse all · Hide/Show right sidebar (last).
       jsx(Tip, { label: visible.files ? "Hide file list" : "Show file list", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": visible.files ? "Hide file list" : "Show file list", "aria-pressed": visible.files, onClick: () => { setVisible((v) => { persist({ files: !v.files }); return { ...v, files: !v.files }; }); }, children: jsx(Codicon, { name: visible.files ? "layout-sidebar-right" : "layout-sidebar-right-off", size: "0.9rem" }) }) })
       ] })
@@ -937,6 +1055,17 @@ function GitReview({ ctx }) {
       jsx(Button, { variant: "outline", size: "sm", "aria-label": "Cite selected lines in focused message draft", onClick: citeSelection, children: "Cite in message" }),
       jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Clear line selection", onClick: () => setLineSelection(null), children: jsx(Codicon, { name: "close", size: "0.85rem" }) }),
     ] }),
+    lineSelection && lineSelection.anchor != null && jsxs("div", { className: "cite-bar", role: "status", children: [
+      jsx(Codicon, { name: "symbol-string", size: "0.85rem" }),
+      jsx("span", { className: "cite-ref", children: `${lineSelection.file}:${lineSelection.start} — click another line to finish the range` }),
+      jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Clear line selection", onClick: () => setLineSelection(null), children: jsx(Codicon, { name: "close", size: "0.85rem" }) }),
+    ] }),
+    (scope === "commits" && navIndex >= 0 && commits[navIndex]) && jsxs("div", { className: "notice commit-nav", role: "navigation", "aria-label": "Commit navigation", style: { display: "flex", alignItems: "center", gap: 6 }, children: [
+      jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex <= 0, "aria-label": "Newer commit", onClick: () => goCommit(navIndex - 1), children: "◀" }),
+      jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex >= commits.length - 1 && !hasMore, "aria-label": "Older commit", onClick: () => (navIndex >= commits.length - 1 ? loadOlder() : goCommit(navIndex + 1)), children: "▶" }),
+      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()} (${navIndex + 1}/${commits.length}${hasMore ? "+" : ""})` }),
+      jsx(Button, { size: "sm", variant: "ghost", onClick: () => { setNavIndex(-1); setPicked(new Set(commits.map((c) => c.sha))); }, children: "All commits" })
+    ] }),
     (scope === "commits" && historyNote) && jsx("div", { className: "notice", role: "status", children: historyNote }),
     (error || diff?.note) && jsxs("div", { className: "notice", role: "alert", children: [
       jsx(Codicon, { className: "text-(--ui-orange) shrink-0", name: "warning", size: "0.85rem" }),
@@ -945,15 +1074,16 @@ function GitReview({ ctx }) {
     !worktrees.length && !error
       ? jsx(EmptyState, { title: "No worktrees found", description: "Focus a chat in a Git repository or configure explicit repos/roots in plugin settings." })
       : !diff
-        ? jsx(EmptyState, { title: error || (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits ahead of base") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…") })
+        ? jsx(EmptyState, { title: error ? "Nothing to show" : (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits to show") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…"), description: error ? "See the message above, then retry or switch scope." : undefined })
         : !sections.length && !diff.note
           ? jsx(EmptyState, { title: "No changes in this scope", description: "Try a different scope or worktree." })
           : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), children: [
             // MAIN: every changed file's diff stacked (Cursor Changes), scroll to the last one.
             jsxs("div", { className: "allfiles", children: [
+              !visibleFiles.length && jsx(EmptyState, { title: q ? `No files match “${filter.trim()}”` : "All files are hidden by filters", description: sections.length ? "Clear the search or adjust the filters." : "" }),
               visibleFiles.map((s) => {
               const collapsed = !!collapsedFiles[s.path];
-              const { rows: rawRows, hunks } = diffRows(s.lines.join("\n"), false);
+              const { rows: rawRows, hunks } = cachedDiffRows(s.lines);
               const gutterWidth = `${rawRows.reduce((width, row) => Math.max(width, String(row.before ?? "").length, String(row.after ?? "").length), 4)}ch`;
               const mode = contextModes[s.path] || "compact";
               const folded = mode === "full" ? rawRows : collapseRows(rawRows, mode === "hidden" ? 0 : 3);
@@ -982,15 +1112,18 @@ function GitReview({ ctx }) {
               const fetchLines = (r, start, end) => ctx.rest("/file-lines", { method: "POST", timeoutMs: 15000, body: { repo: chosen, path: realPath, rev: r, start, end } });
               const fold = (row, gap) => jsx(FoldBar, {
                 row, path: s.path, rev, gap, compact: layout === "split",
+                autoAll: !!fullFiles[s.path],
                 onExpandAll: () => {
+                  setFullFiles((m) => ({ ...m, [s.path]: true }));
                   setContextModes((m) => ({ ...m, [s.path]: "full" }));
                   setExpanded((e) => ({ ...e, [`${s.path}:${row.key}`]: true }));
                 },
                 onFetch: fetchLines,
-              }, `${chosen}|${rev}|${s.path}:${row.key}:${gap?.key || "fold"}`);
+              }, `${chosen}|${rev}|${s.path}:${row.key}:${gap?.key || "fold"}|${fullFiles[s.path] ? "full" : "part"}`);
               const bars = mode === "full" && hasContext
                 ? [jsx(FullBar, { path: s.path, label: "Hide all unchanged lines", onToggle: () => {
                     setContextModes((m) => ({ ...m, [s.path]: "hidden" }));
+                    setFullFiles((m) => ({ ...m, [s.path]: false }));
                     setExpanded((e) => Object.fromEntries(Object.entries(e).filter(([key]) => !key.startsWith(`${s.path}:context:`))));
                   } }, `${s.path}:fullbar`)]
                 : mode === "hidden" && hasContext
@@ -1061,7 +1194,7 @@ function GitReview({ ctx }) {
               // Files whose patch carries no hunks (binary, mode-only, pure rename)
               // render a single muted note instead of an empty body.
               const note = !hunks.length
-                ? [jsx("div", { className: "notice", role: "note", children: "No line changes shown — binary file, mode change, or pure rename." }, `${s.path}:note`)]
+                ? [jsx("div", { className: "notice", role: "note", children: noHunkMessage(s.lines, ignoreWs) }, `${s.path}:note`)]
                 : [];
               return jsxs("section", { className: cn("af-file", collapsed && "af-collapsed"), "data-path": s.path, style: { "--gr-gutter-width": gutterWidth }, children: [
                 jsxs("div", { className: "af-head", children: [
@@ -1090,7 +1223,7 @@ function GitReview({ ctx }) {
             // RIGHT: the file tree list, hide/show via the toolbar toggle.
             visible.files ? jsxs("aside", { className: "tree-side", children: [
               jsxs("div", { className: "search", children: [
-                jsx(SearchField, { containerClassName: "search-field", inputClassName: "search-input", value: filter, onChange: setFilter, placeholder: `Search ${sections.length} files`, "aria-label": "Search files" }),
+                jsx(SearchField, { containerClassName: "search-field", inputClassName: "search-input", value: filter, onChange: setFilter, placeholder: `Search ${sections.length} ${sections.length === 1 ? "file" : "files"}${hiddenByFilters ? ` (${hiddenByFilters} hidden)` : ""}`, "aria-label": "Search files" }),
                 jsx("div", { className: cn("filter-wrap", (!showDeleted || !showTests) && "active"), children:
         jsxs(DropdownMenu, { children: [
           jsx(DropdownMenuTrigger, { asChild: true, children:
@@ -1099,11 +1232,11 @@ function GitReview({ ctx }) {
           }),
           jsxs(DropdownMenuContent, { align: "end", children: [
             jsx(DropdownMenuItem, { onSelect: () => { setShowDeleted((v) => { persist({ showDeleted: !v }); return !v; }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-              jsx(Codicon, { name: showDeleted ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+              jsx(CheckSlot, { on: showDeleted, size: "0.8rem" }),
               "Deleted files"
             ] }) }),
             jsx(DropdownMenuItem, { onSelect: () => { setShowTests((v) => { persist({ showTests: !v }); return !v; }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-              jsx(Codicon, { name: showTests ? "check" : "", size: "0.8rem", className: "shrink-0" }),
+              jsx(CheckSlot, { on: showTests, size: "0.8rem" }),
               "Test files"
             ] }) })
           ] })
@@ -1131,7 +1264,7 @@ const nextGapWindow = (state, gap, step = EXPAND_STEP) => {
 };
 const gapOldNumber = (n, delta) => n - (delta || 0);
 
-const FoldBar = ({ row, path, rev, gap, compact, onExpandAll, onFetch }) => {
+const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }) => {
   const [revealed, setRevealed] = useState({ up: 0, down: 0 });
   const [gapState, setGapState] = useState(null); // {ls, le, numbered, total, done, failed, loading}
   const hidden = row.rows || [];
@@ -1174,8 +1307,13 @@ const FoldBar = ({ row, path, rev, gap, compact, onExpandAll, onFetch }) => {
     } catch { setGapState((p) => ({ ...(p || { le: gap.from - 1, numbered: [] }), loading: false, failed: true })); }
   };
 
+  // "all" on any bar opens the whole file: every other gap of this file loads itself.
+  useEffect(() => {
+    if (isGap && autoAll && !gapState?.done && !gapState?.loading && !gapState?.failed) void loadGap("all");
+  }, [isGap, autoAll, gapState?.done, gapState?.loading, gapState?.failed]);
+
   const expand = (mode) => {
-    if (isGap) { void loadGap(mode); return; }
+    if (isGap) { if (mode === "all") onExpandAll?.(); void loadGap(mode); return; }
     if (mode === "all") { onExpandAll(); return; }
     setRevealed((r) => mode === "up" ? { ...r, up: r.up + 1 } : { ...r, down: r.down + 1 });
   };

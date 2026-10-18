@@ -324,7 +324,13 @@ def branches(repo: str | Path) -> dict:
         if name and not name.endswith("/HEAD"):
             remote.append(name)
     current = _run(repo, "branch", "--show-current").strip()
-    return {"current": current, "local": local[:200], "remote": remote[:400]}
+    detached = not current
+    if detached:
+        try:
+            current = "HEAD@" + _run(repo, "rev-parse", "--short", "HEAD").strip()
+        except GitError:
+            current = "HEAD"
+    return {"current": current, "detached": detached, "local": local[:200], "remote": remote[:400]}
 
 
 def status(repo: str | Path) -> dict:
@@ -695,15 +701,43 @@ def _summarize(patch: str) -> dict:
     return {"patch": patch, "added": added, "removed": removed, "note": ""}
 
 
-def commits(repo: str | Path, base: str | None = None) -> dict:
+def _default_branch_fork_point(repo: str | Path):
+    """Merge-base of HEAD with the default branch, or None when HEAD is on it (or none exists)."""
+    candidates = []
+    try:
+        head = _run(repo, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").strip()
+        if head:
+            candidates.append(head.removeprefix("refs/remotes/"))
+    except GitError:
+        pass
+    candidates += ["origin/main", "origin/master", "main", "master"]
+    for name in candidates:
+        try:
+            tip = _commit_sha(repo, name)
+            head_sha = _commit_sha(repo, "HEAD")
+            if tip == head_sha:
+                return None
+            fork = _run(repo, "merge-base", tip, head_sha).strip()
+            return (fork, name) if re.fullmatch(r"[0-9a-f]{40,64}", fork) and fork != head_sha else None
+        except GitError:
+            continue
+    return None
+
+
+def commits(repo: str | Path, base: str | None = None, skip: int = 0, all_history: bool = False) -> dict:
     """Latest HEAD history by default; an explicit base restricts to base..HEAD."""
     start = _commit_sha(repo, base) if base and base.strip() else None
     try:
         _commit_sha(repo, "HEAD")
     except GitError:
         return {"commits": [], "base": start, "truncated": False, "note": "Repository has no commits yet."}
+    auto = None
+    skip = max(0, min(int(skip or 0), 100000))
+    if start is None and not all_history:
+        found = _default_branch_fork_point(repo)
+        start, auto = (found[0], found[1]) if found else (None, None)
     revision = f"{start}..HEAD" if start else "HEAD"
-    out = _run(repo, "log", revision, "--max-count", str(MAX_COMMITS + 1),
+    out = _run(repo, "log", revision, "--skip", str(skip), "--max-count", str(MAX_COMMITS + 1),
                "--format=%H%x1f%h%x1f%an%x1f%at%x1f%s", "--numstat", "--no-ext-diff", "--no-textconv", "--diff-merges=first-parent", "--")
     items: list[dict] = []
     current = None
@@ -724,8 +758,12 @@ def commits(repo: str | Path, base: str | None = None) -> dict:
                 current["removed"] += int(cols[1])
             current["files"] += 1
     truncated = len(items) > MAX_COMMITS
-    return {"commits": items[:MAX_COMMITS], "base": start, "truncated": truncated,
-            "note": f"Showing the latest {MAX_COMMITS} commits; older history is omitted." if truncated else ""}
+    note = f"Showing {MAX_COMMITS} commits; use Load older for more." if truncated else ""
+    if all_history:
+        note = "Full history of this branch." + (" " + note if note else "")
+    if auto and items:
+        note = f"Commits on this branch since it left {auto}." + (" " + note if note else "")
+    return {"commits": items[:MAX_COMMITS], "base": None if auto else start, "base_label": auto, "truncated": truncated, "has_more": truncated, "skip": skip, "note": note}
 
 
 def remote_url(repo: str | Path) -> str:
