@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7 — 2026-10-19
+
+- The banner now shows Hermes himself (winged helmet, caduceus, winged sandals) holding a diff tablet, at the catalog's 1200×600 (2:1) size.
+
 ## 0.1.6 — 2026-10-19
 
 - New catalog banner (`docs/banner.jpg`, 2:1) and a landing image at the top of the README.
