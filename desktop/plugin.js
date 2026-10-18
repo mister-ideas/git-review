@@ -97,6 +97,22 @@ function unquoteGitPath(value) {
   });
 }
 
+const isHidden = () => typeof document !== "undefined" && document.hidden;
+// Structural sharing for polled data: an unchanged response keeps the previous reference,
+// so React skips the re-render instead of re-parsing and repainting every file.
+function sameData(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
+// Parsed rows per file, keyed by the (stable) lines array: parsing a diff is the expensive part of render.
+const parsedRows = new WeakMap();
+function cachedDiffRows(lines) {
+  let hit = parsedRows.get(lines);
+  if (!hit) { hit = diffRows(lines.join("\n"), false); parsedRows.set(lines, hit); }
+  return hit;
+}
+
 function fileSections(patch) {
   const out = [];
   let current = null;
@@ -559,7 +575,7 @@ function GitReview({ ctx }) {
           }
         }
       } catch { /* backend unreachable — retry on the next tick */ }
-      if (!gone) timer = setTimeout(poll, 3000);
+      if (!gone) timer = setTimeout(poll, isHidden() ? 10000 : 3000);
     }
     poll();
     return () => { gone = true; clearTimeout(timer); };
@@ -633,14 +649,17 @@ function GitReview({ ctx }) {
     const current = ++generation.current;
     let gone = false;
     let timer;
+    let loaded = false;
     async function load() {
+      if (loaded && isHidden()) { timer = setTimeout(load, 5000); return; } // no polling while hidden
       try {
         const r = await ctx.rest("/turn-diff", { method: "POST", timeoutMs: 20000, body: {
           repo: chosen, base: turnBase.base ?? null, preexisting_untracked: turnBase.untracked || [], ignore_ws: ignoreWs,
         } });
-        if (!gone && current === generation.current) { setDiff(r); setError(""); }
+        if (!gone && current === generation.current) { setDiff((prev) => (sameData(prev, r) ? prev : r)); setError(""); loaded = true; }
       } catch {
-        if (!gone && current === generation.current) setDiff(null);
+        // keep the last good diff on a transient failure; only blank on the very first load
+        if (!gone && current === generation.current && !loaded) setDiff(null);
       }
       if (!gone) timer = setTimeout(load, 5000);
     }
@@ -665,7 +684,9 @@ function GitReview({ ctx }) {
     const current = ++generation.current;
     let timer;
     let gone = false;
+    let loaded = false;
     async function load() {
+      if (loaded && isHidden()) { if (!gone && live) timer = setTimeout(load, 5000); return; } // no polling while hidden
       if (scope === "commits" && !commitsRef) { setDiff(null); return; }
       let url = `/diff?repo=${encodeURIComponent(chosen)}&scope=${encodeURIComponent(scope)}&ignore_ws=${ignoreWs}&cwd=${encodeURIComponent(cwd || "")}`;
       if (base && scope === "commits") url += `&base=${encodeURIComponent(base)}`;
@@ -673,10 +694,10 @@ function GitReview({ ctx }) {
       if (scope === "commits" && commitsRef) url += `&ref=${encodeURIComponent(commitsRef)}`;
       try {
         const r = await ctx.rest(url, { timeoutMs: 20000 });
-        if (!gone && current === generation.current) { setDiff(r); setError(""); }
+        if (!gone && current === generation.current) { setDiff((prev) => (sameData(prev, r) ? prev : r)); setError(""); loaded = true; }
       } catch (err) {
         if (!gone && current === generation.current) {
-          setDiff(null);
+          if (!loaded) setDiff(null); // keep the last good diff during a live refresh failure
           const status = err?.status || err?.response?.status;
           setError(status === 404
             ? "Backend route not found — restart the Hermes Desktop app so its backend picks up this plugin"
@@ -988,7 +1009,7 @@ function GitReview({ ctx }) {
               !visibleFiles.length && jsx(EmptyState, { title: q ? `No files match “${filter.trim()}”` : "All files are hidden by filters", description: sections.length ? "Clear the search or adjust the filters." : "" }),
               visibleFiles.map((s) => {
               const collapsed = !!collapsedFiles[s.path];
-              const { rows: rawRows, hunks } = diffRows(s.lines.join("\n"), false);
+              const { rows: rawRows, hunks } = cachedDiffRows(s.lines);
               const gutterWidth = `${rawRows.reduce((width, row) => Math.max(width, String(row.before ?? "").length, String(row.after ?? "").length), 4)}ch`;
               const mode = contextModes[s.path] || "compact";
               const folded = mode === "full" ? rawRows : collapseRows(rawRows, mode === "hidden" ? 0 : 3);
