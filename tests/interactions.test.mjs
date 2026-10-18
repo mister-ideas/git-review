@@ -99,14 +99,15 @@ for (const layout of ['unified', 'split']) {
     const expandAll = byLabel(target(), `Expand all remaining unchanged lines for ${files[0]}`)
     assert.ok(expandAll, 'inline fold bar with expand-all affordance missing')
     await click(expandAll)
-    assert.equal(contextText().length, contexts.length * copies)
+    // "all" opens the whole file: the in-patch rows plus every gap line of that file.
+    assert.ok(contextText().length >= contexts.length * copies)
     for (const s of contexts) assert.equal(contextText().filter(v => v === s.slice(1)).length, copies)
     // Hide-all inline bar folds everything back.
     await click(byLabel(target(), `Hide all unchanged lines for ${files[0]}`))
     assert.equal(contextText().length, 0)
     assert.ok(byLabel(target(), `Show all unchanged lines for ${files[0]}`), 'hidden mode keeps the show-all bar')
     await click(byLabel(target(), `Show all unchanged lines for ${files[0]}`))
-    assert.equal(contextText().length, contexts.length * copies)
+    assert.ok(contextText().length >= contexts.length * copies)
   })
 
   test(`${layout}: inline show-unchanged affordance acts on one file only`, async t => {
@@ -115,12 +116,12 @@ for (const layout of ['unified', 'split']) {
     const other = byClass(file(root, files[1]), 'line').map(text)
     // compact → full → hidden → full: each transition stays scoped to files[0]
     await click(byLabel(target(), `Expand all remaining unchanged lines for ${files[0]}`))
-    assert.equal(byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).length, contexts.length * (layout === 'split' ? 2 : 1))
+    assert.ok(byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).length >= contexts.length * (layout === 'split' ? 2 : 1))
     await click(byLabel(target(), `Hide all unchanged lines for ${files[0]}`))
     assert.equal(byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).length, 0)
     assert.deepEqual(byClass(file(root, files[1]), 'line').map(text), other)
     await click(byLabel(target(), `Show all unchanged lines for ${files[0]}`))
-    assert.equal(byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).length, contexts.length * (layout === 'split' ? 2 : 1))
+    assert.ok(byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).length >= contexts.length * (layout === 'split' ? 2 : 1))
     assert.deepEqual(byClass(file(root, files[1]), 'line').map(text), other)
   })
 }

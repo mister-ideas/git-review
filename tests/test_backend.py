@@ -107,6 +107,18 @@ class BackendTests(unittest.TestCase):
                          preexisting_untracked=['pre.txt', 'new dir/brand new.txt'], ignore_ws=True).json()
         self.assertEqual(body['patch'], '')
 
+    def test_detached_head_reports_short_sha_and_skips_pr_lookup(self):
+        self.repo = self.make_repo(self.root / 'detached')
+        self.config(repos=str(self.repo))
+        (self.repo / 'a.txt').write_text('a\n', newline='\n')
+        self.git('add', 'a.txt'); self.git('commit', '-m', 'one')
+        sha = self.git('rev-parse', '--short', 'HEAD').strip()
+        self.git('checkout', '--detach')
+        info = gitx.branches(self.repo)
+        self.assertTrue(info['detached'])
+        self.assertEqual(info['current'], 'HEAD@' + sha)
+        self.assertIsNone(self.client.get('/api/plugins/git-review/pr', params={'repo': str(self.repo)}).json())
+
     def test_turn_diff_unborn_repository(self):
         self.repo = self.make_repo(self.root / 'unborn')
         self.config(repos=str(self.repo))
@@ -308,7 +320,7 @@ class BackendTests(unittest.TestCase):
         history = self.get('commits', repo=str(self.repo)).json()
         self.assertEqual(len(history['commits']), 200)
         self.assertTrue(history['truncated'])
-        self.assertIn('older history', history['note'])
+        self.assertIn('Load older', history['note'])
         response = self.get('diff', repo=str(self.repo), scope='commits')
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(len(response.json()['commits']), 200)
@@ -449,6 +461,28 @@ class BackendTests(unittest.TestCase):
         self.assertEqual([c['sha'] for c in gitx.commits(self.repo)['commits']], [sha, self.first])
         self.assertEqual([c['sha'] for c in gitx.commits(self.repo, self.first)['commits']], [sha])
         self.assertEqual(len(gitx.diff(self.repo, 'commits')['commits']), 2)
+
+    def test_commits_default_to_branch_since_default_branch(self):
+        import subprocess as sp
+        def g(*a): return sp.run(['git', '-C', str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()
+        base_branch = g('branch', '--show-current')
+        before = len(gitx.commits(self.repo)['commits'])
+        g('checkout', '-q', '-b', 'feature-x')
+        (self.repo / 'feat.txt').write_text('x\n')
+        g('add', 'feat.txt'); g('-c', 'user.name=a', '-c', 'user.email=a@b.c', 'commit', '-qm', 'feat')
+        result = gitx.commits(self.repo)
+        self.assertEqual(len(result['commits']), 1)
+        self.assertIsNone(result['base'])
+        g('checkout', '-q', base_branch)
+        self.assertEqual(len(gitx.commits(self.repo)['commits']), before)
+
+    def test_commits_all_history_and_skip(self):
+        full = gitx.commits(self.repo, all_history=True)
+        self.assertIsNone(full['base_label'])
+        n = len(full['commits'])
+        self.assertGreaterEqual(n, 1)
+        paged = gitx.commits(self.repo, all_history=True, skip=n)
+        self.assertEqual(paged['commits'], [])
 
     def test_noncontiguous_commits_truthful_separate_patches(self):
         (self.repo / 'file.txt').write_text('selected\n', newline='\n')
@@ -601,7 +635,7 @@ class BackendTests(unittest.TestCase):
             self.assertTrue(history['truncated'])
             result = gitx.diff(self.repo, 'commits')
             self.assertEqual(len(result['commits']), 2)
-            self.assertIn('older history', result['note'])
+            self.assertIn('Load older', result['note'])
 
     def test_merge_counts_match_patch(self):
         self.git('switch', '-c', 'feature')
