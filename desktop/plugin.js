@@ -251,6 +251,10 @@ const css = `
 .grd .search-field:focus-within{border-color:var(--ui-accent)}
 .grd .search-field input{width:0;min-width:0;flex:1 1 0;field-sizing:fixed;color:var(--ui-text-primary);background:transparent;font-size:12px}
 .grd .search-field input::placeholder{color:var(--ui-text-secondary);opacity:1}
+  .dark .grd .search-field{background:#141416;color:#fff;border-color:#2b2b2d;border-radius:6px;padding:0 6px}
+  .dark .grd .search-field input{background:#212124;color:#e8e8e8;font-size:12px}
+  .dark .grd .search-field input::placeholder{color:#9b9b9b;opacity:.9}
+
 .grd .search-field > svg{color:var(--ui-text-secondary);flex-shrink:0}
 .grd .search .filter-wrap{flex:0 0 auto;display:inline-flex}
 .grd .search .filter-wrap.active{color:var(--ui-accent)}
