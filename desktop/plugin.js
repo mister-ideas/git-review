@@ -418,8 +418,8 @@ function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone }) {
   return jsxs(Fragment, { children: [
     // preventDefault keeps the menu open: picking commits is a multi-select, and
     // a closing dropdown would cost one reopen per commit.
-    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onAll() }, children: "Select all" }),
-    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onNone() }, children: "Clear" }),
+    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onAll() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Select all"] }) }),
+    jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onNone() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Clear"] }) }),
     jsx(DropdownMenuSeparator, {}),
     commits.length
       ? commits.map((c) => jsxs(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onToggle(c.sha) }, children: [
@@ -427,7 +427,7 @@ function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone }) {
         jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.subject || c.short }),
         jsx(DeltaCounts, { added: c.added, removed: c.removed })
       ] }, c.sha))
-      : jsx(DropdownMenuItem, { disabled: true, children: "No commits ahead of base" })
+      : jsx(DropdownMenuItem, { disabled: true, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "No commits ahead of base"] }) })
   ] });
 }
 
@@ -895,7 +895,7 @@ function GitReview({ ctx }) {
               onNone: () => { commitSelectionExplicit.current = true; setPicked(new Set()); } })
           ] }) : null,
           jsx(DropdownMenuSeparator, {}),
-          jsx(DropdownMenuItem, { onSelect: () => setTick((n) => n + 1), children: "Refresh" })
+          jsx(DropdownMenuItem, { onSelect: () => setTick((n) => n + 1), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Refresh"] }) })
         ] })
       ] }),
       jsxs(DropdownMenu, { children: [
@@ -919,7 +919,7 @@ function GitReview({ ctx }) {
               const rel = w.path.split("/").slice(0, -1).filter(Boolean);
               const inGroup = rel[rel.length - 1] === group ? rel.slice(0, -1).join("/") : rel.join("/");
               out.push(jsx(DropdownMenuItem, { onSelect: () => chooseRepository(w.path), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
-                jsx(Codicon, { name: w.path === chosen ? "check" : "repo", size: "0.8rem", className: "shrink-0" }),
+                jsx("span", { className: "check-slot", children: jsx(Codicon, { name: w.path === chosen ? "check" : "repo", size: "0.8rem" }) }),
                 jsxs("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
                   w.name, " ",
                   jsx("span", { style: { color: "var(--ui-text-tertiary)" }, children: `${inGroup ? `/${inGroup} · ` : ""}${w.branch || "(detached)"}` })
@@ -936,10 +936,10 @@ function GitReview({ ctx }) {
         }),
         jsx(DropdownMenuContent, { className: "repo-menu", children: [
           jsx("div", { className: "menu-group", role: "presentation", children: "Branches (read-only)" }, "hdr"),
-          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "4px 10px" }, children: jsxs("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
-            jsx(Codicon, { name: b === (meta?.current) ? "check" : "git-branch", size: "0.8rem", className: "shrink-0" }),
-            " ", b
-          ] }) }, b))
+          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", fontSize: 13 }, children: [
+            jsx("span", { className: "check-slot", children: jsx(Codicon, { name: b === meta?.current ? "check" : "git-branch", size: "0.8rem" }) }),
+            jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: b })
+          ] }, b))
         ] })
       ] }),
       // Right-side controls group (PR · display · collapse all · file list); margin-left:
