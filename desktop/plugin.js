@@ -251,9 +251,46 @@ const css = `
 .grd .search-field:focus-within{border-color:var(--ui-accent)}
 .grd .search-field input{width:0;min-width:0;flex:1 1 0;field-sizing:fixed;color:var(--ui-text-primary);background:transparent;font-size:12px}
 .grd .search-field input::placeholder{color:var(--ui-text-secondary);opacity:1}
+  .dark .grd{background:#141416;color:#e8e8e8}
+  .dark .grd .toolbar{border-color:#2b2b2d}
+  .dark .grd .toolbar .repo-name{color:#9a9a9a}
+  .dark .grd .folder{color:#c9c9c9}
+  .dark .grd .folder:hover{background:#1c1c20}
+  .dark .grd .file{color:#e8e8e8}
+  .dark .grd .file:hover{background:#1c1c20}
+  .dark .grd .file[aria-pressed=true]{background:#242426}
+  .dark .grd .fname{color:#e8e8e8}
+  .dark .grd .detailhead{border-color:#2b2b2d}
+  .dark .grd .detailtitle .fdir{color:#6b6b6b}
+  .dark .grd .search{border-bottom-color:#2b2b2d}
   .dark .grd .search-field{background:#141416;color:#fff;border-color:#2b2b2d;border-radius:6px;padding:0 6px}
   .dark .grd .search-field input{background:#212124;color:#e8e8e8;font-size:12px}
   .dark .grd .search-field input::placeholder{color:#9b9b9b;opacity:.9}
+  .dark .grd .search-field > svg{color:#9b9b9b}
+  .dark .grd .filter-wrap.active{color:#e8e8e8}
+  .dark .grd .filter-wrap.active .filter-btn{background:#2b2b2d}
+  .dark .grd .lineno{color:#6b6b6b}
+  .dark .grd .line.hunk{color:#9a9a9a;background:#161618}
+  .dark .grd .fold{color:#6b6b6b}
+  .dark .grd .fold:hover{color:#c9c9c9}
+  .dark .grd .fold-strip{background:#161618}
+  .dark .grd .menu-group{background:#161618;color:#6b6b6b}
+  .dark .grd .af-head{background:#161618}
+  .dark .grd .af-head:hover{background:#1c1c20}
+  .dark .grd .af-head .fdir{color:#6b6b6b}
+  .dark .grd .af-copy{color:#6b6b6b}
+  .dark .grd .af-copy:hover{color:#c9c9c9}
+  .dark .grd .notice{background:#161618;color:#9a9a9a}
+  .dark .grd .fold-inline{background:#161618}
+  .dark .grd .fold-inline:hover{background:#242426}
+  .dark .grd .line.add{background:#123a24}
+  .dark .grd .line.add .lineno{color:#4ade80}
+  .dark .grd .line.remove{background:#3a1c1c}
+  .dark .grd .line.remove .lineno{color:#f87171}
+  .dark .grd .line.line-selected{background:#242426}
+  .dark .grd .split-row > .line + .line{border-color:#2b2b2d}
+  .dark .grd .allfiles::-webkit-scrollbar-thumb{background:#2b2b2d}
+  .dark .grd .allfiles::-webkit-scrollbar-thumb:hover{background:#3b3b3b}
 
 .grd .search-field > svg{color:var(--ui-text-secondary);flex-shrink:0}
 .grd .search .filter-wrap{flex:0 0 auto;display:inline-flex}
