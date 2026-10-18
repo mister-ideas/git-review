@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6 — 2026-10-19
+
+- New catalog banner (`docs/banner.jpg`, 2:1) and a landing image at the top of the README.
+- README describes the current Commits model (since the default branch, whole history, commit-by-commit browsing, branch menu), the real fold behaviour, and what to answer to Hermes's Node-dependencies prompt.
+
 ## 0.1.5 — 2026-10-18
 
 - The backend now sends exactly 3 lines of context around every change (`git diff -U3`, was 40). Show more lines therefore starts from the real gap: the bar above and between changes counts the lines actually hidden, and the bar below appears only when the file continues past the last change.
