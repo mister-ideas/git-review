@@ -701,7 +701,7 @@ def _summarize(patch: str) -> dict:
     return {"patch": patch, "added": added, "removed": removed, "note": ""}
 
 
-def _default_branch_fork_point(repo: str | Path) -> str | None:
+def _default_branch_fork_point(repo: str | Path):
     """Merge-base of HEAD with the default branch, or None when HEAD is on it (or none exists)."""
     candidates = []
     try:
@@ -718,7 +718,7 @@ def _default_branch_fork_point(repo: str | Path) -> str | None:
             if tip == head_sha:
                 return None
             fork = _run(repo, "merge-base", tip, head_sha).strip()
-            return fork if re.fullmatch(r"[0-9a-f]{40,64}", fork) and fork != head_sha else None
+            return (fork, name) if re.fullmatch(r"[0-9a-f]{40,64}", fork) and fork != head_sha else None
         except GitError:
             continue
     return None
@@ -733,8 +733,8 @@ def commits(repo: str | Path, base: str | None = None) -> dict:
         return {"commits": [], "base": start, "truncated": False, "note": "Repository has no commits yet."}
     auto = False
     if start is None:
-        start = _default_branch_fork_point(repo)
-        auto = start is not None
+        found = _default_branch_fork_point(repo)
+        start, auto = (found[0], found[1]) if found else (None, None)
     revision = f"{start}..HEAD" if start else "HEAD"
     out = _run(repo, "log", revision, "--max-count", str(MAX_COMMITS + 1),
                "--format=%H%x1f%h%x1f%an%x1f%at%x1f%s", "--numstat", "--no-ext-diff", "--no-textconv", "--diff-merges=first-parent", "--")
@@ -759,8 +759,8 @@ def commits(repo: str | Path, base: str | None = None) -> dict:
     truncated = len(items) > MAX_COMMITS
     note = f"Showing the latest {MAX_COMMITS} commits; older history is omitted." if truncated else ""
     if auto and items:
-        note = "Commits on this branch since it left the default branch." + (" " + note if note else "")
-    return {"commits": items[:MAX_COMMITS], "base": None if auto else start, "truncated": truncated, "note": note}
+        note = f"Commits on this branch since it left {auto}." + (" " + note if note else "")
+    return {"commits": items[:MAX_COMMITS], "base": None if auto else start, "base_label": auto, "truncated": truncated, "note": note}
 
 
 def remote_url(repo: str | Path) -> str:
