@@ -476,6 +476,13 @@ class BackendTests(unittest.TestCase):
         g('checkout', '-q', base_branch)
         self.assertEqual(len(gitx.commits(self.repo)['commits']), before)
 
+    def test_commits_note_a_shallow_clone(self):
+        shallow = self.root / 'shallow'
+        subprocess.run(['git', 'clone', '-q', '--depth', '1', self.repo.resolve().as_uri(), str(shallow)], check=True)
+        result = gitx.commits(shallow)
+        self.assertEqual(len(result['commits']), 1)
+        self.assertIn('Shallow clone', result['note'])
+
     def test_commits_all_history_and_skip(self):
         full = gitx.commits(self.repo, all_history=True)
         self.assertIsNone(full['base_label'])
