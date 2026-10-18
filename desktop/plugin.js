@@ -727,6 +727,7 @@ function GitReview({ ctx }) {
     return true;
   });
   const hiddenByFilters = sections.filter((s) => (!showDeleted && stats.get(s.path)?.status === "deleted") || (!showTests && isTestPath(s.path))).length;
+  const allCollapsed = visibleFiles.length > 0 && visibleFiles.every((s) => collapsedFiles[s.path]);
   const tree = useMemo(() => compactTree(buildTree(visibleFiles.map((s) => s.path))), [visibleFiles]);
   const active = visibleFiles.find((s) => s.path === selected) || visibleFiles[0];
   // Click a line, then click another: the range between the two clicks highlights
@@ -912,12 +913,13 @@ function GitReview({ ctx }) {
         jsx(DropdownMenuTrigger, { asChild: true, children:
           jsx(RepoButton, { icon: "git-branch", label: meta?.current || "branch…" })
         }),
-        jsx(DropdownMenuContent, { className: "repo-menu", children:
-          (meta?.local || []).concat(meta?.remote || []).map((b) => jsx("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "4px 10px" }, children: jsxs("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
+        jsx(DropdownMenuContent, { className: "repo-menu", children: [
+          jsx("div", { className: "menu-group", role: "presentation", children: "Branches (read-only)" }, "hdr"),
+          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "4px 10px" }, children: jsxs("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
             jsx(Codicon, { name: b === (meta?.current) ? "check" : "git-branch", size: "0.8rem", className: "shrink-0" }),
             " ", b
           ] }) }, b))
-        })
+        ] })
       ] }),
       // Right-side controls group (PR · display · collapse all · file list); margin-left:
       // auto pushes it right WITHOUT a spacer stealing flex space from the
@@ -948,13 +950,9 @@ function GitReview({ ctx }) {
           ] }) })
         ] })
       ] }),
-      jsx(Tip, { label: "Collapse all", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Collapse all",
-        onClick: () => { setExpanded({}); setContextModes({}); setCollapsedFiles((c) => {
-          const all = {};
-          for (const s of visibleFiles) all[s.path] = true;
-          return all;
-        }); },
-        children: jsx(Codicon, { name: "collapse-all", size: "0.9rem" }) }) }),
+      jsx(Tip, { label: allCollapsed ? "Expand all" : "Collapse all", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": allCollapsed ? "Expand all" : "Collapse all",
+        onClick: () => { setExpanded({}); setContextModes({}); setCollapsedFiles(allCollapsed ? {} : Object.fromEntries(visibleFiles.map((s) => [s.path, true]))); },
+        children: jsx(Codicon, { name: allCollapsed ? "expand-all" : "collapse-all", size: "0.9rem" }) }) }),
       // Order per spec: ⋯ display · Collapse all · Hide/Show right sidebar (last).
       jsx(Tip, { label: visible.files ? "Hide file list" : "Show file list", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": visible.files ? "Hide file list" : "Show file list", "aria-pressed": visible.files, onClick: () => { setVisible((v) => { persist({ files: !v.files }); return { ...v, files: !v.files }; }); }, children: jsx(Codicon, { name: visible.files ? "layout-sidebar-right" : "layout-sidebar-right-off", size: "0.9rem" }) }) })
       ] })
