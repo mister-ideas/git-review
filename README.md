@@ -1,5 +1,7 @@
 # git-review for Hermes Desktop
 
+![git-review — a read-only Git review pane for Hermes Desktop](docs/banner.jpg)
+
 [![CI](https://github.com/mister-ideas/git-review/actions/workflows/ci.yml/badge.svg)](https://github.com/mister-ideas/git-review/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mister-ideas/git-review)](https://github.com/mister-ideas/git-review/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -58,13 +60,13 @@ Cite the lines that matter straight into the draft:
 
 ## Install
 
-Straight from this repository, which works today — `hermes plugins install` takes a catalog name, a Git URL or `owner/repo`, and `--ref` pins one exact commit:
+`hermes plugins install` takes a catalog name, a Git URL or `owner/repo`, and `--ref` pins one exact commit. To install straight from this repository:
 
 ```sh
 hermes plugins install mister-ideas/git-review
 ```
 
-Once the catalog entry is published, the bare name works too:
+Once the plugin is listed in the Hermes catalog, the bare name works too:
 
 ```sh
 hermes plugins install git-review
@@ -72,6 +74,8 @@ hermes plugins install git-review
 
 Cloned it yourself? `hermes plugins adopt git-review` reads the directory's git
 origin and makes it a tracked install, so `check-updates` and `update` work on it.
+
+Hermes asks "declares Node dependencies (package.json)" during install. Answer **N**: the `package.json` in this repository belongs to the test tooling, and the plugin needs no Node packages at runtime.
 
 Then:
 
@@ -102,9 +106,10 @@ hermes plugins uninstall git-review
 
 ## What it does
 
-- **Scopes:** Last agent turn · Uncommitted · Staged · Unstaged · Commits (multi-select, all loaded commits checked by default, up to 200).
+- **Scopes:** Last agent turn · Uncommitted · Staged · Unstaged · Commits.
+- **Commits** lists the commits your branch has added since it left the default branch (`origin/main`, for example), all checked by default. The Commits menu switches to **Whole history of this branch** and pages older commits in on demand; pick any subset, or **Browse commit by commit** with ◀ ▶. The branch menu lists your local and remote branches: pick one to list only the commits since it. A shallow clone has only the history it fetched, and the pane says so.
 - **Last agent turn** shows everything since the agent's current turn began in this repo, committed and uncommitted, terminal edits and new files included. When the focused session goes busy, the pane snapshots `HEAD` and the untracked file list, then diffs against that baseline. Uncommitted edits that predate the turn still appear, because Git cannot attribute them.
-- **Diffs:** unified or split layout (split always wraps), whitespace filtering, and GitHub-style folding of unchanged lines with ↑20 / ↓20 / all expanders, including above the first hunk and below the last.
+- **Diffs:** unified or split layout (split always wraps), whitespace filtering, and folding of unchanged lines: every change keeps three lines of context, and the bars between changes count the lines actually hidden, revealing up to 20 at a time or all of them, including above the first change and below the last when the file continues.
 - **Files:** a right-hand tree with per-file churn, file search, and Deleted / Test filters. Click a file to jump to it; drag a file into the composer to attach it.
 - **Line citations:** click a line, then another, and choose **Cite in message** to insert an `@line:` reference into the focused composer draft, or drag lines into the composer. Only lines that exist in the current working tree can be cited (Last agent turn, Uncommitted and Unstaged scopes). Nothing is ever sent automatically.
 - **Agent tool `git_review_select`:** lets the agent point the pane at a repository and scope (`repo`, `scope`, `ref`, `base`, `path`, `ignore_ws`). It validates the diff first, then queues the selection for the pane.
@@ -112,7 +117,7 @@ hermes plugins uninstall git-review
 ## Using the pane
 
 1. **Pick a change set** with the toolbar's first control: Last agent turn, Uncommitted, Staged, Unstaged or Commits.
-2. **Read it.** Fold unchanged runs with ↑20 / ↓20 / all, expand the lines above the first hunk or below the last, switch to split, filter whitespace, or search and filter the file tree.
+2. **Read it.** Reveal hidden lines a bar at a time, or open a whole file with **all**; switch to split, filter whitespace, or search and filter the file tree.
 3. **Cite what matters.** Click a line, then another, and choose **Cite in message** — or drag the lines straight into the composer. The pane inserts a reference into the draft and never sends it:
 
    ```
