@@ -473,6 +473,8 @@ function GitReview({ ctx }) {
   const [showTests, setShowTests] = useState(() => ctx.storage.get(SETTINGS_KEY, {}).showTests !== false);
   const [copied, setCopied] = useState("");
   const [collapsedFiles, setCollapsedFiles] = useState({});
+  const [autoBase, setAutoBase] = useState("");
+  const [fullFiles, setFullFiles] = useState({}); // files whose every unchanged line is being opened
   // Last-agent-turn baselines live in STATE (mirror of storage) so recording a
   // new snapshot re-renders the pane immediately.
   const [turnBases, setTurnBases] = useState(() => ctx.storage.get(TURN_BASE_KEY, {}));
@@ -506,7 +508,7 @@ function GitReview({ ctx }) {
     setScope("uncommitted"); setBase(""); setRef(""); setPathFilter("");
     setCommits([]); setPicked(new Set()); setCommitsLoading(false); setHistoryNote("");
     commitSelectionOwner.current = ""; commitSelectionExplicit.current = false;
-    setSelected(""); setFilter(""); setExpanded({}); setContextModes({});
+    setSelected(""); setFilter(""); setExpanded({}); setContextModes({}); setFullFiles({});
     setError(""); setRepositoryIdentity(identity);
   }, [identity, repositoryReady]);
 
@@ -584,7 +586,7 @@ function GitReview({ ctx }) {
   useEffect(() => {
     if (!repositoryReady || !chosen) return;
     let gone = false;
-    setMeta(null); setSelected(""); setDiff(null); setExpanded({}); setContextModes({}); setPr(null);
+    setMeta(null); setSelected(""); setDiff(null); setExpanded({}); setContextModes({}); setFullFiles({}); setPr(null);
     ctx.rest(`/meta?repo=${encodeURIComponent(chosen)}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 10000 }).then((r) => { if (!gone) setMeta(r); }).catch(() => {});
     return () => { gone = true; };
   }, [ctx, chosen, tick, identity, repositoryReady]);
@@ -607,7 +609,7 @@ function GitReview({ ctx }) {
     ctx.rest(`/commits?repo=${encodeURIComponent(chosen)}&base=${encodeURIComponent(base)}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 15000 })
       .then((r) => { if (!gone) {
         const list = r.commits || [];
-        setCommits(list);
+        setCommits(list); setAutoBase(r.base_label || "");
         setHistoryNote(r.note || (r.truncated ? "Older history is omitted from this commit list." : ""));
         if (scope === "commits" && !commitSelectionExplicit.current) {
           setPicked(new Set(list.map((c) => c.sha)));
@@ -935,11 +937,13 @@ function GitReview({ ctx }) {
           jsx(RepoButton, { icon: "git-branch", label: meta?.current || "branch…" })
         }),
         jsx(DropdownMenuContent, { className: "repo-menu", children: [
-          jsx("div", { className: "menu-group", role: "presentation", children: "Branches (read-only)" }, "hdr"),
-          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", fontSize: 13 }, children: [
-            jsx("span", { className: "check-slot", children: jsx(Codicon, { name: b === meta?.current ? "check" : "git-branch", size: "0.8rem" }) }),
-            jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: b })
-          ] }, b))
+          jsx("div", { className: "menu-group", role: "presentation", children: "Compare Commits against" }, "hdr"),
+          jsx(DropdownMenuItem, { onSelect: () => setBase(""), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: !base, size: "0.8rem" }), `Automatic (${autoBase || "default branch"})`] }) }, "auto"),
+          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => setBase(b), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
+            jsx(CheckSlot, { on: base === b, size: "0.8rem" }),
+            jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: b }),
+            b === meta?.current ? jsx("span", { style: { color: "var(--ui-text-tertiary)", fontSize: 11 }, children: "current" }) : null
+          ] }) }, b))
         ] })
       ] }),
       // Right-side controls group (PR · display · collapse all · file list); margin-left:
@@ -972,7 +976,7 @@ function GitReview({ ctx }) {
         ] })
       ] }),
       jsx(Tip, { label: allCollapsed ? "Expand all" : "Collapse all", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": allCollapsed ? "Expand all" : "Collapse all",
-        onClick: () => { setExpanded({}); setContextModes({}); setCollapsedFiles(allCollapsed ? {} : Object.fromEntries(visibleFiles.map((s) => [s.path, true]))); },
+        onClick: () => { setExpanded({}); setContextModes({}); setFullFiles({}); setCollapsedFiles(allCollapsed ? {} : Object.fromEntries(visibleFiles.map((s) => [s.path, true]))); },
         children: jsx(Codicon, { name: allCollapsed ? "expand-all" : "collapse-all", size: "0.9rem" }) }) }),
       // Order per spec: ⋯ display · Collapse all · Hide/Show right sidebar (last).
       jsx(Tip, { label: visible.files ? "Hide file list" : "Show file list", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": visible.files ? "Hide file list" : "Show file list", "aria-pressed": visible.files, onClick: () => { setVisible((v) => { persist({ files: !v.files }); return { ...v, files: !v.files }; }); }, children: jsx(Codicon, { name: visible.files ? "layout-sidebar-right" : "layout-sidebar-right-off", size: "0.9rem" }) }) })
@@ -1038,15 +1042,18 @@ function GitReview({ ctx }) {
               const fetchLines = (r, start, end) => ctx.rest("/file-lines", { method: "POST", timeoutMs: 15000, body: { repo: chosen, path: realPath, rev: r, start, end } });
               const fold = (row, gap) => jsx(FoldBar, {
                 row, path: s.path, rev, gap, compact: layout === "split",
+                autoAll: !!fullFiles[s.path],
                 onExpandAll: () => {
+                  setFullFiles((m) => ({ ...m, [s.path]: true }));
                   setContextModes((m) => ({ ...m, [s.path]: "full" }));
                   setExpanded((e) => ({ ...e, [`${s.path}:${row.key}`]: true }));
                 },
                 onFetch: fetchLines,
-              }, `${chosen}|${rev}|${s.path}:${row.key}:${gap?.key || "fold"}`);
+              }, `${chosen}|${rev}|${s.path}:${row.key}:${gap?.key || "fold"}|${fullFiles[s.path] ? "full" : "part"}`);
               const bars = mode === "full" && hasContext
                 ? [jsx(FullBar, { path: s.path, label: "Hide all unchanged lines", onToggle: () => {
                     setContextModes((m) => ({ ...m, [s.path]: "hidden" }));
+                    setFullFiles((m) => ({ ...m, [s.path]: false }));
                     setExpanded((e) => Object.fromEntries(Object.entries(e).filter(([key]) => !key.startsWith(`${s.path}:context:`))));
                   } }, `${s.path}:fullbar`)]
                 : mode === "hidden" && hasContext
@@ -1187,7 +1194,7 @@ const nextGapWindow = (state, gap, step = EXPAND_STEP) => {
 };
 const gapOldNumber = (n, delta) => n - (delta || 0);
 
-const FoldBar = ({ row, path, rev, gap, compact, onExpandAll, onFetch }) => {
+const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }) => {
   const [revealed, setRevealed] = useState({ up: 0, down: 0 });
   const [gapState, setGapState] = useState(null); // {ls, le, numbered, total, done, failed, loading}
   const hidden = row.rows || [];
@@ -1230,8 +1237,13 @@ const FoldBar = ({ row, path, rev, gap, compact, onExpandAll, onFetch }) => {
     } catch { setGapState((p) => ({ ...(p || { le: gap.from - 1, numbered: [] }), loading: false, failed: true })); }
   };
 
+  // "all" on any bar opens the whole file: every other gap of this file loads itself.
+  useEffect(() => {
+    if (isGap && autoAll && !gapState?.done && !gapState?.loading && !gapState?.failed) void loadGap("all");
+  }, [isGap, autoAll, gapState?.done, gapState?.loading, gapState?.failed]);
+
   const expand = (mode) => {
-    if (isGap) { void loadGap(mode); return; }
+    if (isGap) { if (mode === "all") onExpandAll?.(); void loadGap(mode); return; }
     if (mode === "all") { onExpandAll(); return; }
     setRevealed((r) => mode === "up" ? { ...r, up: r.up + 1 } : { ...r, down: r.down + 1 });
   };
