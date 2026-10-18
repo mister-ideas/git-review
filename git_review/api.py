@@ -186,17 +186,20 @@ def status(repo: str = Query(min_length=2, max_length=1024), cwd: str = Query(de
 
 @router.get("/commits")
 def commits(repo: str = Query(min_length=2, max_length=1024), base: str = Query(default=None, max_length=200),
+            skip: int = Query(default=0, ge=0, le=100000), all: bool = Query(default=False),
             cwd: str = Query(default="", max_length=1024)):
     normalized = _authorized(repo, cwd)
-    return _guard(gitx.commits, normalized, base)
+    return _guard(gitx.commits, normalized, base, skip, all)
 
 
 @router.get("/pr")
 def pr(repo: str = Query(min_length=2, max_length=1024), cwd: str = Query(default="", max_length=1024)):
     """Open MR/PR for the checked-out branch, if any (read-only glab/gh lookup)."""
     normalized = _authorized(repo, cwd)
-    branch = _guard(gitx.branches, normalized)["current"]
-    return _guard(gitx.pr_for_branch, normalized, branch)
+    info = _guard(gitx.branches, normalized)
+    if info.get("detached"):
+        return None
+    return _guard(gitx.pr_for_branch, normalized, info["current"])
 
 
 @router.get("/pending-select")
