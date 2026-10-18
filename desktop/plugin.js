@@ -414,12 +414,13 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot }) {
 }
 
 // Checkable commit rows inside the Commits submenu (multi-select)
-function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone }) {
+function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone, hasMore, loadingMore, onMore, onOpen }) {
   return jsxs(Fragment, { children: [
     // preventDefault keeps the menu open: picking commits is a multi-select, and
     // a closing dropdown would cost one reopen per commit.
     jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onAll() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Select all"] }) }),
     jsx(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onNone() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Clear"] }) }),
+    jsx(DropdownMenuItem, { disabled: !commits.length, onSelect: () => onOpen(0), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Browse commit by commit"] }) }),
     jsx(DropdownMenuSeparator, {}),
     commits.length
       ? commits.map((c) => jsxs(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onToggle(c.sha) }, children: [
@@ -427,7 +428,8 @@ function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone }) {
         jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.subject || c.short }),
         jsx(DeltaCounts, { added: c.added, removed: c.removed })
       ] }, c.sha))
-      : jsx(DropdownMenuItem, { disabled: true, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "No commits ahead of base"] }) })
+      : jsx(DropdownMenuItem, { disabled: true, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "No commits ahead of base"] }) }),
+    hasMore ? jsx(DropdownMenuItem, { disabled: loadingMore, onSelect: (event) => { event.preventDefault(); onMore() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), loadingMore ? "Loading older commits…" : "Load older commits"] }) }) : null
   ] });
 }
 
@@ -474,6 +476,10 @@ function GitReview({ ctx }) {
   const [copied, setCopied] = useState("");
   const [collapsedFiles, setCollapsedFiles] = useState({});
   const [autoBase, setAutoBase] = useState("");
+  const [allHistory, setAllHistory] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [navIndex, setNavIndex] = useState(-1); // >=0: single-commit mode on commits[navIndex]
   const [fullFiles, setFullFiles] = useState({}); // files whose every unchanged line is being opened
   // Last-agent-turn baselines live in STATE (mirror of storage) so recording a
   // new snapshot re-renders the pane immediately.
@@ -506,7 +512,7 @@ function GitReview({ ctx }) {
     ++generation.current; ++focusGeneration.current;
     setWorktrees([]); setChosen(""); setMeta(null); setDiff(null); setPr(null);
     setScope("uncommitted"); setBase(""); setRef(""); setPathFilter("");
-    setCommits([]); setPicked(new Set()); setCommitsLoading(false); setHistoryNote("");
+    setCommits([]); setPicked(new Set()); setCommitsLoading(false); setHistoryNote(""); setAllHistory(false); setNavIndex(-1); setHasMore(false);
     commitSelectionOwner.current = ""; commitSelectionExplicit.current = false;
     setSelected(""); setFilter(""); setExpanded({}); setContextModes({}); setFullFiles({});
     setError(""); setRepositoryIdentity(identity);
@@ -606,10 +612,10 @@ function GitReview({ ctx }) {
     if (!repositoryReady || !chosen || (scope !== "commit" && scope !== "commits")) return;
     let gone = false;
     setCommitsLoading(true); setHistoryNote("");
-    ctx.rest(`/commits?repo=${encodeURIComponent(chosen)}&base=${encodeURIComponent(base)}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 15000 })
+    ctx.rest(`/commits?repo=${encodeURIComponent(chosen)}&base=${encodeURIComponent(base)}${allHistory ? "&all=true" : ""}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 15000 })
       .then((r) => { if (!gone) {
         const list = r.commits || [];
-        setCommits(list); setAutoBase(r.base_label || "");
+        setCommits(list); setAutoBase(r.base_label || ""); setHasMore(!!r.has_more); setNavIndex(-1);
         setHistoryNote(r.note || (r.truncated ? "Older history is omitted from this commit list." : ""));
         if (scope === "commits" && !commitSelectionExplicit.current) {
           setPicked(new Set(list.map((c) => c.sha)));
@@ -617,7 +623,22 @@ function GitReview({ ctx }) {
         }
       } }).catch(() => {}).finally(() => { if (!gone) setCommitsLoading(false); });
     return () => { gone = true; };
-  }, [ctx, chosen, scope, base, tick, identity, repositoryReady]);
+  }, [ctx, chosen, scope, base, allHistory, tick, identity, repositoryReady]);
+
+  const loadOlder = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const r = await ctx.rest(`/commits?repo=${encodeURIComponent(chosen)}&base=${encodeURIComponent(base)}${allHistory ? "&all=true" : ""}&skip=${commits.length}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 20000 });
+      const more = (r.commits || []).filter((c) => !commits.some((x) => x.sha === c.sha));
+      setCommits((prev) => prev.concat(more)); setHasMore(!!r.has_more);
+    } catch { /* keep the list as is */ } finally { setLoadingMore(false); }
+  };
+  // Single-commit navigation: show exactly commits[i]; -1 returns to the multi-select.
+  const goCommit = (i) => {
+    if (i < 0 || i >= commits.length) return;
+    commitSelectionExplicit.current = true; setNavIndex(i); setPicked(new Set([commits[i].sha]));
+  };
 
   // The commits-scope ref param: selected shas in commit order
   const commitsRef = useMemo(() => [...picked].join(","), [picked]);
@@ -892,7 +913,7 @@ function GitReview({ ctx }) {
           // inline in the scope menu (all checked by default).
           scope === "commits" ? jsxs(Fragment, { children: [
             jsx(DropdownMenuSeparator, {}),
-            jsx(CommitsSubmenu, { commits, selected: picked, onToggle: toggleCommit,
+            jsx(CommitsSubmenu, { commits, selected: picked, onToggle: toggleCommit, hasMore, loadingMore, onMore: loadOlder, onOpen: goCommit,
               onAll: () => { commitSelectionExplicit.current = true; setPicked(new Set(commits.map((c) => c.sha))); },
               onNone: () => { commitSelectionExplicit.current = true; setPicked(new Set()); } })
           ] }) : null,
@@ -938,8 +959,9 @@ function GitReview({ ctx }) {
         }),
         jsx(DropdownMenuContent, { className: "repo-menu", children: [
           jsx("div", { className: "menu-group", role: "presentation", children: "Compare Commits against" }, "hdr"),
-          jsx(DropdownMenuItem, { onSelect: () => setBase(""), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: !base, size: "0.8rem" }), `Automatic (${autoBase || "default branch"})`] }) }, "auto"),
-          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => setBase(b), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
+          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(true); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: allHistory && !base, size: "0.8rem" }), "All history (whole branch)"] }) }, "all"),
+          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: !base && !allHistory, size: "0.8rem" }), `Automatic (${autoBase || "default branch"})`] }) }, "auto"),
+          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(b); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
             jsx(CheckSlot, { on: base === b, size: "0.8rem" }),
             jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: b }),
             b === meta?.current ? jsx("span", { style: { color: "var(--ui-text-tertiary)", fontSize: 11 }, children: "current" }) : null
@@ -995,6 +1017,12 @@ function GitReview({ ctx }) {
       jsx(Codicon, { name: "symbol-string", size: "0.85rem" }),
       jsx("span", { className: "cite-ref", children: `${lineSelection.file}:${lineSelection.start} — click another line to finish the range` }),
       jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Clear line selection", onClick: () => setLineSelection(null), children: jsx(Codicon, { name: "close", size: "0.85rem" }) }),
+    ] }),
+    (scope === "commits" && navIndex >= 0 && commits[navIndex]) && jsxs("div", { className: "notice commit-nav", role: "navigation", "aria-label": "Commit navigation", style: { display: "flex", alignItems: "center", gap: 6 }, children: [
+      jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex <= 0, "aria-label": "Newer commit", onClick: () => goCommit(navIndex - 1), children: "◀" }),
+      jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex >= commits.length - 1 && !hasMore, "aria-label": "Older commit", onClick: () => (navIndex >= commits.length - 1 ? loadOlder() : goCommit(navIndex + 1)), children: "▶" }),
+      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()} (${navIndex + 1}/${commits.length}${hasMore ? "+" : ""})` }),
+      jsx(Button, { size: "sm", variant: "ghost", onClick: () => { setNavIndex(-1); setPicked(new Set(commits.map((c) => c.sha))); }, children: "All commits" })
     ] }),
     (scope === "commits" && historyNote) && jsx("div", { className: "notice", role: "status", children: historyNote }),
     (error || diff?.note) && jsxs("div", { className: "notice", role: "alert", children: [

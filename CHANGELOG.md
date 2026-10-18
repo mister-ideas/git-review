@@ -18,4 +18,5 @@ command: `hermes plugins install` takes a catalog name, a Git URL or
 - Performance: polled diffs keep the previous reference when unchanged (no re-render every 5 s), parsed diff rows are cached per file, a failed refresh keeps the last good diff instead of blanking the pane, and polling pauses while the window is hidden.
 - All dropdowns (scope, commit actions, Refresh, repo, branch) reserve the same check column, so icons and labels align whether or not a row is checked.
 - Branch menu now picks what Commits compares against (Automatic shows the resolved base, e.g. origin/main); clicking "all" on any fold or gap bar opens the entire file (every gap of that file loads), and "Hide all" folds it back.
+- Commits: new "All history (whole branch)" base, "Load older commits" paging past the 200 cap (`/commits?skip=&all=`), and "Browse commit by commit" with ◀ ▶ and a commit header (sha, subject, author, date, n/total).
 - Repository now ships only user-facing media and the offline test suites run by CI; browser, E2E and screenshot tooling were removed.

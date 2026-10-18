@@ -186,9 +186,10 @@ def status(repo: str = Query(min_length=2, max_length=1024), cwd: str = Query(de
 
 @router.get("/commits")
 def commits(repo: str = Query(min_length=2, max_length=1024), base: str = Query(default=None, max_length=200),
+            skip: int = Query(default=0, ge=0, le=100000), all: bool = Query(default=False),
             cwd: str = Query(default="", max_length=1024)):
     normalized = _authorized(repo, cwd)
-    return _guard(gitx.commits, normalized, base)
+    return _guard(gitx.commits, normalized, base, skip, all)
 
 
 @router.get("/pr")
