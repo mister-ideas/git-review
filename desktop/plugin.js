@@ -1001,9 +1001,11 @@ function GitReview({ ctx }) {
           jsx(RepoButton, { icon: "git-branch", label: meta?.current || "branch…" })
         }),
         jsx(DropdownMenuContent, { className: "repo-menu", children: [
-          jsx("div", { className: "menu-group", role: "presentation", children: "Compare Commits against" }, "hdr"),
-          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(true); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: allHistory && !base, size: "0.8rem" }), "All history (whole branch)"] }) }, "all"),
-          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: !base && !allHistory, size: "0.8rem" }), `Automatic (${autoBase || "default branch"})`] }) }, "auto"),
+          jsx("div", { className: "menu-group", role: "presentation", children: "Commits to list" }, "hdr"),
+          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(true); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: allHistory && !base, size: "0.8rem" }), "Whole history of this branch"] }) }, "all"),
+          jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(""); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: !base && !allHistory, size: "0.8rem" }), autoBase ? `Only since ${autoBase}` : "Only this branch's own commits"] }) }, "auto"),
+          jsx(DropdownMenuSeparator, {}, "sep"),
+          jsx("div", { className: "menu-group", role: "presentation", children: "Or only since another branch" }, "hdr2"),
           ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(b); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
             jsx(CheckSlot, { on: base === b, size: "0.8rem" }),
             jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: b }),
