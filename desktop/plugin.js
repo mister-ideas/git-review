@@ -469,7 +469,7 @@ function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone, hasMore, l
         jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.subject || c.short }),
         jsx(DeltaCounts, { added: c.added, removed: c.removed })
       ] }, c.sha))
-      : jsx(DropdownMenuItem, { disabled: true, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "No commits ahead of base"] }) }),
+      : jsx(DropdownMenuItem, { disabled: true, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "No commits to show"] }) }),
     hasMore ? jsx(DropdownMenuItem, { disabled: loadingMore, onSelect: (event) => { event.preventDefault(); onMore() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), loadingMore ? "Loading older commits…" : "Load older commits"] }) }) : null
   ] });
 }
@@ -656,6 +656,7 @@ function GitReview({ ctx }) {
     ctx.rest(`/commits?repo=${encodeURIComponent(chosen)}&base=${encodeURIComponent(base)}${allHistory ? "&all=true" : ""}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 15000 })
       .then((r) => { if (!gone) {
         const list = r.commits || [];
+        if (!list.length && !base && !allHistory) { setAllHistory(true); return; }
         setCommits(list); setAutoBase(r.base_label || ""); setHasMore(!!r.has_more); setNavIndex(-1);
         setHistoryNote(r.note || (r.truncated ? "Older history is omitted from this commit list." : ""));
         if (scope === "commits" && !commitSelectionExplicit.current) {
@@ -1073,7 +1074,7 @@ function GitReview({ ctx }) {
     !worktrees.length && !error
       ? jsx(EmptyState, { title: "No worktrees found", description: "Focus a chat in a Git repository or configure explicit repos/roots in plugin settings." })
       : !diff
-        ? jsx(EmptyState, { title: error ? "Nothing to show" : (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits ahead of base") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…"), description: error ? "See the message above, then retry or switch scope." : undefined })
+        ? jsx(EmptyState, { title: error ? "Nothing to show" : (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits to show") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…"), description: error ? "See the message above, then retry or switch scope." : undefined })
         : !sections.length && !diff.note
           ? jsx(EmptyState, { title: "No changes in this scope", description: "Try a different scope or worktree." })
           : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), children: [
