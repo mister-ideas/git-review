@@ -763,6 +763,12 @@ def commits(repo: str | Path, base: str | None = None, skip: int = 0, all_histor
         note = "Full history of this branch." + (" " + note if note else "")
     if auto and items:
         note = f"Commits on this branch since it left {auto}." + (" " + note if note else "")
+    try:
+        shallow = _run(repo, "rev-parse", "--is-shallow-repository", timeout=5).strip() == "true"
+    except GitError:
+        shallow = False
+    if shallow:
+        note = "Shallow clone: only the fetched history exists. Run `git fetch --unshallow` to see every commit." + (" " + note if note else "")
     return {"commits": items[:MAX_COMMITS], "base": None if auto else start, "base_label": auto, "truncated": truncated, "has_more": truncated, "skip": skip, "note": note}
 
 
