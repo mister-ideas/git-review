@@ -2,6 +2,15 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.11 — 2026-10-19
+
+Repository-settings pass with usage-guard. No change to the plugin itself.
+
+- Workflows pin every action to a full commit SHA (with the tag in a comment); Dependabot keeps the pins current.
+- Releases are immutable: assets and tags cannot change once published. The release workflow already creates the release and its zip in one step, so it is unaffected.
+- `.github/CODEOWNERS`, `.gitattributes` (LF line endings, binary assets) and one shared `.gitignore` layout.
+- Repository homepage, wiki and projects settings now match usage-guard.
+
 ## 0.1.10 — 2026-10-19
 
 Consistency pass with usage-guard: same README skeleton, same asset names, same manifest layout.
