@@ -1,10 +1,10 @@
 name: git-review
-version: 0.1.12
+version: 0.1.13
 description: Read-only Git review pane for focused repositories and configured worktree roots.
 author: mister-ideas
 license: MIT
 manifest_version: 1
-requires_hermes: ">=0.21.5"
+requires_hermes: ">=0.21.6"
 kind: standalone
 provides_tools:
   - git_review_select

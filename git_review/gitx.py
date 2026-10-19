@@ -130,11 +130,55 @@ def _capture(cmd: list[str], *, cwd=None, env=None, timeout=TIMEOUT, limit=MAX_D
     return outputs["stdout"].decode("utf-8", "replace")
 
 
+# A checkout is untrusted input: its own .git/config and .gitattributes can name programs that
+# git would run during the plain read-only commands this pane polls (core.fsmonitor on status,
+# clean/process filter drivers on status and worktree diff, gpg.program via log.showSignature).
+# Every call therefore overrides those settings on the command line, which beats repo config.
+_NEUTRAL_CONFIG = ("core.fsmonitor=false", f"core.hooksPath={os.devnull}", "log.showSignature=false")
+_FILTER_KEY = re.compile(r"^filter\.(.+)\.(clean|smudge|process)$", re.IGNORECASE | re.DOTALL)
+# Commands that run clean filters over the worktree.
+_FILTERING = frozenset({"status", "diff"})
+
+
+def _repo_filter_drivers(repo: str | Path) -> set[str]:
+    """Filter drivers defined by the repository's own config (local/worktree scope).
+
+    Drivers only exist when config names them, so blanking the repo-defined ones covers whatever
+    .gitattributes asks for, while the user's own global drivers (git-lfs) keep working.
+    """
+    try:
+        raw = _capture(["git", "-C", str(repo), *(a for kv in _NEUTRAL_CONFIG for a in ("-c", kv)),
+                        "config", "--show-scope", "--includes", "-z", "--get-regexp",
+                        r"^filter\..*\.(clean|smudge|process)$"],
+                       timeout=5, limit=256 * 1024, ok=(0, 1), env=_git_env())
+    except (GitError, OSError):
+        return set()
+    parts = raw.split("\0")
+    names: set[str] = set()
+    for scope, item in zip(parts[0::2], parts[1::2]):
+        if scope not in ("local", "worktree", "command"):
+            continue
+        match = _FILTER_KEY.match(item.split("\n", 1)[0])
+        if match:
+            names.add(match.group(1))
+    return names
+
+
+def _git_env() -> dict:
+    return {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_PAGER": "cat", "PAGER": "cat",
+            "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"}
+
+
 def _run(repo: str | Path, *args: str, timeout: int = TIMEOUT, limit: int = MAX_DIFF_BYTES + 65536,
          ok=(0,), binary: bool = False):
-    return _capture(["git", "-C", str(repo), *args], timeout=timeout, limit=limit, ok=ok, binary=binary,
-                    env={**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_PAGER": "cat", "PAGER": "cat",
-                         "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"})
+    overrides = list(_NEUTRAL_CONFIG)
+    if args and args[0] in _FILTERING:
+        for name in sorted(_repo_filter_drivers(repo)):
+            overrides += [f"filter.{name}.clean=", f"filter.{name}.smudge=", f"filter.{name}.process=",
+                          f"filter.{name}.required=false"]
+    flags = [a for kv in overrides for a in ("-c", kv)]
+    return _capture(["git", "-C", str(repo), *flags, *args], timeout=timeout, limit=limit, ok=ok,
+                    binary=binary, env=_git_env())
 
 
 # Environment a repo CLI needs to find the user's own login. The POSIX names are
