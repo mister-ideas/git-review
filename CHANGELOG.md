@@ -2,6 +2,13 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.14 — 2026-10-19
+
+Commit identity clean-up. No change to the plugin itself.
+
+- Repository history was rewritten so every commit and tag uses the maintainer's GitHub noreply identity only; two stray addresses (an old agent identity and a personal mailbox) are gone from branches and tags. Release 0.1.11, 0.1.12 and 0.1.13 were withdrawn with it: their tags pointed at the old history and, being immutable, could only be removed with the release. Their contents are in 0.1.14.
+- CI now fails a change that introduces one of those addresses, or that authors a commit as `mister-ideas` with any other address (new `Commit identities` step in the `Hygiene` job).
+
 ## 0.1.13 — 2026-10-19
 
 Security hardening from the Hermes catalog review.
