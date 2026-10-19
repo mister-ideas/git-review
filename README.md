@@ -1,6 +1,6 @@
-# git-review for Hermes Desktop
+# git-review
 
-![git-review — a read-only Git review pane for Hermes Desktop](docs/banner.jpg)
+![git-review: a marble Hermes holds up a diff tablet. A read-only Git review pane for Hermes Desktop.](docs/banner.jpg)
 
 [![CI](https://github.com/mister-ideas/git-review/actions/workflows/ci.yml/badge.svg)](https://github.com/mister-ideas/git-review/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mister-ideas/git-review)](https://github.com/mister-ideas/git-review/releases)
@@ -79,14 +79,14 @@ Hermes asks "declares Node dependencies (package.json)" during install. Answer *
 
 Then:
 
-1. Enable **git-review** under **Capabilities → Plugins**. The Desktop app copies the pane from the package's `desktop/` folder into `$HERMES_HOME/desktop-plugins/git-review/` and hot-loads it.
+1. Enable **git-review** under **Capabilities → Plugins** (or `hermes plugins enable git-review`). The Desktop app copies the pane from the package's `desktop/` folder into `$HERMES_HOME/desktop-plugins/git-review/` and hot-loads it.
 2. Restart the backend — or quit and reopen the app — so the plugin's routes mount.
 3. Open it from the command palette (**Open git review**), or toggle the **Git review** pane, which docks right by default.
 
 To remove it:
 
 ```sh
-hermes plugins uninstall git-review
+hermes plugins remove git-review
 ```
 
 ## Updating
@@ -188,6 +188,8 @@ python scripts/package.py
 ```
 
 Python tests use temporary real repositories and the actual FastAPI router.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Changelog: [CHANGELOG.md](CHANGELOG.md).
 
 ## Support, issues and releases
 
