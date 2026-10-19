@@ -11,7 +11,10 @@ import os
 import threading
 import time
 from pathlib import Path
-import yaml
+try:  # core ships hermes_yaml (v0.21.6+); stock installs have no PyYAML
+    from hermes_yaml import safe_load as _yaml_load
+except ImportError:  # outside a Hermes checkout (CI, standalone tests)
+    from yaml import safe_load as _yaml_load
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -41,11 +44,11 @@ def settings() -> dict:
     """Only this plugin's explicit non-secret settings; never scan home implicitly."""
     home = Path(os.environ.get('HERMES_HOME') or Path.home() / '.hermes').expanduser()
     try:
-        config = yaml.safe_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
+        config = _yaml_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
         entry = config.get('plugins', {}).get('entries', {}).get('git-review', {})
         value = entry.get('settings', entry.get('config', {})) or {}
         return value if isinstance(value, dict) else {}
-    except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError):
+    except Exception:  # unreadable or malformed config.yaml: fall back to defaults
         return {}
 
 
@@ -58,10 +61,10 @@ def profile_workspace() -> str:
     """
     home = Path(os.environ.get('HERMES_HOME') or Path.home() / '.hermes').expanduser()
     try:
-        config = yaml.safe_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
+        config = _yaml_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
         value = (config.get('terminal') or {}).get('cwd')
         return str(value).strip() if value and str(value).strip() not in ('', '.') else ''
-    except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError):
+    except Exception:  # unreadable or malformed config.yaml: fall back to defaults
         return ''
 
 

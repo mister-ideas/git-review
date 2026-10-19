@@ -739,6 +739,38 @@ class BackendTests(unittest.TestCase):
             with self.assertRaises(gitx.GitError):
                 gitx._first_pr(json.dumps([item]), 'gh')
 
+    # A checkout is untrusted: its own config must not make read-only polling run programs.
+    def _marker_script(self, name):
+        marker = self.root / f'{name}.marker'
+        script = self.root / f'{name}.py'
+        script.write_text(f'import pathlib,sys\npathlib.Path({str(marker)!r}).write_text("ran")\n'
+                          'sys.stdout.buffer.write(sys.stdin.buffer.read() if not sys.argv[1:] else b"")\n',
+                          newline='\n')
+        return marker, f'{Path(sys.executable).as_posix()} {script.as_posix()}'
+
+    def test_repo_fsmonitor_is_never_run(self):
+        marker, command = self._marker_script('fsmonitor')
+        self.git('config', 'core.fsmonitor', command)
+        (self.repo / 'file.txt').write_text('one\ntwo\nthree\n', newline='\n')
+        gitx.status(self.repo)
+        gitx.diff(self.repo, 'unstaged')
+        self.assertFalse(marker.exists(), 'core.fsmonitor from the checkout ran')
+
+    def test_repo_filter_drivers_are_never_run(self):
+        marker, command = self._marker_script('filter')
+        self.git('config', 'filter.evil.clean', command)
+        (self.repo / '.gitattributes').write_text('* filter=evil\n', newline='\n')
+        (self.repo / 'file.txt').write_text('one\ntwo\nthree\n', newline='\n')
+        gitx.status(self.repo)
+        result = gitx.diff(self.repo, 'unstaged')
+        self.assertFalse(marker.exists(), 'a clean/process filter from the checkout ran')
+        self.assertIn('three', json.dumps(result))
+
+    def test_repo_filter_names_are_found_in_local_scope_only(self):
+        self.git('config', 'filter.evil.clean', 'x')
+        self.git('config', 'filter.we.ird.smudge', 'x')
+        self.assertEqual(gitx._repo_filter_drivers(self.repo), {'evil', 'we.ird'})
+
     def test_registration_contract(self):
         ctx = Mock()
         select_tool.register(ctx)

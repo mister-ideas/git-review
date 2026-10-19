@@ -2,6 +2,13 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.13 — 2026-10-19
+
+Security hardening from the Hermes catalog review.
+
+- A repository is now treated as untrusted input. Every `git` call overrides `core.fsmonitor`, `core.hooksPath` and `log.showSignature`, and `status` and worktree `diff` blank the clean, smudge and process filter drivers defined in the repository's own config. Before this, opening a checkout whose `.git/config` named a `core.fsmonitor` program or a clean filter ran that program on the 5-second poll. Two regression tests use marker-writing programs and fail on the previous code.
+- Config is read through core's `hermes_yaml`, so a stock install no longer needs PyYAML for the dashboard routes to import. `requires_hermes` is now `>=0.21.6`, the release that introduced it.
+
 ## 0.1.12 — 2026-10-19
 
 README title is now `git-review for Hermes Desktop`, matching usage-guard's `usage-guard for Hermes Agent`. No change to the plugin itself.
