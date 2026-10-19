@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8 — 2026-10-19
+
+- README's Limits section no longer says older history is omitted: older commits page in on demand.
+
 ## 0.1.7 — 2026-10-19
 
 - The banner now shows Hermes himself (winged helmet, caduceus, winged sandals) holding a diff tablet, at the catalog's 1200×600 (2:1) size.

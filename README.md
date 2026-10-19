@@ -153,7 +153,7 @@ Settings are stored under `plugins.entries.git-review.settings`. None of them ar
 ## Limits
 
 - Diffs above 2 MiB are refused with a note rather than silently truncated.
-- History is capped at 200 commits, and older history is reported as omitted.
+- The commit list loads 200 commits at a time; **Load older commits** pages further back, so no history is unreachable.
 - Each unchanged-line expansion reads at most 2000 lines.
 - New untracked files in a turn diff are capped at 200.
 
