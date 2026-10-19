@@ -20,4 +20,3 @@ labels: bug
 **Steps to reproduce**, including the scope you had selected (Last agent turn / Uncommitted / Staged / Unstaged / Commits):
 
 **Relevant log lines** — from `grep "git-review" ~/.hermes/logs/agent.log*` (no repository contents, please):
-
