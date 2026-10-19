@@ -1,4 +1,4 @@
-# Keep the workflow actions and the test-only npm packages current. The plugin
+# Keep the workflow actions (pinned to commit SHAs) and the test-only npm packages current. The plugin
 # itself has no runtime dependencies: the Python half uses only what Hermes
 # ships, and the npm packages exist for the test harnesses.
 version: 2
