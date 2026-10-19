@@ -15,7 +15,7 @@ A pane bug is much cheaper to fix when it reproduces in a test, so please say wh
 
 ## Scope: what this plugin will and will not do
 
-**In scope:** the review pane itself — the five scopes, diff rendering, folding and gap expanders, the file tree and filters, line citations into the composer, repository discovery, and the read-only backend routes behind all of it.
+**In scope:** the review pane itself — the five scopes, commit navigation (base branch, whole history, paging, commit by commit), diff rendering, folding and gap expanders, the file tree and filters, line citations into the composer, repository discovery, and the read-only backend routes behind all of it.
 
 **Out of scope.** Requests for these are closed with a pointer rather than a debate:
 
@@ -41,7 +41,7 @@ hermes plugins validate .
 python scripts/package.py
 ```
 
-Python tests use temporary real repositories and the actual FastAPI router.
+Python tests use temporary real repositories and the actual FastAPI router. The desktop tests render the real `desktop/plugin.js` against a Node test double of the Hermes SDK, so they prove behaviour and request shapes, not pixel layout: look at the pane in Hermes Desktop for anything visual.
 
 ## Tests to add for behavior changes
 

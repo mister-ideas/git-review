@@ -1,5 +1,16 @@
 # Changelog
 
+All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
+
+## 0.1.9 — 2026-10-19
+
+Catalog-readiness pass, compared against the most-starred Hermes plugins.
+
+- README: new **Updating** section (`check-updates`, `update`, and the Desktop-on-another-machine case) and two troubleshooting rows (remote Desktop, shallow clones).
+- SECURITY.md: supported versions and what to expect after a report. Private vulnerability reporting is now enabled on the repository, as the policy says.
+- Issue and PR templates no longer point at the removed `npm run test:layout`; CONTRIBUTING describes commit navigation as in scope and what the desktop tests do and do not prove.
+- CHANGELOG opens with its versioning policy.
+
 ## 0.1.8 — 2026-10-19
 
 - README's Limits section no longer says older history is omitted: older commits page in on demand.
