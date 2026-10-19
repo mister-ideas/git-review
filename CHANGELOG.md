@@ -2,6 +2,13 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.10 — 2026-10-19
+
+Consistency pass with usage-guard: same README skeleton, same asset names, same manifest layout.
+
+- README: the title is the plugin name; the banner's alt text follows the same pattern as usage-guard's; install notes the CLI way to enable (`hermes plugins enable git-review`); removal uses `hermes plugins remove`; the Development section points at CONTRIBUTING, SECURITY and CHANGELOG.
+- New `docs/social-preview.png` (1280×640), drawn from the same art as the banner. Upload it under the repository's Settings → Social preview.
+
 ## 0.1.9 — 2026-10-19
 
 Catalog-readiness pass, compared against the most-starred Hermes plugins.
