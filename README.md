@@ -89,6 +89,15 @@ To remove it:
 hermes plugins uninstall git-review
 ```
 
+## Updating
+
+```sh
+hermes plugins check-updates          # read-only: is a newer version available?
+hermes plugins update git-review
+```
+
+Restart the backend afterwards (new routes mount at start) and run **Reload desktop plugins**. If Desktop runs on a different machine than the backend, run the install or update there too: the pane is copied from the installed package on the machine that runs the app.
+
 ## What happens on first install
 
 - The pane follows the focused chat's workspace. If that workspace is not a Git
@@ -165,7 +174,8 @@ Settings are stored under `plugins.entries.git-review.settings`. None of them ar
 | Backend unavailable | Make sure the plugin is enabled and the backend is running. Backend updates need a backend restart. |
 | Diff exceeds display limit | Narrow the scope, the selected commits or the file filter. |
 | PR button missing | Authenticate `gh`/`glab` and check that the branch has an open PR/MR. |
-| Pane missing or stale | Enable the plugin, then run **Reload desktop plugins** from the command palette. |
+| Pane missing or stale | Enable the plugin, then run **Reload desktop plugins** from the command palette. Desktop on another machine than the backend: install the plugin on that machine too. |
+| Commits lists only a few commits | The reviewed repository is a shallow clone (a plugin directory installed by Hermes is one). The pane says so; run `git fetch --unshallow` in that repository. |
 
 ## Development
 

@@ -4,6 +4,14 @@
 
 Report vulnerabilities privately via GitHub security advisories on this repository (Security → Report a vulnerability). Do not open public issues for security reports.
 
+## Supported versions
+
+Only the latest release receives fixes. The Hermes catalog pins an exact commit, so a fix reaches catalog users through a reviewed pin bump.
+
+## What to expect
+
+This is a single-maintainer project: an acknowledgement usually within a few days, and a fix or a written assessment as soon as one is ready. Reports are disclosed in the release notes once a fix ships, with credit if you want it.
+
 ## Scope and design stance
 
 - **Read-only by construction.** The backend runs `git` as a bounded subprocess — `rev-parse`, `status`, `diff`, `log`, `show`, `cat-file`, `ls-files`, `for-each-ref`, `branch`, `remote`, `rev-list`, and `hash-object` without `-w`. It never fetches, checks out, stages, commits or writes to a repository. External diff and textconv drivers are disabled. Every call has a timeout and an output cap.
