@@ -1,4 +1,4 @@
-# git-review
+# git-review for Hermes Desktop
 
 ![git-review: a marble Hermes holds up a diff tablet. A read-only Git review pane for Hermes Desktop.](docs/banner.jpg)
 
