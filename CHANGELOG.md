@@ -2,6 +2,10 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.12 — 2026-10-19
+
+README title is now `git-review for Hermes Desktop`, matching usage-guard's `usage-guard for Hermes Agent`. No change to the plugin itself.
+
 ## 0.1.11 — 2026-10-19
 
 Repository-settings pass with usage-guard. No change to the plugin itself.
