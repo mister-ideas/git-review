@@ -5,7 +5,6 @@ What does this change do?
 ## Checks
 
 - [ ] `npm test` passes (unit, desktop smoke harness, import allowlist)
-- [ ] `npm run test:layout` passes, or the change cannot affect layout (needs Chromium and the desktop sources)
 - [ ] `python -m unittest discover -s tests -v` passes
 - [ ] `node --check desktop/plugin.js` passes
 - [ ] `hermes plugins doctor . --ci` and `hermes plugins validate .` pass

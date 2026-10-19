@@ -20,5 +20,3 @@ labels: bug
 **Steps to reproduce**, including the scope you had selected (Last agent turn / Uncommitted / Staged / Unstaged / Commits):
 
 **Relevant log lines** — from `grep "git-review" ~/.hermes/logs/agent.log*` (no repository contents, please):
-
-**Does it reproduce in the browser layout suite?** (`npm run test:layout` — a pane bug that reproduces there is much faster to fix):
