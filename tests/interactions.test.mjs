@@ -164,6 +164,22 @@ test('commits scope selects ALL 27 commits by default, without a 20-commit cap',
   assert.equal(paths(root).length, commits.length)
 })
 
+test('collapse state is saved with the pane settings', async t => {
+  const storage = new Map()
+  const { root } = await mount(t, { storage })
+  await click(byLabel(root, `Collapse diff for ${files[1]}`))
+  const saved = paneSettings(storage)
+  assert.equal(saved?.collapsedFiles?.[files[1]], true, 'the collapsed file must be saved')
+  assert.equal(saved.collapsedFiles[files[0]], undefined, 'only the file that was collapsed is saved')
+})
+
+test('a saved collapse state is applied on mount', async t => {
+  const storage = new Map([['display.v1', { collapsedFiles: { [files[1]]: true } }]])
+  const { root } = await mount(t, { storage })
+  assert.ok(byLabel(root, `Expand diff for ${files[1]}`), 'a saved collapse must be applied on mount')
+  assert.ok(byLabel(root, `Collapse diff for ${files[0]}`), 'a file with no saved state stays expanded')
+})
+
 test('Word wrap changes rendered diff class and survives remount settings', async t => {
   const storage = new Map([['display.v1', { wordWrap: true }]])
   const { root } = await mount(t, { storage })

@@ -220,6 +220,21 @@ const SETTINGS_KEY = "display.v1";
 // profile, plus the focused workspace. Shared with the tests so both sides build
 // the same key.
 const settingsKeyFor = (identity, cwd) => `${SETTINGS_KEY}:${identity}:${cwd || ""}`;
+// Which files a new diff opens: ones the reviewer had collapsed whose changes
+// just changed (a fresh edit), and files that were not in the previous diff at
+// all (a new file). The first observation of a scope is not a change, so a file
+// that is collapsed stays collapsed when the pane loads.
+const filesToOpen = (prev, next, collapsed) => {
+  if (!prev) return [];
+  const open = [];
+  for (const [path, sig] of next) {
+    if (!collapsed[path]) continue;
+    if (prev.get(path) !== sig) open.push(path);
+  }
+  return open;
+};
+// A file's changes, cheaply: the counts the header shows plus the patch size.
+const sectionSignature = (s) => `${s.added}:${s.removed}:${(s.patch || "").length}`;
 const EMPTY_ATOM = { get: () => "", subscribe: () => () => {} };
 
 const css = `
@@ -528,7 +543,7 @@ function GitReview({ ctx }) {
   const [expanded, setExpanded] = useState({});
   const [contextModes, setContextModes] = useState({});
   const [copied, setCopied] = useState("");
-  const [collapsedFiles, setCollapsedFiles] = useState({});
+
   const [autoBase, setAutoBase] = useState("");
   const [allHistory, setAllHistory] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -538,9 +553,16 @@ function GitReview({ ctx }) {
   // Last-agent-turn baselines live in STATE (mirror of storage) so recording a
   // new snapshot re-renders the pane immediately.
   const [turnBases, setTurnBases] = useState(() => ctx.storage.get(TURN_BASE_KEY, {}));
-  // Files and folders start open; preserve deliberate toggles across live polls.
+  // A scope or repository switch re-derives the collapse state from what was
+  // saved for this workspace, instead of carrying the old one over or wiping the
+  // reviewer's own toggles on every live poll.
   useEffect(() => {
-    setCollapsedFiles({});
+    let saved = {};
+    try {
+      saved = ctx.storage.get(settingsKey, {}) || {};
+      if (!Object.keys(saved).length) saved = ctx.storage.get(SETTINGS_KEY, {}) || {};
+    } catch { saved = {}; }
+    setCollapsedFiles(saved.collapsedFiles || {});
     // re-derive when the file set changes (scope/repo switch)
   }, [chosen, scope]);
   const [pr, setPr] = useState(null);
@@ -579,6 +601,9 @@ function GitReview({ ctx }) {
   const [showDeleted, setShowDeleted] = useState(() => readSettings().showDeleted !== false);
   const [showTests, setShowTests] = useState(() => readSettings().showTests !== false);
   const [visible, setVisible] = useState(() => ({ files: readSettings().files !== false }));
+  // Collapse state is part of the review: it is restored with the other settings
+  // and a file that changes while collapsed opens itself.
+  const [collapsedFiles, setCollapsedFiles] = useState(() => readSettings().collapsedFiles || {});
   // The file list keeps its default share of the pane until it is dragged; the
   // diff column stays minmax(0,1fr) so it reflows rather than overflowing.
   const [filesWidth, setFilesWidth] = useState(() => {
@@ -646,6 +671,7 @@ function GitReview({ ctx }) {
     setShowDeleted(s.showDeleted !== false);
     setShowTests(s.showTests !== false);
     setVisible({ files: s.files !== false });
+    setCollapsedFiles(s.collapsedFiles || {});
     const w = s.filesWidth;
     filesWidthRef.current = typeof w === "number" ? w : null;
     setFilesWidth(typeof w === "number" ? w : null);
@@ -879,6 +905,36 @@ function GitReview({ ctx }) {
     });
     return diff?.patch ? fileSections(diff.patch) : [];
   }, [diff, scope]);
+
+  // A file that changes while it is collapsed opens itself, so the review keeps
+  // showing what is new without a click per edit. Signatures are kept per scope:
+  // switching scope is not a change.
+  const seenSections = useRef(null);
+  useEffect(() => {
+    const sigs = new Map(sections.map((s) => [s.path, sectionSignature(s)]));
+    // Nothing loaded yet is not an observation: recording an empty list would make
+    // the first real diff look like every file is new, opening collapsed ones.
+    if (!sigs.size) return;
+    const prev = seenSections.current;
+    seenSections.current = { scope, sigs };
+    if (!prev || prev.scope !== scope || !prev.sigs.size) return;
+    const open = filesToOpen(prev.sigs, sigs, collapsedFiles);
+    if (!open.length) return;
+    setCollapsedFiles((c) => {
+      const next = { ...c };
+      for (const path of open) delete next[path];
+      return next;
+    });
+  }, [sections, scope]);
+
+  // Only on a real change: persisting on mount would write an empty map over the
+  // state being restored, and the restore reads the scoped key first.
+  const persistedCollapse = useRef(collapsedFiles);
+  useEffect(() => {
+    if (persistedCollapse.current === collapsedFiles) return;
+    persistedCollapse.current = collapsedFiles;
+    persist({ collapsedFiles });
+  }, [collapsedFiles]);
   const stats = useMemo(() => {
     const m = new Map();
     for (const s of sections) {
@@ -1620,4 +1676,4 @@ const plugin_default = {
   }
 };
 
-export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, settingsKeyFor, plugin_default as default };
+export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, settingsKeyFor, filesToOpen, plugin_default as default };
