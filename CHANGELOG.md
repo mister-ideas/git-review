@@ -2,6 +2,20 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.15 — 2026-10-20
+
+Pane interactions, from reports against a running pane. Two pull requests.
+
+- **One expander per hidden run.** A gap bar (lines outside the patch, fetched on demand) and an in-patch fold that touch with no change between them describe the same run; they stacked two "N unmodified lines" controls with nothing between them. They merge into one bar whose range covers both, in both layouts.
+- **A gap bar reveals its whole run in one click.** The label already carried the true count, but a click fetched 20 lines and left a separate "all" control to ask for the rest. The step is gone for gap bars: one control shows exactly as many lines as the label promised, bounded by the next change or the file edge — which is what the run is. The bar surface no longer changes colour on hover, where it promised a click that only the small step button acted on.
+- **No count when the selection is everything.** With all commits selected — the default — the navigator showed a position counter and the scope button a churn total, both describing the whole history rather than a reviewable selection.
+- **Pane settings are restored per workspace** (connection/profile plus the focused workspace) instead of one global set, with a fallback to the key older versions wrote. Scope and repository are deliberately not stored: they follow the session and the agent.
+- **Selection has a way out.** Clicking the selected line again, or any click that is not on a code line, leaves selection mode. A selection spanning a hidden run cites the exact range, covered by a test that reveals a file, hides its context, selects across the hidden run and asserts the ref.
+- **The file list resizes.** It keeps its default share of the pane until the divider is dragged; double-click resets, the width is stored with the other pane settings, the diff column reflows rather than overflowing, and the divider hides once the narrow layout stacks the two.
+- **Ceilings come from the hosts people compare against rather than invented numbers.** GitHub lists at most 250 commits between two revisions and refuses a diff past 3,000 lines; GitLab renders 5,000 diff lines before collapsing the rest. The commit list is 250 (was 200) and one expansion reads 5,000 lines (was 2,000). The 8 MiB whole-diff ceiling is ours.
+- **Menu surfaces keep their styling.** A menu portals to `document.body`, outside the scope the stylesheet used, so the churn colours, group headers and scroll cap silently stopped applying; menu content now carries the menu surface class as a second scope. Menu rows share one label slot too — a row passing its children as a bare array rendered its label 8 px left of its neighbours.
+- `$activeSessionId` is not importable by a plugin (the loader's allowlist rejects it, which the desktop smoke harness caught), so pane settings are scoped to state a plugin may read.
+
 ## 0.1.14 — 2026-10-19
 
 Commit identity clean-up. No change to the plugin itself.
