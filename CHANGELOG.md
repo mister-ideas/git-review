@@ -2,6 +2,14 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.16 — 2026-10-20
+
+The review survives a reload, and a file that changes opens itself.
+
+- **Collapse state is saved with the pane settings** (per workspace) instead of resetting on every mount, so a review in progress comes back the way it was left.
+- **A file whose changes change while it is collapsed opens itself**, and so does a file that appears for the first time. The first observation of a scope is not a change, so nothing pops open on load and an unchanged collapsed file stays collapsed.
+- Fixes a first-observation bug the new test caught: the pane records the diff it is showing, and recording an empty list before the diff loads made the first real diff look like every file was new — which would have opened collapsed files on every load.
+
 ## 0.1.15 — 2026-10-20
 
 Pane interactions, from reports against a running pane. Two pull requests.

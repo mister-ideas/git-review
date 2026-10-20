@@ -6,7 +6,7 @@ import { files, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
 import { host } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
-import { GitReview } from '../desktop/plugin.js'
+import { GitReview, filesToOpen } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -252,6 +252,19 @@ test('scope interaction changes the actual REST scope; removed chat actions stay
   assert.equal(latestDiff(requests).searchParams.get('scope'), 'staged')
   assert.ok(!text(byClass(root, 'toolbar')[0]).includes('Find Issues'))
   assert.ok(!text(byClass(root, 'toolbar')[0]).includes('Send to chat'))
+})
+
+test('filesToOpen: only files whose changes changed, and only when collapsed', () => {
+  const prev = new Map([['a.txt', '1:0:10'], ['b.txt', '2:0:20']])
+  const next = new Map([['a.txt', '1:0:10'], ['b.txt', '5:0:50'], ['c.txt', '0:1:8']])
+  assert.deepEqual(filesToOpen(prev, next, { 'b.txt': true, 'c.txt': true }), ['b.txt', 'c.txt'],
+    'a file with new changes, and a new file, must open')
+  assert.deepEqual(filesToOpen(prev, next, { 'a.txt': true }), [],
+    'a collapsed file whose changes did not change stays collapsed')
+  assert.deepEqual(filesToOpen(prev, next, { 'b.txt': false }), [],
+    'an expanded file is left alone')
+  assert.deepEqual(filesToOpen(null, next, { 'b.txt': true }), [],
+    'the first observation of a scope is not a change')
 })
 
 test('a hidden run renders one expander, never two stacked', async t => {
