@@ -403,7 +403,7 @@ const css = `
 .grd .gr-menu [role="separator"]{margin:4px 0}
 .grd .menu-group,.gr-menu .menu-group{padding:8px 10px 4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
    child inheriting from the wrapper gets nothing, so name the token and stay opaque. */background:var(--ui-bg-elevated,var(--ui-surface-background))}
-.grd .af-file{scroll-margin-top:34px;/* Skip layout and paint for file sections that are off-screen. The browser
+.grd .af-file{/* Skip layout and paint for file sections that are off-screen. The browser
    remembers each section's measured height, so the scrollbar does not jump. */
   content-visibility:auto;contain-intrinsic-size:auto 600px;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-file.af-collapsed{border-bottom:0}
@@ -1122,8 +1122,17 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
     setSelected(path);
     setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
     requestAnimationFrame(() => {
-      const section = document.querySelector(`.af-file[data-path="${CSS.escape(path)}"]`);
-      section?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const scroller = document.querySelector(".grd .allfiles");
+      const section = scroller?.querySelector(`.af-file[data-path="${CSS.escape(path)}"]`);
+      if (!scroller || !section) return;
+      scroller.scrollTo({
+        top: scrollTopFor({
+          elementTop: section.getBoundingClientRect().top,
+          scrollerTop: scroller.getBoundingClientRect().top,
+          scrollTop: scroller.scrollTop,
+        }),
+        behavior: "smooth",
+      });
     });
   };
   const scopeLabel = scope === "commits" ? (picked.size ? `Commits (${picked.size})` : "Commits")
@@ -1776,4 +1785,11 @@ const plugin_default = {
   }
 };
 
-export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, filesToOpen, plugin_default as default };
+// Where to scroll so a file's sticky header sits exactly at the top of the diff
+// column. Measured from live rects rather than scrollIntoView: the target may be a
+// section the browser skipped (content-visibility), and scroll margins left the
+// header under the previous file's sticky header instead of at the top.
+const scrollTopFor = ({ elementTop, scrollerTop, scrollTop, sticky = 0 }) =>
+  Math.max(0, elementTop - scrollerTop + scrollTop - sticky);
+
+export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, filesToOpen, scrollTopFor, plugin_default as default };

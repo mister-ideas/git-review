@@ -6,7 +6,8 @@ import { files, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
 import { host } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
-import { GitReview, filesToOpen, collapseRows } from '../desktop/plugin.js'
+import { readFileSync } from 'node:fs'
+import { GitReview, filesToOpen, collapseRows, scrollTopFor } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -303,6 +304,32 @@ test('the menu headers sit on the menu surface, and the divider is the desktop s
   assert.ok(!/\.menu-group[^{]*\{[^}]*background:inherit/.test(css), 'inherit resolves to transparent inside the scroll wrapper')
   assert.match(css, /\.resizer\{[^}]*width:4px/, 'the divider must be a 4px sash, like the desktop\'s')
   assert.match(css, /\.resizer:hover[^{]*\{[^}]*ui-sash-hover-background/, 'the sash must fill with the desktop\'s hover token')
+})
+
+test('scrollToSelection lands the header exactly at the top of the diff column', () => {
+  // A section 300px into the column, already scrolled 200px, must return the
+  // absolute scrollTop that puts its header flush with the column's top edge.
+  assert.equal(scrollTopFor({ elementTop: 100, scrollerTop: 0, scrollTop: 200 }), 300)
+  // The column itself offset down the viewport: only the delta matters.
+  assert.equal(scrollTopFor({ elementTop: 140, scrollerTop: 40, scrollTop: 200 }), 300)
+  // Never overscroll past the top when the header is already above the fold.
+  assert.equal(scrollTopFor({ elementTop: 10, scrollerTop: 0, scrollTop: 0 }), 10)
+  assert.equal(scrollTopFor({ elementTop: 10, scrollerTop: 0, scrollTop: 0, sticky: 34 }), 0)
+})
+
+test('the file section keeps no scroll margin, so a jump cannot stop short', () => {
+  // scroll-margin-top made the sticky header land below the previous file's
+  // header; the offset is computed instead. A stray margin is invisible in logic
+  // tests and only shows up as a misaligned jump, so it is pinned here.
+  const css = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  assert.ok(!/\.af-file\{[^}]*scroll-margin-top/.test(css), 'no scroll margin on .af-file')
+})
+
+test('a menu group title has a rule above it, never below', () => {
+  const css = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const group = css.match(/\.menu-group\{[^}]*\}/)?.[0] || '';
+  assert.ok(group, 'the group style exists')
+  assert.ok(!/border-bottom/.test(group), 'the divider lives above the title only')
 })
 
 test('filesToOpen: only files whose changes changed, and only when collapsed', () => {
