@@ -133,6 +133,13 @@ function fileSections(patch) {
     }
     if (current) current.lines.push(line);
   }
+  // Search and change-detection need the file's text, once per diff: doing it
+  // per keystroke meant re-joining every file's lines on every character typed.
+  for (const s of out) {
+    s.text = s.lines.join("\n");
+    s.hay = `${s.path}\n${s.text}`.toLowerCase();
+    s.chars = s.text.length;
+  }
   return out;
 }
 
@@ -247,7 +254,7 @@ const filesToOpen = (prev, next, collapsed) => {
   return open;
 };
 // A file's changes, cheaply: the counts the header shows plus the patch size.
-const sectionSignature = (s) => `${s.added}:${s.removed}:${(s.lines || []).join("\n").length}`;
+const sectionSignature = (s) => `${s.added}:${s.removed}:${s.chars}`;
 const EMPTY_ATOM = { get: () => "", subscribe: () => () => {} };
 
 const css = `
@@ -391,8 +398,9 @@ const css = `
 .grd .line.empty{background:transparent}
 .grd .splitwrap > .line{min-width:0}
 .grd .repo-menu,.gr-menu .repo-menu{max-height:380px;overflow-y:auto}
-.grd .menu-group,.gr-menu .menu-group{padding:6px 10px 2px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
-   child inheriting from the wrapper gets nothing, so name the token and stay opaque. */background:var(--ui-bg-elevated,var(--ui-surface-background));box-shadow:0 1px 0 var(--ui-stroke-tertiary)}
+.grd .gr-menu [role="separator"]{margin:4px 0}
+.grd .menu-group,.gr-menu .menu-group{padding:8px 10px 4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
+   child inheriting from the wrapper gets nothing, so name the token and stay opaque. */background:var(--ui-bg-elevated,var(--ui-surface-background))}
 .grd .af-file{scroll-margin-top:34px;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-file.af-collapsed{border-bottom:0}
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
@@ -991,15 +999,17 @@ function GitReview({ ctx }) {
   // Cursor's "Show:" filters: deleted files and test files can be hidden from
   // the tree. Deleted = every hunk is a whole-file deletion.
   const isTestPath = (p) => /(^|[/\\])(test|tests|__tests__|spec)([/\\]|$)|\.(test|spec)\.[^.]+$|\btest_[^/]*\.py$/i.test(p);
-  const visibleFiles = sections.filter((s) => {
+  // Stable across renders: a fresh array here invalidated every downstream memo
+  // and re-mapped the whole diff tree on any click.
+  const visibleFiles = useMemo(() => sections.filter((s) => {
     // Search covers the changes, not only the file names: a reviewer looks for
     // the identifier they changed, which is not in the path.
-    if (q && !s.path.toLowerCase().includes(q) && !(s.lines || []).join("\n").toLowerCase().includes(q)) return false;
+    if (q && !(s.hay || "").includes(q)) return false;
     const st = stats.get(s.path);
     if (!showDeleted && st?.status === "deleted") return false;
     if (!showTests && isTestPath(s.path)) return false;
     return true;
-  });
+  }), [sections, q, showDeleted, showTests, stats]);
   const hiddenByFilters = sections.filter((s) => (!showDeleted && stats.get(s.path)?.status === "deleted") || (!showTests && isTestPath(s.path))).length;
   const allCollapsed = visibleFiles.length > 0 && visibleFiles.every((s) => collapsedFiles[s.path]);
   const tree = useMemo(() => compactTree(buildTree(visibleFiles.map((s) => s.path))), [visibleFiles]);
