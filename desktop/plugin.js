@@ -1239,7 +1239,10 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
         jsx(DropdownMenuTrigger, { asChild: true, children:
           // The base, named plainly — Cursor says "against main" only inside a
           // sentence, never on the control.
-          jsx(RepoButton, { icon: "git-branch", label: shortLabel(shownBase || "main") })
+          // The picker chooses a comparison base, not a branch to be on: a bare
+          // branch name here read as "the current branch". The menu marks the
+          // checked-out branch as "current" and the auto base as "default".
+          jsx(RepoButton, { icon: "git-branch", label: `vs ${shortLabel(shownBase || "main")}` })
         }),
         jsx(DropdownMenuContent, { className: "gr-menu repo-menu", children: [
           jsx("div", { className: "menu-group", role: "presentation", children: "Compare against…" }, "hdr"),

@@ -294,7 +294,9 @@ test('picking a branch asks for commits since it, and the trigger names it', asy
   assert.ok(last, 'picking a branch must refetch the commit list')
   assert.match(decodeURIComponent(last.url), /[?&]base=main/, 'the commit query must carry the chosen base')
   const labels = root.findAll(n => typeof n.type === 'string' && typeof n.props?.className === 'string' && n.props.className.includes('repo-text')).map(text)
-  assert.ok(labels.some(t => t.trim() === 'main'), `the base control must name the base alone, got ${JSON.stringify(labels)}`)
+  // The control picks a comparison base, so it must not read as the branch we are
+  // on: the checked-out branch is named in the menu as "current".
+  assert.ok(labels.some(t => t.trim() === 'vs main'), `the base control must name the comparison, got ${JSON.stringify(labels)}`)
 })
 
 test('the menu headers sit on the menu surface, and the divider is the desktop sash', async t => {
