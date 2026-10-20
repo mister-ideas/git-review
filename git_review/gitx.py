@@ -732,7 +732,47 @@ def diff(repo: str | Path, scope: str, base: str | None = None, ref: str | None 
         return {"patch": "", "note": "Diff exceeds the display limit. Narrow the scope or filter to one file.", "added": 0, "removed": 0}
     if len(patch.encode("utf-8", "replace")) > MAX_DIFF_BYTES:
         return {"patch": "", "note": f"Diff exceeds the {MAX_DIFF_BYTES // (1024 * 1024)} MB display limit. Narrow the scope or filter to one file.", "added": 0, "removed": 0}
-    return _summarize(patch)
+    result = _summarize(patch)
+    # The run below the last hunk has no end in the patch, but the file does. Only
+    # a worktree side can be counted without reading a blob, so the pane gets the
+    # count when the new side is the working tree and falls back to "show more"
+    # otherwise (staged ranges number against the index, commits against a blob).
+    if scope in ("unstaged", "uncommitted"):
+        result["total_lines"] = _worktree_totals(repo, patch)
+    return result
+
+
+# New-side path of a file in a unified diff. Quoted paths (core.quotePath) are
+# skipped: the count only feeds a label, it is not correctness.
+_PATCH_PATH = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
+
+
+def _worktree_totals(repo: Path, patch: str) -> dict[str, int]:
+    """New-side line count per file of a worktree diff, for end-of-file runs.
+
+    The patch says where the last hunk stops, never how long the file is, so a
+    run that reaches the end has no number to show. Counting the files on disk is
+    the only way to know it, and only for paths the diff named.
+    """
+    totals: dict[str, int] = {}
+    if len(patch) > 2 * 1024 * 1024:
+        return totals
+    root = Path(repo).resolve()
+    for raw in _PATCH_PATH.findall(patch):
+        path = raw.split("\t")[0].strip()
+        if not path:
+            continue
+        full = (root / path).resolve()
+        if root not in full.parents or not full.is_file():
+            continue
+        try:
+            if full.stat().st_size > 8 * 1024 * 1024:
+                continue
+            data = full.read_bytes()
+        except OSError:
+            continue
+        totals[path] = data.count(b"\n") + (0 if not data or data.endswith(b"\n") else 1)
+    return totals
 
 
 def _summarize(patch: str) -> dict:
@@ -752,14 +792,19 @@ def _summarize(patch: str) -> dict:
 
 def _default_branch_fork_point(repo: str | Path):
     """Merge-base of HEAD with the default branch, or None when HEAD is on it (or none exists)."""
-    candidates = []
+    # main/master first: origin/HEAD is a pointer that goes stale (a worktree, an
+    # old clone, a CI checkout can leave it on any branch), and trusting it first
+    # made the fork point against an unrelated branch — which then listed that
+    # branch's whole history as "the commits of this branch". It stays as the last
+    # resort for repositories whose default really is something else.
+    candidates = ["origin/main", "main", "origin/master", "master"]
     try:
         head = _run(repo, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").strip()
-        if head:
-            candidates.append(head.removeprefix("refs/remotes/"))
+        name = head.removeprefix("refs/remotes/") if head else ""
+        if name and name not in candidates:
+            candidates.append(name)
     except GitError:
         pass
-    candidates += ["origin/main", "origin/master", "main", "master"]
     for name in candidates:
         try:
             tip = _commit_sha(repo, name)
@@ -767,7 +812,12 @@ def _default_branch_fork_point(repo: str | Path):
             if tip == head_sha:
                 return None
             fork = _run(repo, "merge-base", tip, head_sha).strip()
-            return (fork, name) if re.fullmatch(r"[0-9a-f]{40,64}", fork) and fork != head_sha else None
+            if not re.fullmatch(r"[0-9a-f]{40,64}", fork):
+                return None
+            # HEAD is an ancestor of the base (already merged, or behind it): the
+            # branch's own range is empty, and saying so beats listing history the
+            # branch did not write.
+            return (fork, name)
         except GitError:
             continue
     return None

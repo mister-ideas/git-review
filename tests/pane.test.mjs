@@ -1,12 +1,12 @@
 // Effect-driven plugin tests; SDK is a Node test double, never SDK layout proof.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mount, byClass, byLabel, click, text, select, paths, latestDiff, hasClass } from './render-harness.mjs'
+import { mount, byClass, byLabel, click, text, select, paths, latestDiff, hasClass, file } from './render-harness.mjs'
 import { files, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
 import { host } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
-import { GitReview, filesToOpen } from '../desktop/plugin.js'
+import { GitReview, filesToOpen, collapseRows } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -194,7 +194,7 @@ test('a selection spanning a hidden run cites the exact range', async t => {
   const inFile = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function').filter((n) => fileOf(n) === path)
   // Reveal the file, then hide it: the run between the two changes is only
   // hidden once the file is in "full" mode and the hide bar is used.
-  await click(byLabel(root, `Expand all remaining unchanged lines for ${path}`))
+  await click(byLabel(root, `Expand the remaining unchanged lines (bottom) for ${path}`))
   await click(byLabel(root, `Hide all unchanged lines for ${path}`))
   const shown = inFile()
   assert.ok(shown.length >= 2, 'need two lines to select across the hidden run')
@@ -254,6 +254,57 @@ test('scope interaction changes the actual REST scope; removed chat actions stay
   assert.ok(!text(byClass(root, 'toolbar')[0]).includes('Send to chat'))
 })
 
+test('a run after the last change folds to the end of the file', () => {
+  const rows = [
+    { kind: 'context', before: 1, after: 1, text: ' a', hunk: 0 },
+    { kind: 'add', before: 1, after: 2, text: '+b', hunk: 0 },
+    ...Array.from({ length: 10 }, (_, i) => ({ kind: 'context', before: 2 + i, after: 3 + i, text: ` c${i}`, hunk: 0 })),
+  ]
+  const out = collapseRows(rows, 3)
+  assert.equal(out.at(-1).kind, 'fold', 'the last run must end in its expander, not in a tail below it')
+  assert.equal(out.filter((r) => r.kind === 'fold').length, 1)
+  assert.equal(out.filter((r) => r.kind === 'context').length, 4, 'one leading line and the 3 nearest the change')
+})
+
+test('a run between two changes keeps both of its ends', () => {
+  const ctx = (n, from) => Array.from({ length: n }, (_, i) => ({ kind: 'context', before: from + i, after: from + i, text: ` c${from + i}`, hunk: 0 }))
+  const out = collapseRows([
+    { kind: 'add', before: 1, after: 1, text: '+a', hunk: 0 },
+    ...ctx(10, 2),
+    { kind: 'remove', before: 12, after: 12, text: '-z', hunk: 0 },
+    ...ctx(2, 13),
+  ], 3)
+  assert.equal(out.filter((r) => r.kind === 'fold').length, 1)
+  assert.equal(out[out.length - 1].kind, 'context', 'the tail of a middle run stays visible')
+})
+
+test('picking a branch asks for commits since it, and the trigger names it', async t => {
+  const { root, requests } = await mount(t)
+  await select(root, 'Commits')
+  const rows = () => root.findAll(n => typeof n.props.onSelect === 'function').map(n => text(n))
+  // One row per branch: origin/main is the same branch as main and must not be
+  // listed a second time under its remote name.
+  assert.equal(rows().filter(t => t.includes('origin/main')).length, 0, 'a remote counterpart must not be listed twice')
+  assert.equal(rows().filter(t => t.startsWith('main')).length, 1, 'main must be listed once')
+  const row = root.findAll(n => typeof n.props.onSelect === 'function' && text(n).startsWith('main'))[0]
+  assert.ok(row, 'branch row missing')
+  await act(async () => row.props.onSelect())
+  const last = [...requests].reverse().find(r => r.url.startsWith('/commits?'))
+  assert.ok(last, 'picking a branch must refetch the commit list')
+  assert.match(decodeURIComponent(last.url), /[?&]base=main/, 'the commit query must carry the chosen base')
+  const labels = root.findAll(n => typeof n.type === 'string' && typeof n.props?.className === 'string' && n.props.className.includes('repo-text')).map(text)
+  assert.ok(labels.some(t => t.trim() === 'main'), `the base control must name the base alone, got ${JSON.stringify(labels)}`)
+})
+
+test('the menu headers sit on the menu surface, and the divider is the desktop sash', async t => {
+  const { root } = await mount(t)
+  const css = root.findAll(n => n.type === 'style').map(n => (n.children || []).join('')).join('')
+  assert.match(css, /\.menu-group[^{]*\{[^}]*background:var\(--ui-bg-elevated/, 'sticky group headers must be opaque: the menu surface is painted on the content element, where a child cannot inherit it')
+  assert.ok(!/\.menu-group[^{]*\{[^}]*background:inherit/.test(css), 'inherit resolves to transparent inside the scroll wrapper')
+  assert.match(css, /\.resizer\{[^}]*width:4px/, 'the divider must be a 4px sash, like the desktop\'s')
+  assert.match(css, /\.resizer:hover[^{]*\{[^}]*ui-sash-hover-background/, 'the sash must fill with the desktop\'s hover token')
+})
+
 test('filesToOpen: only files whose changes changed, and only when collapsed', () => {
   const prev = new Map([['a.txt', '1:0:10'], ['b.txt', '2:0:20']])
   const next = new Map([['a.txt', '1:0:10'], ['b.txt', '5:0:50'], ['c.txt', '0:1:8']])
@@ -265,6 +316,50 @@ test('filesToOpen: only files whose changes changed, and only when collapsed', (
     'an expanded file is left alone')
   assert.deepEqual(filesToOpen(null, next, { 'b.txt': true }), [],
     'the first observation of a scope is not a change')
+})
+
+test('a gap bar sits between the hunks, not one row inside the next one', async t => {
+  const twoHunks = [
+    'diff --git a/a.txt b/a.txt', '--- a/a.txt', '+++ b/a.txt',
+    '@@ -10,8 +10,8 @@', ' c10', ' c11', ' c12', '-old1', '+new1', ' c13', ' c14', ' c15',
+    '@@ -40,8 +40,8 @@', ' c40', ' c41', ' c42', '-old2', '+new2', ' c43', ' c44', ' c45',
+  ].join('\n')
+  const { root } = await mount(t, { diffOverride: { patch: twoHunks, added: 2, removed: 2, note: '' } })
+  // Document order: rows and bars as they are painted.
+  const nodes = root.findAll((n) => typeof n.type === 'string' && (hasClass(n, 'fold') || hasClass(n, 'line')))
+  const i15 = nodes.findIndex((n) => hasClass(n, 'line') && text(n).includes('c15'))
+  assert.ok(i15 >= 0, 'last row of the first hunk missing')
+  assert.ok(hasClass(nodes[i15 + 1], 'fold'), `a bar must close the run right after c15, got ${JSON.stringify(text(nodes[i15 + 1]))}`)
+  assert.ok(text(nodes[i15 + 2]).includes('c40'), `the bar must precede the second hunk, got ${JSON.stringify(text(nodes[i15 + 2]))}`)
+})
+
+test('exactly one bar between two hunks, and none when the file ends there', async t => {
+  const twoHunks = [
+    'diff --git a/a.txt b/a.txt', '--- a/a.txt', '+++ b/a.txt',
+    '@@ -10,8 +10,8 @@', ' c10', ' c11', ' c12', '-old1', '+new1', ' c13', ' c14', ' c15',
+    '@@ -40,8 +40,8 @@', ' c40', ' c41', ' c42', '-old2', '+new2', ' c43', ' c44', ' c45',
+  ].join('\n')
+  const { root } = await mount(t, { diffOverride: { patch: twoHunks, added: 2, removed: 2, note: '', total_lines: { 'a.txt': 60 } } })
+  const bars = byClass(file(root, 'a.txt'), 'fold-inline').map(n => n.props['aria-label'] || '')
+  assert.equal(bars.filter(l => l.includes('(mid')).length, 1, `the run between the hunks must be exactly one bar, got ${JSON.stringify(bars)}`)
+})
+
+test('a real -U3 patch with two hunks puts one bar between them, not two', async t => {
+  const patchText = [
+    'diff --git a/a.txt b/a.txt', '--- a/a.txt', '+++ b/a.txt',
+    '@@ -10,8 +10,8 @@', ' c10', ' c11', ' c12', '-old1', '+new1', ' c13', ' c14', ' c15',
+    '@@ -40,8 +40,8 @@', ' c40', ' c41', ' c42', '-old2', '+new2', ' c43', ' c44', ' c45',
+  ].join('\n')
+  const { root } = await mount(t, { diffOverride: { patch: patchText, added: 2, removed: 2, note: '', total_lines: { 'a.txt': 60 } } })
+  const bars = byClass(root, 'fold')
+  assert.ok(bars.length > 0, 'the untouched run between the hunks must have a bar')
+  const stacked = bars.filter((b, i) => {
+    const prev = bars[i - 1]
+    if (!b.parent || prev?.parent !== b.parent) return false
+    const kids = (b.parent.children || []).filter((c) => c && typeof c === 'object')
+    return kids.indexOf(b) - kids.indexOf(prev) === 1
+  })
+  assert.equal(stacked.length, 0, `${stacked.length} pair(s) of expanders stack with no change between them`)
 })
 
 test('a hidden run renders one expander, never two stacked', async t => {

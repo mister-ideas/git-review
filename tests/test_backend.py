@@ -304,6 +304,38 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(self.get('meta', repo=str(self.repo), cwd=str(other)).status_code, 200)
         self.assertNotIn(posix(other), [posix(p) for p in self.inventory(str(other))])
 
+    def test_default_base_prefers_main_over_a_stale_origin_head(self):
+        tree = self.git('write-tree')
+        middle = self.git('commit-tree', tree, '-p', self.first, '-m', 'middle')
+        tip = self.git('commit-tree', tree, '-p', middle, '-m', 'tip')
+        self.git('update-ref', 'refs/heads/main', tip)
+        self.git('update-ref', 'refs/remotes/origin/main', self.first)
+        self.git('update-ref', 'refs/remotes/origin/qa/e2e-and-detached-head', middle)
+        self.git('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/qa/e2e-and-detached-head')
+        # main wins: a stale origin/HEAD must not define the fork point, which is
+        # what made an unrelated branch's history look like this branch's commits.
+        self.assertEqual(gitx._default_branch_fork_point(Path(self.repo)), (self.first, 'origin/main'))
+
+    def test_branch_already_contained_in_base_has_an_empty_range(self):
+        head = self.git('rev-parse', 'HEAD')
+        tree = self.git('write-tree')
+        ahead = self.git('commit-tree', tree, '-p', head, '-m', 'base moved ahead')
+        self.git('update-ref', 'refs/remotes/origin/main', ahead)
+        base = gitx._default_branch_fork_point(Path(self.repo))
+        self.assertEqual(base, (head, 'origin/main'), 'the base is main, and the fork is HEAD itself')
+        result = gitx.commits(Path(self.repo))
+        self.assertEqual(result['commits'], [], 'a branch with nothing of its own lists nothing')
+        self.assertEqual(result['base_label'], 'origin/main')
+
+    def test_worktree_totals_counts_new_side_lines(self):
+        p = Path(self.repo) / 'a.txt'
+        p.write_text('one\ntwo\nthree', encoding='utf-8')  # no trailing newline
+        patch = 'diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n'
+        self.assertEqual(gitx._worktree_totals(Path(self.repo), patch), {'a.txt': 3})
+        self.assertEqual(gitx._worktree_totals(Path(self.repo), ''), {})
+        # a path outside the repository is never read
+        self.assertEqual(gitx._worktree_totals(Path(self.repo), '+++ b/../outside.txt\n'), {})
+
     def test_http_selected_commits_supports_50_and_the_cap_full_shas(self):
         self.config(repos=str(self.repo))
         tree = self.git('rev-parse', 'HEAD^{tree}')

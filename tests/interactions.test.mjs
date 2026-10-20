@@ -98,11 +98,12 @@ for (const layout of ['unified', 'split']) {
     const contextText = () => byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).map(n => text(byClass(n, 'linecode')[0]))
     const copies = layout === 'split' ? 2 : 1
     // GitHub semantics: leading run keeps its LAST 3 (3 rendered), trailing run
-    // keeps 3+3 (6 rendered) → 9 rendered contexts per side.
-    assert.equal(contextText().length, 9 * copies)
+    // keeps 3 nearest the change, and the run after the last change folds to the
+    // end of the file → 3 + 3 = 6 rendered contexts per side.
+    assert.equal(contextText().length, 6 * copies)
     assert.equal(contextText().filter(s => s === contexts[3].slice(1)).length, 0)
     // GitHub-style expanders: reveal hidden rows progressively, then all.
-    const expandAll = byLabel(target(), `Expand all remaining unchanged lines for ${files[0]}`)
+    const expandAll = byLabel(target(), `Expand the remaining unchanged lines (bottom) for ${files[0]}`)
     assert.ok(expandAll, 'inline fold bar with expand-all affordance missing')
     await click(expandAll)
     // "all" opens the whole file: the in-patch rows plus every gap line of that file.
@@ -121,7 +122,9 @@ for (const layout of ['unified', 'split']) {
     const target = () => file(root, files[0])
     const other = byClass(file(root, files[1]), 'line').map(text)
     // compact → full → hidden → full: each transition stays scoped to files[0]
-    await click(byLabel(target(), `Expand all remaining unchanged lines for ${files[0]}`))
+    // The run after the last change merged into the bar below it, which reveals
+    // the whole remaining run in one click.
+    await click(byLabel(target(), `Expand the remaining unchanged lines (bottom) for ${files[0]}`))
     assert.ok(byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).length >= contexts.length * (layout === 'split' ? 2 : 1))
     await click(byLabel(target(), `Hide all unchanged lines for ${files[0]}`))
     assert.equal(byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).length, 0)
@@ -178,6 +181,28 @@ test('a saved collapse state is applied on mount', async t => {
   const { root } = await mount(t, { storage })
   assert.ok(byLabel(root, `Expand diff for ${files[1]}`), 'a saved collapse must be applied on mount')
   assert.ok(byLabel(root, `Collapse diff for ${files[0]}`), 'a file with no saved state stays expanded')
+})
+
+test('search matches the changes, not only the file names', async t => {
+  const { root } = await mount(t)
+  const search = root.findAll(n => n.props['aria-label'] === 'Search files' && typeof n.props.onChange === 'function')[0]
+  assert.ok(search, 'search field missing')
+  const before = paths(root)
+  // A token that exists only inside the diff body, taken from the rendered lines.
+  const token = byClass(file(root, files[0]), 'linecode').map(text).map(s => s.trim())
+    .find(s => s.length > 5 && !before.some(p => p.includes(s)))
+  assert.ok(token, 'need a body token to search')
+  await act(async () => search.props.onChange(token.slice(0, 6)))
+  const after = paths(root)
+  assert.ok(after.includes(files[0]), `a file whose changed line matches "${token.slice(0, 6)}" must stay visible`)
+  assert.ok(after.length <= before.length, 'search must not add files')
+})
+
+test('the empty state names the scope being reviewed', async t => {
+  const { root } = await mount(t, { diffOverride: { patch: '', added: 0, removed: 0, note: '' } })
+  await select(root, 'Staged')
+  const titles = root.findAll(n => n.props && typeof n.props.title === 'string').map(n => n.props.title)
+  assert.ok(titles.some(t => /staged/i.test(t)), `a staged scope with nothing staged must say so, got ${JSON.stringify(titles)}`)
 })
 
 test('Word wrap changes rendered diff class and survives remount settings', async t => {
@@ -251,6 +276,13 @@ test('unified: gap expander fetches outside-patch lines from /file-lines', async
 // means the file ended, so there is nothing below to reveal; exactly 3 means it may go on.
 const realPatch = (trailing) => ({ patch: ['diff --git a/a.txt b/a.txt', '--- a/a.txt', '+++ b/a.txt', `@@ -10,5 +10,5 @@`, ' c1', ' c2', ' c3', '-old', '+new', ...Array.from({ length: trailing }, (_, i) => ` t${i}`)].join('\n'), added: 1, removed: 1, note: '' })
 const belowBars = (root) => byClass(root, 'fold-inline').map(n => n.props['aria-label'] || '').filter(l => l.includes('(bottom)'))
+
+test('the bar below the last hunk names the lines it hides when the total is known', async t => {
+  const { root } = await mount(t, { diffOverride: { ...realPatch(5), total_lines: { 'a.txt': 40 } } })
+  const bar = byClass(root, 'fold-inline').find(n => (n.props['aria-label'] || '').includes('(bottom)'))
+  assert.ok(bar, 'bottom bar missing')
+  assert.match(bar.props['aria-label'], /all 26 unchanged lines/, 'lines 15..40 are 26 lines')
+})
 
 test('the bar below the last hunk loads the lines it stands for', async t => {
   const { root, requests } = await mount(t, { diffOverride: realPatch(5) })
