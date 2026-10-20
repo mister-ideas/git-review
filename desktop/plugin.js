@@ -1114,13 +1114,17 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
     if (!visibleFiles.length) return;
     const at = visibleFiles.findIndex((s) => s.path === active.path);
     const next = visibleFiles[(at + 1) % visibleFiles.length];
-    if (next) scrollToSelection(next.path);
+    // Stepping through files is navigation, not a layout edit: a file the reviewer
+    // collapsed stays collapsed and its header is the destination.
+    if (next) scrollToSelection(next.path, { reveal: false });
   };
 
   // Clicking a file in the tree scrolls the stacked diff to that file's section.
-  const scrollToSelection = (path) => {
+  // `reveal` is for the tree, where clicking a file means "show me this one". The
+  // toolbar's step-through does not pass it, so collapse state survives.
+  const scrollToSelection = (path, { reveal = true } = {}) => {
     setSelected(path);
-    setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
+    if (reveal) setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
     requestAnimationFrame(() => {
       const scroller = document.querySelector(".grd .allfiles");
       const section = scroller?.querySelector(`.af-file[data-path="${CSS.escape(path)}"]`);

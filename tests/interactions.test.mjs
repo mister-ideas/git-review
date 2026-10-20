@@ -12,6 +12,20 @@ import { GitReview } from '../desktop/plugin.js'
 const paneSettings = (storage) => storage.get(
   [...storage.keys()].filter(k => k.startsWith('display.v1')).sort((a, b) => b.length - a.length)[0])
 
+test('Review next file lands on a collapsed file without expanding it', async t => {
+  // The jump itself is browser work; the state it must not change is what this covers.
+  const raf = globalThis.requestAnimationFrame
+  globalThis.requestAnimationFrame = () => 0
+  t.after(() => { globalThis.requestAnimationFrame = raf })
+  const { root } = await mount(t)
+  // The first file is active, so the step-through target is the second one.
+  await click(byClass(file(root, files[1]), 'file-toggle')[0])
+  assert.equal(byClass(file(root, files[1]), 'diff').length, 0, 'precondition: collapsed')
+  await click(byLabel(root, 'Review next file'))
+  assert.equal(byClass(file(root, files[1]), 'diff').length, 0, 'stepping is navigation, not an expand')
+  assert.equal(byClass(root, 'af-file')[1].props['data-path'], files[1])
+})
+
 test('Ignore whitespace requests false → true → false and persists each value', async t => {
   const { root, requests, storage } = await mount(t)
   assert.equal(latestDiff(requests).searchParams.get('ignore_ws'), 'false')
