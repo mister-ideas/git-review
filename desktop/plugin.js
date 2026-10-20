@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, forwardRef } from "r
 import {
   Badge, Button, Codicon, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, EmptyState,
-  SearchField, Switch, Tip, cn, host, useValue, $activeSessionId,
+  SearchField, Switch, Tip, cn, host, useValue,
 } from "@hermes/plugin-sdk";
 
 // ───────────────────────── diff parsing ─────────────────────────
@@ -216,6 +216,10 @@ const SCOPES = [
 
 // Pane-scoped settings persisted via plugin storage (namespaced to the plugin).
 const SETTINGS_KEY = "display.v1";
+// Pane settings are scoped to the work they were chosen for: the connection and
+// profile, plus the focused workspace. Shared with the tests so both sides build
+// the same key.
+const settingsKeyFor = (identity, cwd) => `${SETTINGS_KEY}:${identity}:${cwd || ""}`;
 const EMPTY_ATOM = { get: () => "", subscribe: () => () => {} };
 
 const css = `
@@ -518,18 +522,6 @@ function GitReview({ ctx }) {
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState({});
   const [contextModes, setContextModes] = useState({});
-  // Pane settings belong to the chat session they were chosen in, so coming back
-  // to a session restores the pane the way it was left and two sessions with
-  // different shapes of work do not fight over one set of toggles. The scope and
-  // the repository are not stored: they follow the session and the agent.
-  const sessionId = useValue($activeSessionId || EMPTY_ATOM);
-  const settingsKey = `${SETTINGS_KEY}:${sessionId || "shared"}`;
-  const readSettings = () => { try { return ctx.storage.get(settingsKey, {}) || {}; } catch { return {}; } };
-  const [ignoreWs, setIgnoreWs] = useState(() => !!readSettings().ignoreWs);
-  const [wordWrap, setWordWrap] = useState(() => !!readSettings().wordWrap);
-  const [layout, setLayout] = useState(() => readSettings().layout || "unified"); // unified | split
-  const [showDeleted, setShowDeleted] = useState(() => readSettings().showDeleted !== false);
-  const [showTests, setShowTests] = useState(() => readSettings().showTests !== false);
   const [copied, setCopied] = useState("");
   const [collapsedFiles, setCollapsedFiles] = useState({});
   const [autoBase, setAutoBase] = useState("");
@@ -546,7 +538,6 @@ function GitReview({ ctx }) {
     setCollapsedFiles({});
     // re-derive when the file set changes (scope/repo switch)
   }, [chosen, scope]);
-  const [visible, setVisible] = useState(() => ({ files: readSettings().files !== false }));
   const [pr, setPr] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -560,6 +551,30 @@ function GitReview({ ctx }) {
   const profile = useValue(host.state.profile || EMPTY_ATOM);
   const connectionId = useValue(host.state.connectionId || EMPTY_ATOM);
   const identity = JSON.stringify([connectionId, profile]);
+
+  // Pane settings belong to the work they were chosen for, so coming back to a
+  // workspace restores the pane the way it was left instead of two different
+  // jobs sharing one set of toggles. The key is the connection/profile plus the
+  // focused workspace — the session identity a plugin may read: the loader's
+  // allowlist exposes no focused-session atom. The scope and the repository are
+  // deliberately not stored; they follow the session and the agent.
+  const settingsKey = settingsKeyFor(identity, cwd);
+  // Scoped first, then the unscoped key older versions wrote, so an existing
+  // install keeps its settings and a new workspace starts from them.
+  const readSettings = () => {
+    try {
+      const scoped = ctx.storage.get(settingsKey, {}) || {};
+      if (Object.keys(scoped).length) return scoped;
+      return ctx.storage.get(SETTINGS_KEY, {}) || {};
+    } catch { return {}; }
+  };
+  const [ignoreWs, setIgnoreWs] = useState(() => !!readSettings().ignoreWs);
+  const [wordWrap, setWordWrap] = useState(() => !!readSettings().wordWrap);
+  const [layout, setLayout] = useState(() => readSettings().layout || "unified"); // unified | split
+  const [showDeleted, setShowDeleted] = useState(() => readSettings().showDeleted !== false);
+  const [showTests, setShowTests] = useState(() => readSettings().showTests !== false);
+  const [visible, setVisible] = useState(() => ({ files: readSettings().files !== false }));
+
   const [repositoryIdentity, setRepositoryIdentity] = useState(identity);
   const repositoryReady = repositoryIdentity === identity;
   const lastHandled = useRef(-1);
@@ -580,21 +595,24 @@ function GitReview({ ctx }) {
 
   const persist = (patch) => { try { ctx.storage.set(settingsKey, { ...ctx.storage.get(settingsKey, {}), ...patch }); } catch { /* best-effort */ } };
 
-  // Switching the focused chat switches the settings set in play; re-apply the
-  // stored ones for the session being entered (the first run is the mount read).
-  const lastSession = useRef(sessionId);
+  // Switching the focused workspace switches the settings in play; re-apply the
+  // stored ones for the workspace being entered (the first run is the mount read).
+  const lastSession = useRef(settingsKey);
   useEffect(() => {
-    if (lastSession.current === sessionId) return;
-    lastSession.current = sessionId;
+    if (lastSession.current === settingsKey) return;
+    lastSession.current = settingsKey;
     let s = {};
-    try { s = ctx.storage.get(`${SETTINGS_KEY}:${sessionId || "shared"}`, {}) || {}; } catch { s = {}; }
+    try {
+      s = ctx.storage.get(settingsKey, {}) || {};
+      if (!Object.keys(s).length) s = ctx.storage.get(SETTINGS_KEY, {}) || {};
+    } catch { s = {}; }
     setLayout(s.layout || "unified");
     setWordWrap(!!s.wordWrap);
     setIgnoreWs(!!s.ignoreWs);
     setShowDeleted(s.showDeleted !== false);
     setShowTests(s.showTests !== false);
     setVisible({ files: s.files !== false });
-  }, [sessionId, ctx]);
+  }, [settingsKey, ctx]);
 
   // Follow the focused chat's workspace when it is a known worktree
   useEffect(() => {
@@ -1544,4 +1562,4 @@ const plugin_default = {
   }
 };
 
-export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, plugin_default as default };
+export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, settingsKeyFor, plugin_default as default };

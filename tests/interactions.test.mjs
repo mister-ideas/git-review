@@ -3,8 +3,14 @@ import assert from 'node:assert/strict'
 import { act, mount, byClass, byLabel, switchFor, click, select, paths, file, latestDiff, text } from './render-harness.mjs'
 import TestRenderer from 'react-test-renderer'
 import { jsx } from 'react/jsx-runtime'
-import { files, repo, commits, contexts, makeContext } from './fixtures.mjs'
+import { files, repo, makeContext, commits, contexts } from './fixtures.mjs'
+
 import { GitReview } from '../desktop/plugin.js'
+
+// The pane scopes its settings to the connection/profile and the workspace, and
+// falls back to the unscoped key older versions wrote. Read what it wrote.
+const paneSettings = (storage) => storage.get(
+  [...storage.keys()].filter(k => k.startsWith('display.v1')).sort((a, b) => b.length - a.length)[0])
 
 test('Ignore whitespace requests false → true → false and persists each value', async t => {
   const { root, requests, storage } = await mount(t)
@@ -14,7 +20,7 @@ test('Ignore whitespace requests false → true → false and persists each valu
     await act(async () => switchFor(root, 'Ignore whitespace').props.onCheckedChange(value))
     assert.equal(requests.filter(r => r.url.startsWith('/diff?')).length, count + 1)
     assert.equal(latestDiff(requests).searchParams.get('ignore_ws'), String(value))
-    assert.equal(storage.get('display.v1:shared').ignoreWs, value)
+    assert.equal(paneSettings(storage).ignoreWs, value)
   }
 })
 
@@ -35,10 +41,10 @@ test('deleted/test filters remove exact paths from both main view and tree', asy
   assert.deepEqual(paths(root), files)
   await select(root, 'Deleted files')
   assert.deepEqual(paths(root), files.slice(0, 3))
-  assert.equal(storage.get('display.v1:shared').showDeleted, false)
+  assert.equal(paneSettings(storage).showDeleted, false)
   await select(root, 'Test files')
   assert.deepEqual(paths(root), files.slice(0, 2))
-  assert.equal(storage.get('display.v1:shared').showTests, false)
+  assert.equal(paneSettings(storage).showTests, false)
   assert.deepEqual(byClass(root, 'file').map(text).map(s => s.replace(/[+−]\d+/g, '')), ['main.ts', 'other.ts'])
   await select(root, 'Deleted files')
   await select(root, 'Test files')
@@ -51,14 +57,14 @@ test('files hide/show persists through a real unmount/remount', async t => {
   assert.equal(first.root.findAllByType('aside').length, 1)
   await click(byLabel(first.root, 'Hide file list'))
   assert.equal(first.root.findAllByType('aside').length, 0)
-  assert.equal(storage.get('display.v1:shared').files, false)
+  assert.equal(paneSettings(storage).files, false)
   await act(async () => first.renderer.unmount())
   // mount uses the already-active timer mock for this test.
   const { root } = await mount(t, { storage })
   assert.equal(root.findAllByType('aside').length, 0)
   await click(byLabel(root, 'Show file list'))
   assert.equal(root.findAllByType('aside').length, 1)
-  assert.equal(storage.get('display.v1:shared').files, true)
+  assert.equal(paneSettings(storage).files, true)
 })
 
 test('architecture folders default expanded; compact chain toggles descendants only', async t => {
@@ -87,7 +93,7 @@ test('all files default expanded; one header collapse/reopen does not affect sib
 
 for (const layout of ['unified', 'split']) {
   test(`${layout}: expanding first and second context folds reveals exactly hidden rows`, async t => {
-    const { root } = await mount(t, { storage: new Map([['display.v1:shared', { layout }]]) })
+    const { root } = await mount(t, { storage: new Map([['display.v1', { layout }]]) })
     const target = () => file(root, files[0])
     const contextText = () => byClass(target(), 'line').filter(n => n.props.className.split(/\s+/).includes('context')).map(n => text(byClass(n, 'linecode')[0]))
     const copies = layout === 'split' ? 2 : 1
@@ -111,7 +117,7 @@ for (const layout of ['unified', 'split']) {
   })
 
   test(`${layout}: inline show-unchanged affordance acts on one file only`, async t => {
-    const { root } = await mount(t, { storage: new Map([['display.v1:shared', { layout }]]) })
+    const { root } = await mount(t, { storage: new Map([['display.v1', { layout }]]) })
     const target = () => file(root, files[0])
     const other = byClass(file(root, files[1]), 'line').map(text)
     // compact → full → hidden → full: each transition stays scoped to files[0]
@@ -129,7 +135,7 @@ for (const layout of ['unified', 'split']) {
 test('split unequal replacements pad both sides so subsequent context rows stay paired', async t => {
   const { root, storage } = await mount(t)
   await select(root, 'Layout: Split')
-  assert.equal(storage.get('display.v1:shared').layout, 'split')
+  assert.equal(paneSettings(storage).layout, 'split')
   const pairs = byClass(file(root, files[0]), 'split-row')
   assert.ok(pairs.length > 0)
   for (const pair of pairs) assert.equal(byClass(pair, 'line').length, 2)
@@ -159,12 +165,12 @@ test('commits scope selects ALL 27 commits by default, without a 20-commit cap',
 })
 
 test('Word wrap changes rendered diff class and survives remount settings', async t => {
-  const storage = new Map([['display.v1:shared', { wordWrap: true }]])
+  const storage = new Map([['display.v1', { wordWrap: true }]])
   const { root } = await mount(t, { storage })
   assert.equal(byClass(root, 'wordw').length, files.length)
   await act(async () => switchFor(root, 'Word wrap').props.onCheckedChange(false))
   assert.equal(byClass(root, 'wordw').length, 0)
-  assert.equal(storage.get('display.v1:shared').wordWrap, false)
+  assert.equal(paneSettings(storage).wordWrap, false)
 })
 
 test('Last agent turn scope: POSTs /turn-diff with the stored baseline; empty state without one', async t => {
