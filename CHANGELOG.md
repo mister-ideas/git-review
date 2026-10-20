@@ -2,6 +2,24 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.18 — 2026-10-20
+
+Everything since 0.1.16, from reports against a running pane: the fold geometry,
+the three pickers, and the menu surface.
+
+- **One bar per untouched run, in the right place.** A gap bar was queued and flushed on the following row, so it landed one row late: the run it described stayed open (lines jumped with no expander) and the bar appeared between two consecutive lines. It is emitted at the hunk boundary now, and a run that computes to nothing produces no bar.
+- **A run after the last change folds to the file end** instead of keeping a tail, which had put the expander in the middle of that final run.
+- **One control per bar.** The bar already names the run, so the numeric buttons repeated it: `34 unmodified lines ⌃ 20 ⌄ 20 all (34)` is now `34 unmodified lines ⌃ ⌄ all`, and gap bars show a single chevron.
+- **The chevrons are icons.** `⌃`/`⌄` were text glyphs whose line-box metrics sat off-centre in a padded button.
+- **The end-of-file bar names its length** when the pane knows it: the backend counts the worktree file (`total_lines`), so a bounded run says `N unmodified lines` and one click reveals exactly that. Staged ranges and commits keep "Show more lines below" rather than a count that could be wrong.
+- **Menu group headers are opaque.** `background: inherit` resolved to transparent inside the scroll wrapper — Radix paints the surface on the content element — so the first row showed through the header.
+- **The three pickers say one thing each.** The branch menu listed `main` and `origin/main` as two rows; it lists each branch once, checked-out first. The base is a comparison target, named plainly (`main`), with "against X" only in sentences, as Cursor does. The commit list shows `Commits · 3/41 against main` and its Select all/Clear reflect the selection.
+- **No silent fallback to whole history.** A branch with nothing since its base says so; a stale `origin/HEAD` can no longer define the fork point (main/master win).
+- **Scope-named empty states** ("No staged changes", "No changes in the last agent turn") instead of one generic line.
+- **Search covers the changed lines**, not only file paths.
+- **Review next file** in the toolbar, stepping through the changed files.
+- Fixes a change-signature that read a field sections do not have, so a collapsed file whose edits changed went unnoticed.
+
 ## 0.1.16 — 2026-10-20
 
 The review survives a reload, and a file that changes opens itself.
