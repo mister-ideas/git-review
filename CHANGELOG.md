@@ -2,6 +2,14 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.17 — 2026-10-20
+
+Menu and splitter polish, and the branch picker tells the truth.
+
+- Sticky menu group headers inherit the menu's own surface, so a scrolled row no longer shows through them as a transparent band.
+- The divider between the diff and the file list is now the desktop's pane sash: a 4px grab area on the seam, invisible until hovered or dragged, then filled with the app's sash tokens — the same shape as the app's own splitters.
+- The branch trigger names the comparison once one is chosen (`main since origin/main`) instead of continuing to name only the checked-out branch, and picking a base clears the previous commit picks, which belonged to the old range.
+
 ## 0.1.16 — 2026-10-20
 
 The review survives a reload, and a file that changes opens itself.

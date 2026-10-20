@@ -263,9 +263,12 @@ const css = `
 .grd .fdelta .add,.gr-menu .fdelta .add{color:var(--ui-green)}.grd .fdelta .del,.gr-menu .fdelta .del{color:var(--ui-red)}
 .grd .body{min-height:0;min-width:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) var(--files-w,minmax(210px,28%))}
 .grd .tree-side{position:relative}
-.grd .resizer{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:2}
-.grd .resizer::after{content:"";position:absolute;left:2px;top:0;bottom:0;width:1px;background:transparent}
-.grd .resizer:hover::after,.grd .resizer:focus-visible::after{background:var(--ui-stroke-tertiary)}
+/* Same shape as the desktop's pane sash: a 4px grab area straddling the seam,
+   invisible until it is hovered or dragged, then filled with the accent mix. */
+.grd .resizer{position:absolute;left:-2px;top:0;bottom:0;width:4px;cursor:col-resize;z-index:2;background:transparent}
+.grd .resizer:hover,.grd .resizer:focus-visible,.grd .resizer:active{background:var(--ui-sash-hover-background,var(--ui-stroke-tertiary))}
+.grd .resizer::after{content:"";position:absolute;left:1px;top:0;bottom:0;width:2px;background:transparent}
+.grd .resizer:hover::after,.grd .resizer:focus-visible::after,.grd .resizer:active::after{background:var(--ui-sash-hover-border,var(--ui-accent))}
 .grd .body.tree-hidden{grid-template-columns:minmax(0,1fr)}
 .grd .allfiles{overflow:auto;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0;scrollbar-gutter:stable}
 .grd .tree-side{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0;border-left:0;background:transparent}
@@ -300,7 +303,7 @@ const css = `
   .dark .grd .line.hunk{color:#9a9a9a;background:#161618}
   .dark .grd .fold{color:#6b6b6b}
   .dark .grd .fold-strip{background:#161618}
-  .dark .grd .menu-group,.dark .gr-menu .menu-group{background:#161618;color:#6b6b6b}
+  .dark .grd .menu-group,.dark .gr-menu .menu-group{color:#6b6b6b}
   .dark .grd .af-head{background:#161618}
   .dark .grd .af-head:hover{background:#1c1c20}
   .dark .grd .af-head .fdir{color:#6b6b6b}
@@ -375,7 +378,7 @@ const css = `
 .grd .line.empty{background:transparent}
 .grd .splitwrap > .line{min-width:0}
 .grd .repo-menu,.gr-menu .repo-menu{max-height:380px;overflow-y:auto}
-.grd .menu-group,.gr-menu .menu-group{padding:6px 10px 2px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;background:var(--ui-surface-background)}
+.grd .menu-group,.gr-menu .menu-group{padding:6px 10px 2px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;/* The menu draws its own surface; inherit it so a scrolled row cannot show through. */background:inherit}
 .grd .af-file{border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-file.af-collapsed{border-bottom:0}
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
@@ -1150,11 +1153,17 @@ function GitReview({ ctx }) {
       ] }),
       jsxs(DropdownMenu, { children: [
         jsx(DropdownMenuTrigger, { asChild: true, children:
-          jsx(RepoButton, { icon: "git-branch", label: meta?.current || "branch…" })
+          // The trigger says what is being compared against once a base is chosen:
+          // before that it names the checked-out branch.
+          jsx(RepoButton, { icon: "git-branch", label: base ? `${meta?.current || "HEAD"} since ${base}` : (meta?.current || "branch…") })
         }),
         jsx(DropdownMenuContent, { className: "gr-menu repo-menu", children: [
           jsx("div", { className: "menu-group", role: "presentation", children: "Commits since…" }, "hdr"),
-          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(b); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
+          ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => {
+            // A different base is a different commit range: the previous picks no
+            // longer belong to it, so they must not stay selected.
+            setAllHistory(false); setBase(b); setPicked(new Set()); setNavIndex(-1); commitSelectionExplicit.current = false;
+          }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
             jsx(CheckSlot, { on: base === b, size: "0.8rem" }),
             jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: b }),
             b === meta?.current ? jsx("span", { style: { color: "var(--ui-text-tertiary)", fontSize: 11 }, children: "current" }) : null
