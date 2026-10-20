@@ -387,7 +387,7 @@ const css = `
    instead: absolutely positioned over the diff, so it takes no width, and it
    fades a moment after scrolling stops. */
 .grd .allfiles::-webkit-scrollbar{width:0;height:0}
-.grd .ov-bar{position:absolute;right:2px;top:0;width:6px;border-radius:3px;pointer-events:none;
+.grd .ov-bar{position:absolute;right:2px;top:0;width:6px;border-radius:3px;pointer-events:none;z-index:6;
   background:color-mix(in srgb,var(--dt-scrollbar-thumb) 45%,transparent);opacity:0;transition:opacity .18s ease;will-change:transform}
 /* Right sidebar: vertical scroll only; long names ellipsize, never overflow. */
 .grd .tree-side .tree{overflow-x:hidden}
