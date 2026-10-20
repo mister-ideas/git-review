@@ -292,7 +292,7 @@ const css = `
 .grd .resizer::after{content:"";position:absolute;left:1px;top:0;bottom:0;width:2px;background:transparent}
 .grd .resizer:hover::after,.grd .resizer:focus-visible::after,.grd .resizer:active::after{background:var(--ui-sash-hover-border,var(--ui-accent))}
 .grd .body.tree-hidden{grid-template-columns:minmax(0,1fr)}
-.grd .allfiles{overflow:auto;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0}
+.grd .allfiles{overflow:auto;position:relative;scrollbar-width:none;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0}
 .grd .tree-side{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0;border-left:0;background:transparent}
 .grd .body{column-gap:0}
 .grd .tree-side .tree{overflow:auto;flex:1;min-height:0}
@@ -382,10 +382,13 @@ const css = `
 .grd .fold::before,.grd .fold::after{content:"";flex:1;border-top:1px solid var(--ui-stroke-tertiary)}
 .grd .fold-strip{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--ui-surface-background);pointer-events:none}
 .grd .fold-inner{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px}
-/* No scrollbar is styled here on purpose. Styling any ::-webkit-scrollbar part
-   makes Chromium draw a classic bar, which reserves its width forever. Left to
-   the system, the diff column gets an overlay scrollbar: nothing reserved, and
-   the bar only appears while the column is being scrolled. */
+/* Hermes core styles *::-webkit-scrollbar globally, so every scroller gets a
+   classic bar that reserves its width. The column hides it and draws .ov-bar
+   instead: absolutely positioned over the diff, so it takes no width, and it
+   fades a moment after scrolling stops. */
+.grd .allfiles::-webkit-scrollbar{width:0;height:0}
+.grd .ov-bar{position:absolute;right:2px;top:0;width:6px;border-radius:3px;pointer-events:none;
+  background:color-mix(in srgb,var(--dt-scrollbar-thumb) 45%,transparent);opacity:0;transition:opacity .18s ease;will-change:transform}
 /* Right sidebar: vertical scroll only; long names ellipsize, never overflow. */
 .grd .tree-side .tree{overflow-x:hidden}
 .grd .folder{min-width:0}
@@ -959,6 +962,22 @@ function GitReview({ ctx }) {
   // showing what is new without a click per edit. Signatures are kept per scope:
   // switching scope is not a change.
   const seenSections = useRef(null);
+  // The floating scrollbar updates the DOM directly: a scroll event must never
+  // re-render the diff tree, which is the expensive part of this pane.
+  const barRef = useRef(null);
+  const barTimer = useRef(null);
+  const onDiffScroll = (event) => {
+    const el = event.currentTarget;
+    const bar = barRef.current;
+    if (!bar) return;
+    const max = Math.max(1, el.scrollHeight - el.clientHeight);
+    const h = Math.max(28, (el.clientHeight * el.clientHeight) / el.scrollHeight);
+    bar.style.height = `${h}px`;
+    bar.style.transform = `translateY(${el.scrollTop + (el.scrollTop / max) * (el.clientHeight - h)}px)`;
+    bar.style.opacity = "1";
+    clearTimeout(barTimer.current);
+    barTimer.current = setTimeout(() => { bar.style.opacity = "0"; }, 800);
+  };
   useEffect(() => {
     const sigs = new Map(sections.map((s) => [s.path, sectionSignature(s)]));
     // Nothing loaded yet is not an observation: recording an empty list would make
@@ -1328,7 +1347,8 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
           ? jsx(EmptyState, { title: (EMPTY_SCOPE[scope] || ["No changes in this scope"])[0], description: (EMPTY_SCOPE[scope] || [null, "Try a different scope or worktree."])[1] })
           : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), style: visible.files && filesWidth ? { "--files-w": `${filesWidth}px` } : undefined, children: [
             // MAIN: every changed file's diff stacked (Cursor Changes), scroll to the last one.
-            jsxs("div", { className: "allfiles", children: [
+            jsxs("div", { className: "allfiles", onScroll: onDiffScroll, children: [
+              jsx("div", { ref: barRef, className: "ov-bar", "aria-hidden": true }),
               !visibleFiles.length && jsx(EmptyState, { title: q ? `No files match “${filter.trim()}”` : "All files are hidden by filters", description: sections.length ? "Clear the search or adjust the filters." : "" }),
               visibleFiles.map((s) => {
               const collapsed = !!collapsedFiles[s.path];

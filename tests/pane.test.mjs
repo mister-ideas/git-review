@@ -316,7 +316,10 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   const rule = src.match(/\.grd \.allfiles\{[^}]*\}/)?.[0] || '';
   assert.ok(rule, 'the diff column style exists')
   assert.ok(!/scrollbar-gutter/.test(rule), 'no reserved gutter')
-  assert.ok(!/\.grd \.allfiles::-webkit-scrollbar/.test(src), 'no styled scrollbar')
+  // The core styles every scrollbar globally, which reserves width; the column
+  // zeroes it and draws a floating bar over the diff instead.
+  assert.match(src, /\.grd \.allfiles::-webkit-scrollbar\{width:0;height:0\}/, 'the native bar takes no width')
+  assert.match(src, /\.grd \.ov-bar\{/, 'a floating bar is the affordance')
 })
 
 test('toolbar icon buttons are ghost, so none of them draws a border', () => {
