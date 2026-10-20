@@ -161,6 +161,52 @@ test('click line then another highlights the range; cite inserts native @line re
   assert.equal(selected().length, 0, 'selection clears after citing')
 })
 
+test('clicking the only selected line again leaves selection mode', async t => {
+  const { root } = await mount(t)
+  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
+  const selected = () => root.findAll(n => hasClass(n, 'line-selected'))
+  await click(lines()[0])
+  assert.equal(selected().length, 1, 'first click anchors')
+  await click(lines()[0])
+  assert.equal(selected().length, 0, 'clicking the selected line again must clear the selection')
+})
+
+test('a click that is not on a line leaves selection mode', async t => {
+  const { root } = await mount(t)
+  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
+  const selected = () => root.findAll(n => hasClass(n, 'line-selected'))
+  await click(lines()[0])
+  assert.equal(selected().length, 1)
+  const pane = root.findAll(n => hasClass(n, 'grd'))[0]
+  assert.ok(pane?.props?.onClick, 'the pane must clear a selection on an outside click')
+  await act(async () => pane.props.onClick())
+  assert.equal(selected().length, 0, 'an outside click must clear the selection')
+})
+
+test('a selection spanning a hidden run cites the exact range', async t => {
+  const inserted = []
+  const original = host.composer
+  host.composer = { ...original, insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) } }
+  t.after(() => { host.composer = original })
+  const { root } = await mount(t)
+  const path = 'src/architecture/deep/main.ts'
+  const fileOf = (n) => { let p = n; while (p && !(p.props && p.props['data-path'])) p = p.parent; return p?.props?.['data-path'] }
+  const inFile = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function').filter((n) => fileOf(n) === path)
+  // Reveal the file, then hide it: the run between the two changes is only
+  // hidden once the file is in "full" mode and the hide bar is used.
+  await click(byLabel(root, `Expand all remaining unchanged lines for ${path}`))
+  await click(byLabel(root, `Hide all unchanged lines for ${path}`))
+  const shown = inFile()
+  assert.ok(shown.length >= 2, 'need two lines to select across the hidden run')
+  await click(shown[0])
+  await click(shown[shown.length - 1])
+  await click(byLabel(root, 'Cite selected lines in focused message draft'))
+  assert.equal(inserted.length, 1)
+  const m = inserted[0].match(/^@line:(?:\/repositories\/[^:\s]+\/)?src\/architecture\/deep\/main\.ts:(\d+)-(\d+)$/)
+  assert.ok(m, `unexpected ref ${inserted[0]}`)
+  assert.ok(Number(m[2]) > Number(m[1]), 'the range must span the hidden lines')
+})
+
 test('clearing the line selection removes highlight and inserts nothing', async t => {
   const inserted = []
   const original = host.composer

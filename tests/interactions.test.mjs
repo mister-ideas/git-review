@@ -217,15 +217,16 @@ test('a busy rising edge snapshots the turn baseline via POST /turn-base', async
 test('unified: gap expander fetches outside-patch lines from /file-lines', async t => {
   const { root, requests } = await mount(t)
   const target = () => file(root, files[0])
-  const expander = byLabel(target(), `Expand 20 lines (top) for ${files[0]}`)
+  const expander = target().findAll(n => typeof n.props.onClick === 'function' && (n.props['aria-label'] || '').includes('(top)'))[0]
   assert.ok(expander, 'top gap expander bar missing')
   await click(expander)
-  const post = requests.find(r => r.url === '/file-lines' && r.options?.method === 'POST')
+  // The pane pre-loads gaps for the visible file, so the click's request is the latest one.
+  const post = [...requests].reverse().find(r => r.url === '/file-lines' && r.options?.method === 'POST')
   assert.ok(post, 'gap expander must POST /file-lines')
-  // the top gap grows UPWARD from the first change: the 20 nearest lines, not lines 1-20
-  assert.equal(post.options.body.end - post.options.body.start, 19)
+  // One control reveals the whole run: it reaches back to the file start rather
+  // than stopping 20 lines short of it.
+  assert.equal(post.options.body.start, 1, 'a gap bar must reveal its whole run in one click')
   assert.deepEqual({ ...post.options.body, start: 0, end: 0 }, { repo, path: files[0], rev: 'worktree', start: 0, end: 0 })
-  assert.ok(post.options.body.start > 1, 'top gap must fetch nearest-first')
   assert.ok(byClass(target(), 'linecode').some(n => text(n) === `filler-${post.options.body.end}`), 'fetched gap line must render')
 })
 
@@ -234,6 +235,17 @@ test('unified: gap expander fetches outside-patch lines from /file-lines', async
 // means the file ended, so there is nothing below to reveal; exactly 3 means it may go on.
 const realPatch = (trailing) => ({ patch: ['diff --git a/a.txt b/a.txt', '--- a/a.txt', '+++ b/a.txt', `@@ -10,5 +10,5 @@`, ' c1', ' c2', ' c3', '-old', '+new', ...Array.from({ length: trailing }, (_, i) => ` t${i}`)].join('\n'), added: 1, removed: 1, note: '' })
 const belowBars = (root) => byClass(root, 'fold-inline').map(n => n.props['aria-label'] || '').filter(l => l.includes('(bottom)'))
+
+test('the bar below the last hunk loads the lines it stands for', async t => {
+  const { root, requests } = await mount(t, { diffOverride: realPatch(5) })
+  const bar = byClass(root, 'fold-inline').find(n => (n.props['aria-label'] || '').includes('(bottom)'))
+  assert.ok(bar, 'bottom bar missing')
+  await click(bar)
+  const post = requests.find(r => r.url === '/file-lines' && r.options?.method === 'POST')
+  assert.ok(post, 'the bottom bar must fetch the lines it hides')
+  assert.equal(post.options.body.start, 15, 'the run starts after the last hunk\'s context')
+  assert.ok(post.options.body.end > post.options.body.start, 'the request must cover a run')
+})
 
 test('no "below" bar when the last hunk ends before 3 trailing lines (file ended)', async t => {
   const { root } = await mount(t, { diffOverride: realPatch(1) })

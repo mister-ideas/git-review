@@ -243,7 +243,11 @@ const css = `
 .grd .repo-name{font-size:12px;color:var(--ui-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .fdelta{font-family:var(--font-mono,monospace);font-size:10.5px;font-variant-numeric:tabular-nums;display:inline-flex;gap:6px}
 .grd .fdelta .add{color:var(--ui-green)}.grd .fdelta .del{color:var(--ui-red)}
-.grd .body{min-height:0;min-width:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,28%)}
+.grd .body{min-height:0;min-width:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) var(--files-w,minmax(210px,28%))}
+.grd .tree-side{position:relative}
+.grd .resizer{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:2}
+.grd .resizer::after{content:"";position:absolute;left:2px;top:0;bottom:0;width:1px;background:transparent}
+.grd .resizer:hover::after,.grd .resizer:focus-visible::after{background:var(--ui-stroke-tertiary)}
 .grd .body.tree-hidden{grid-template-columns:minmax(0,1fr)}
 .grd .allfiles{overflow:auto;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0;scrollbar-gutter:stable}
 .grd .tree-side{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0;border-left:0;background:transparent}
@@ -277,7 +281,6 @@ const css = `
   .dark .grd .lineno{color:#6b6b6b}
   .dark .grd .line.hunk{color:#9a9a9a;background:#161618}
   .dark .grd .fold{color:#6b6b6b}
-  .dark .grd .fold:hover{color:#c9c9c9}
   .dark .grd .fold-strip{background:#161618}
   .dark .grd .menu-group{background:#161618;color:#6b6b6b}
   .dark .grd .af-head{background:#161618}
@@ -335,7 +338,6 @@ const css = `
 .grd .line.hunk{color:var(--ui-text-secondary);background:var(--ui-row-hover-background);padding:5px 0;margin:0 0 4px}
 .grd .line.hunk:not(:first-child){margin-top:12px}
 .grd .fold{position:relative;display:flex;align-items:center;gap:8px;padding:2px 0;color:var(--ui-text-tertiary);font-size:11px;cursor:default;user-select:none}
-.grd .fold:hover{color:var(--ui-text-secondary)}
 .grd .fold::before,.grd .fold::after{content:"";flex:1;border-top:1px solid var(--ui-stroke-tertiary)}
 .grd .fold-strip{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--ui-surface-background);pointer-events:none}
 .grd .fold-inner{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px}
@@ -380,7 +382,7 @@ const css = `
 @container(max-width:560px){.grd .body{grid-template-columns:minmax(0,1fr) minmax(150px,30%)}.grd .toolbar{gap:4px;padding-inline:6px}}
 .grd .fold,.grd .fold-inner{white-space:nowrap}
 .check-slot{display:inline-flex;align-items:center;justify-content:center;width:1rem;flex:0 0 1rem}
-@container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
+@container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .resizer{display:none}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
 `;
 
 // Fixed-width check column: unchecked rows keep the same indent as checked ones, so labels align.
@@ -574,6 +576,35 @@ function GitReview({ ctx }) {
   const [showDeleted, setShowDeleted] = useState(() => readSettings().showDeleted !== false);
   const [showTests, setShowTests] = useState(() => readSettings().showTests !== false);
   const [visible, setVisible] = useState(() => ({ files: readSettings().files !== false }));
+  // The file list keeps its default share of the pane until it is dragged; the
+  // diff column stays minmax(0,1fr) so it reflows rather than overflowing.
+  const [filesWidth, setFilesWidth] = useState(() => {
+    const w = readSettings().filesWidth;
+    return typeof w === "number" ? w : null;
+  });
+  const filesWidthRef = useRef(filesWidth);
+  const resizeFrom = useRef(null);
+  const onResizeStart = (e) => {
+    const body = e?.currentTarget?.closest?.(".body");
+    if (!body || typeof e?.clientX !== "number") return;
+    resizeFrom.current = { right: body.getBoundingClientRect().right, id: e.pointerId };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    e.preventDefault?.();
+  };
+  const onResizeMove = (e) => {
+    if (!resizeFrom.current || typeof e?.clientX !== "number") return;
+    const room = resizeFrom.current.right;
+    // Clamp: the list stays usable and the diff keeps most of the pane.
+    const w = Math.max(180, Math.min(Math.round(room - e.clientX), Math.max(240, Math.round(room - 320))));
+    filesWidthRef.current = w;
+    setFilesWidth(w);
+  };
+  const onResizeEnd = () => {
+    if (!resizeFrom.current) return;
+    resizeFrom.current = null;
+    persist({ filesWidth: filesWidthRef.current });
+  };
+  const onResizeReset = () => { filesWidthRef.current = null; setFilesWidth(null); persist({ filesWidth: null }); };
 
   const [repositoryIdentity, setRepositoryIdentity] = useState(identity);
   const repositoryReady = repositoryIdentity === identity;
@@ -612,6 +643,9 @@ function GitReview({ ctx }) {
     setShowDeleted(s.showDeleted !== false);
     setShowTests(s.showTests !== false);
     setVisible({ files: s.files !== false });
+    const w = s.filesWidth;
+    filesWidthRef.current = typeof w === "number" ? w : null;
+    setFilesWidth(typeof w === "number" ? w : null);
   }, [settingsKey, ctx]);
 
   // Follow the focused chat's workspace when it is a known worktree
@@ -883,9 +917,13 @@ function GitReview({ ctx }) {
     const file = s.filePath || s.path;
     setLineSelection((sel) => {
       if (sel && sel.file === file && sel.anchor != null) {
+        // Clicking the anchor line itself leaves selection mode.
+        if (sel.anchor === line) return null;
         const lo = Math.min(sel.anchor, line), hi = Math.max(sel.anchor, line);
         return { file, sha: s.sha, anchor: null, start: lo, end: hi };
       }
+      // Clicking the only selected line again leaves selection mode too.
+      if (sel && sel.file === file && sel.start === line && sel.end === line) return null;
       return { file, sha: s.sha, anchor: line, start: line, end: line };
     });
   };
@@ -987,7 +1025,7 @@ function GitReview({ ctx }) {
     });
   };
 
-  return jsxs("section", { className: "grd", "aria-label": "git-review", children: [
+  return jsxs("section", { className: "grd", "aria-label": "git-review", onClick: () => setLineSelection((sel) => (sel ? null : sel)), children: [
     jsx("style", { children: css }),
     // ── toolbar: scope · repo/branch · right group (PR · display ⋯ · collapse all · file list)
     jsxs("div", { className: "toolbar", children: [
@@ -1131,7 +1169,7 @@ function GitReview({ ctx }) {
         ? jsx(EmptyState, { title: error ? "Nothing to show" : (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits to show") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…"), description: error ? "See the message above, then retry or switch scope." : undefined })
         : !sections.length && !diff.note
           ? jsx(EmptyState, { title: "No changes in this scope", description: "Try a different scope or worktree." })
-          : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), children: [
+          : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), style: visible.files && filesWidth ? { "--files-w": `${filesWidth}px` } : undefined, children: [
             // MAIN: every changed file's diff stacked (Cursor Changes), scroll to the last one.
             jsxs("div", { className: "allfiles", children: [
               !visibleFiles.length && jsx(EmptyState, { title: q ? `No files match “${filter.trim()}”` : "All files are hidden by filters", description: sections.length ? "Clear the search or adjust the filters." : "" }),
@@ -1313,6 +1351,8 @@ function GitReview({ ctx }) {
             ] }),
             // RIGHT: the file tree list, hide/show via the toolbar toggle.
             visible.files ? jsxs("aside", { className: "tree-side", children: [
+              jsx("div", { className: "resizer", role: "separator", tabIndex: 0, title: "Drag to resize the file list; double-click to reset",
+                "aria-label": "Resize file list", onPointerDown: onResizeStart, onPointerMove: onResizeMove, onPointerUp: onResizeEnd, onPointerCancel: onResizeEnd, onDoubleClick: onResizeReset }),
               jsxs("div", { className: "search", children: [
                 jsx(SearchField, { containerClassName: "search-field", inputClassName: "search-input", value: filter, onChange: setFilter, placeholder: `Search ${sections.length} ${sections.length === 1 ? "file" : "files"}${hiddenByFilters ? ` (${hiddenByFilters} hidden)` : ""}`, "aria-label": "Search files" }),
                 jsx("div", { className: cn("filter-wrap", (!showDeleted || !showTests) && "active"), children:
@@ -1345,6 +1385,9 @@ function GitReview({ ctx }) {
 // style). Gap bars (above first hunk / between hunks / below last) have no
 // local rows — they fetch through the bounded /file-lines backend route.
 const EXPAND_STEP = 20;
+// One request may cover a whole gap run; the backend clamps it to the file end
+// and to its own per-request ceiling, and reports `done` when it reaches it.
+const GAP_RUN_WINDOW = 5000;
 // Pure gap math (exported as _gapInternals for regression tests): the next
 // bounded window to fetch and the old/new line-number mapping for gap rows
 // (delta = newStart - oldStart, so old = new - delta).
@@ -1357,6 +1400,9 @@ const nextGapWindow = (state, gap, step = EXPAND_STEP) => {
     return { start: Math.max(gap.from, end - step + 1), end };
   }
   const start = state?.le != null ? state.le + 1 : gap.from;
+  // The gap below the last hunk has no known end: it runs to the end of the file,
+  // so it asks for one bounded window and the backend clamps it.
+  if (gap.to == null) return { start, end: start + step - 1 };
   if (start > gap.to) return null;
   return { start, end: Math.min(gap.to, start + step - 1) };
 };
@@ -1393,7 +1439,10 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
     if (!onFetch || !isGap) return;
     // "all" fetches one bounded window: the backend caps /file-lines at
     // MAX_FILE_LINES (2000) lines per request, so no chunk loops are needed.
-    const w = nextGapWindow(gapState, gap, mode === "all" ? 2000 : EXPAND_STEP);
+    // A gap bar's single control reveals its whole run: bounded by the next
+    // change when the diff knows where that is, otherwise one window the backend
+    // clamps at the file end (and at its own per-request ceiling).
+    const w = nextGapWindow(gapState, gap, mode === "all" ? GAP_RUN_WINDOW : EXPAND_STEP);
     if (!w) { setGapState((p) => ({ ...(p || {}), done: true })); return; }
     setGapState((p) => ({ ...(p || { le: gap.from - 1, numbered: [] }), loading: true, failed: false }));
     try {
@@ -1408,7 +1457,11 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
         return {
           ls, le, numbered, total,
           loading: false, failed: false,
-          done: isTop ? ls <= gap.from : (r.end >= Math.min(gap.to, total ?? r.end) || r.lines.length < (w.end - w.start + 1)),
+          done: isTop
+            ? ls <= gap.from
+            : (gap.to == null
+              ? (total != null ? r.end >= total : r.lines.length < (w.end - w.start + 1))
+              : (r.end >= Math.min(gap.to, total ?? r.end) || r.lines.length < (w.end - w.start + 1))),
         };
       });
     } catch { setGapState((p) => ({ ...(p || { le: gap.from - 1, numbered: [] }), loading: false, failed: true })); }
@@ -1450,9 +1503,11 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
         !isGap && !compact ? btn(`⌃ ${Math.min(EXPAND_STEP, midHidden)}`, "up", `Expand ${Math.min(EXPAND_STEP, midHidden)} unchanged lines above for ${path}`) : null,
         !isGap && !compact ? btn(`⌄ ${Math.min(EXPAND_STEP, midHidden)}`, "down", `Expand ${Math.min(EXPAND_STEP, midHidden)} unchanged lines below for ${path}`) : null,
         isGap ? (gapState?.failed
-          ? btn("Retry", "down", `Retry expanding lines (${gap.key}) for ${path}`, gapState?.loading)
-          : btn(gapState?.loading ? "…" : `${isTop ? "⌃" : "⌄"} ${stepCount}`, "down", `Expand ${stepCount} lines (${gap.key}) for ${path}`, gapState?.loading)) : null,
-        remaining > 0 ? btn(`all (${remaining})`, "all", isGap ? `Expand all gap lines (${gap.key}) for ${path}` : `Expand all remaining unchanged lines for ${path}`, gapState?.loading) : null,
+          ? btn("Retry", "all", `Retry expanding lines (${gap.key}) for ${path}`, gapState?.loading)
+          : btn(gapState?.loading ? "…" : `${isTop ? "⌃" : "⌄"} ${remaining != null ? remaining : "more"}`, "all", remaining != null ? `Expand all ${remaining} unchanged lines (${gap.key}) for ${path}` : `Expand the remaining unchanged lines (${gap.key}) for ${path}`, gapState?.loading)) : null,
+        // In-patch folds keep the progressive arrows (their rows are already
+        // here); a gap bar reveals its whole run in one click.
+        !isGap && remaining > 0 ? btn(`all (${remaining})`, "all", `Expand all remaining unchanged lines for ${path}`, gapState?.loading) : null,
       ] }) : null,
     ] }, `${path}:${row.key}`),
     ...(isTop ? loadedRows : []),
