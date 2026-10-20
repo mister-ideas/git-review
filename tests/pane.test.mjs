@@ -321,6 +321,11 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   // Sticky file headers sit at z-index 2; a lower bar paints underneath them.
   const bar = src.match(/\.grd \.ov-bar\{[^}]*\}/)?.[0] || ''
   assert.match(bar, /z-index:6/, 'the bar must paint over the sticky headers')
+
+  // The sticky group label is pinned at top: 0; list padding above it let a
+  // scrolled row show through as a clipped band above the label.
+  const list = src.match(/\.gr-menu \.repo-menu\{[^}]*\}/)?.[0] || ''
+  assert.match(list, /padding-top:0/, 'no padding above the sticky label')
 })
 
 test('toolbar icon buttons are ghost, so none of them draws a border', () => {
