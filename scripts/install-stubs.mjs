@@ -46,5 +46,7 @@ export const Badge = Component, Button = Component, Codicon = Component,
 export const cn = (...v) => v.filter(Boolean).join(' ');
 export { host };
 export const useValue = (a) => (a && typeof a.get === 'function' ? a.get() : '');
+// Mirrors the real SDK atom the pane keys per-session settings on.
+export const $activeSessionId = { get: () => null };
 `)
 console.log('render-test stubs installed (react is the REAL npm react)')

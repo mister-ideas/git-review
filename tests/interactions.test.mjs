@@ -3,8 +3,14 @@ import assert from 'node:assert/strict'
 import { act, mount, byClass, byLabel, switchFor, click, select, paths, file, latestDiff, text } from './render-harness.mjs'
 import TestRenderer from 'react-test-renderer'
 import { jsx } from 'react/jsx-runtime'
-import { files, repo, commits, contexts, makeContext } from './fixtures.mjs'
+import { files, repo, makeContext, commits, contexts } from './fixtures.mjs'
+
 import { GitReview } from '../desktop/plugin.js'
+
+// The pane scopes its settings to the connection/profile and the workspace, and
+// falls back to the unscoped key older versions wrote. Read what it wrote.
+const paneSettings = (storage) => storage.get(
+  [...storage.keys()].filter(k => k.startsWith('display.v1')).sort((a, b) => b.length - a.length)[0])
 
 test('Ignore whitespace requests false → true → false and persists each value', async t => {
   const { root, requests, storage } = await mount(t)
@@ -14,7 +20,7 @@ test('Ignore whitespace requests false → true → false and persists each valu
     await act(async () => switchFor(root, 'Ignore whitespace').props.onCheckedChange(value))
     assert.equal(requests.filter(r => r.url.startsWith('/diff?')).length, count + 1)
     assert.equal(latestDiff(requests).searchParams.get('ignore_ws'), String(value))
-    assert.equal(storage.get('display.v1').ignoreWs, value)
+    assert.equal(paneSettings(storage).ignoreWs, value)
   }
 })
 
@@ -35,10 +41,10 @@ test('deleted/test filters remove exact paths from both main view and tree', asy
   assert.deepEqual(paths(root), files)
   await select(root, 'Deleted files')
   assert.deepEqual(paths(root), files.slice(0, 3))
-  assert.equal(storage.get('display.v1').showDeleted, false)
+  assert.equal(paneSettings(storage).showDeleted, false)
   await select(root, 'Test files')
   assert.deepEqual(paths(root), files.slice(0, 2))
-  assert.equal(storage.get('display.v1').showTests, false)
+  assert.equal(paneSettings(storage).showTests, false)
   assert.deepEqual(byClass(root, 'file').map(text).map(s => s.replace(/[+−]\d+/g, '')), ['main.ts', 'other.ts'])
   await select(root, 'Deleted files')
   await select(root, 'Test files')
@@ -51,14 +57,14 @@ test('files hide/show persists through a real unmount/remount', async t => {
   assert.equal(first.root.findAllByType('aside').length, 1)
   await click(byLabel(first.root, 'Hide file list'))
   assert.equal(first.root.findAllByType('aside').length, 0)
-  assert.equal(storage.get('display.v1').files, false)
+  assert.equal(paneSettings(storage).files, false)
   await act(async () => first.renderer.unmount())
   // mount uses the already-active timer mock for this test.
   const { root } = await mount(t, { storage })
   assert.equal(root.findAllByType('aside').length, 0)
   await click(byLabel(root, 'Show file list'))
   assert.equal(root.findAllByType('aside').length, 1)
-  assert.equal(storage.get('display.v1').files, true)
+  assert.equal(paneSettings(storage).files, true)
 })
 
 test('architecture folders default expanded; compact chain toggles descendants only', async t => {
@@ -129,7 +135,7 @@ for (const layout of ['unified', 'split']) {
 test('split unequal replacements pad both sides so subsequent context rows stay paired', async t => {
   const { root, storage } = await mount(t)
   await select(root, 'Layout: Split')
-  assert.equal(storage.get('display.v1').layout, 'split')
+  assert.equal(paneSettings(storage).layout, 'split')
   const pairs = byClass(file(root, files[0]), 'split-row')
   assert.ok(pairs.length > 0)
   for (const pair of pairs) assert.equal(byClass(pair, 'line').length, 2)
@@ -164,7 +170,7 @@ test('Word wrap changes rendered diff class and survives remount settings', asyn
   assert.equal(byClass(root, 'wordw').length, files.length)
   await act(async () => switchFor(root, 'Word wrap').props.onCheckedChange(false))
   assert.equal(byClass(root, 'wordw').length, 0)
-  assert.equal(storage.get('display.v1').wordWrap, false)
+  assert.equal(paneSettings(storage).wordWrap, false)
 })
 
 test('Last agent turn scope: POSTs /turn-diff with the stored baseline; empty state without one', async t => {
@@ -211,15 +217,16 @@ test('a busy rising edge snapshots the turn baseline via POST /turn-base', async
 test('unified: gap expander fetches outside-patch lines from /file-lines', async t => {
   const { root, requests } = await mount(t)
   const target = () => file(root, files[0])
-  const expander = byLabel(target(), `Expand 20 lines (top) for ${files[0]}`)
+  const expander = target().findAll(n => typeof n.props.onClick === 'function' && (n.props['aria-label'] || '').includes('(top)'))[0]
   assert.ok(expander, 'top gap expander bar missing')
   await click(expander)
-  const post = requests.find(r => r.url === '/file-lines' && r.options?.method === 'POST')
+  // The pane pre-loads gaps for the visible file, so the click's request is the latest one.
+  const post = [...requests].reverse().find(r => r.url === '/file-lines' && r.options?.method === 'POST')
   assert.ok(post, 'gap expander must POST /file-lines')
-  // the top gap grows UPWARD from the first change: the 20 nearest lines, not lines 1-20
-  assert.equal(post.options.body.end - post.options.body.start, 19)
+  // One control reveals the whole run: it reaches back to the file start rather
+  // than stopping 20 lines short of it.
+  assert.equal(post.options.body.start, 1, 'a gap bar must reveal its whole run in one click')
   assert.deepEqual({ ...post.options.body, start: 0, end: 0 }, { repo, path: files[0], rev: 'worktree', start: 0, end: 0 })
-  assert.ok(post.options.body.start > 1, 'top gap must fetch nearest-first')
   assert.ok(byClass(target(), 'linecode').some(n => text(n) === `filler-${post.options.body.end}`), 'fetched gap line must render')
 })
 
@@ -228,6 +235,17 @@ test('unified: gap expander fetches outside-patch lines from /file-lines', async
 // means the file ended, so there is nothing below to reveal; exactly 3 means it may go on.
 const realPatch = (trailing) => ({ patch: ['diff --git a/a.txt b/a.txt', '--- a/a.txt', '+++ b/a.txt', `@@ -10,5 +10,5 @@`, ' c1', ' c2', ' c3', '-old', '+new', ...Array.from({ length: trailing }, (_, i) => ` t${i}`)].join('\n'), added: 1, removed: 1, note: '' })
 const belowBars = (root) => byClass(root, 'fold-inline').map(n => n.props['aria-label'] || '').filter(l => l.includes('(bottom)'))
+
+test('the bar below the last hunk loads the lines it stands for', async t => {
+  const { root, requests } = await mount(t, { diffOverride: realPatch(5) })
+  const bar = byClass(root, 'fold-inline').find(n => (n.props['aria-label'] || '').includes('(bottom)'))
+  assert.ok(bar, 'bottom bar missing')
+  await click(bar)
+  const post = requests.find(r => r.url === '/file-lines' && r.options?.method === 'POST')
+  assert.ok(post, 'the bottom bar must fetch the lines it hides')
+  assert.equal(post.options.body.start, 15, 'the run starts after the last hunk\'s context')
+  assert.ok(post.options.body.end > post.options.body.start, 'the request must cover a run')
+})
 
 test('no "below" bar when the last hunk ends before 3 trailing lines (file ended)', async t => {
   const { root } = await mount(t, { diffOverride: realPatch(1) })

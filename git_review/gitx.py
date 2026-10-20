@@ -11,14 +11,19 @@ import time
 from pathlib import Path
 
 # Diffs larger than this are refused with a note instead of freezing the pane.
-MAX_DIFF_BYTES = 2 * 1024 * 1024
+# Display ceilings, kept at what the hosts people already compare against do
+# rather than invented: GitHub lists at most 250 commits between two revisions
+# and refuses a diff past 3,000 lines; GitLab renders 5,000 diff lines before it
+# collapses the rest. The byte ceiling is our own — a diff far past the line
+# budgets is refused with a note instead of being transferred and rendered.
+MAX_DIFF_BYTES = 8 * 1024 * 1024
 MAX_FILES = 2000
-MAX_COMMITS = 200
+MAX_COMMITS = 250
 MAX_REFS = MAX_COMMITS
 # New untracked files rendered per turn diff (each costs one git process).
 MAX_TURN_UNTRACKED = 200
 # Lines returned per /file-lines request (unchanged-line expansion).
-MAX_FILE_LINES = 2000
+MAX_FILE_LINES = 5000
 # Bytes sniffed for NUL when deciding a file is binary (git uses the same size).
 BINARY_SNIFF = 8000
 # Enough unchanged lines for meaningful UI folds, still bounded by MAX_DIFF_BYTES.

@@ -216,6 +216,10 @@ const SCOPES = [
 
 // Pane-scoped settings persisted via plugin storage (namespaced to the plugin).
 const SETTINGS_KEY = "display.v1";
+// Pane settings are scoped to the work they were chosen for: the connection and
+// profile, plus the focused workspace. Shared with the tests so both sides build
+// the same key.
+const settingsKeyFor = (identity, cwd) => `${SETTINGS_KEY}:${identity}:${cwd || ""}`;
 const EMPTY_ATOM = { get: () => "", subscribe: () => () => {} };
 
 const css = `
@@ -242,7 +246,11 @@ const css = `
    and the scroll cap all apply to the menu, not to the pane. */
 .grd .fdelta,.gr-menu .fdelta{font-family:var(--font-mono,monospace);font-size:10.5px;font-variant-numeric:tabular-nums;display:inline-flex;gap:6px}
 .grd .fdelta .add,.gr-menu .fdelta .add{color:var(--ui-green)}.grd .fdelta .del,.gr-menu .fdelta .del{color:var(--ui-red)}
-.grd .body{min-height:0;min-width:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,28%)}
+.grd .body{min-height:0;min-width:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) var(--files-w,minmax(210px,28%))}
+.grd .tree-side{position:relative}
+.grd .resizer{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:2}
+.grd .resizer::after{content:"";position:absolute;left:2px;top:0;bottom:0;width:1px;background:transparent}
+.grd .resizer:hover::after,.grd .resizer:focus-visible::after{background:var(--ui-stroke-tertiary)}
 .grd .body.tree-hidden{grid-template-columns:minmax(0,1fr)}
 .grd .allfiles{overflow:auto;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0;scrollbar-gutter:stable}
 .grd .tree-side{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0;border-left:0;background:transparent}
@@ -276,7 +284,6 @@ const css = `
   .dark .grd .lineno{color:#6b6b6b}
   .dark .grd .line.hunk{color:#9a9a9a;background:#161618}
   .dark .grd .fold{color:#6b6b6b}
-  .dark .grd .fold:hover{color:#c9c9c9}
   .dark .grd .fold-strip{background:#161618}
   .dark .grd .menu-group,.dark .gr-menu .menu-group{background:#161618;color:#6b6b6b}
   .dark .grd .af-head{background:#161618}
@@ -334,7 +341,6 @@ const css = `
 .grd .line.hunk{color:var(--ui-text-secondary);background:var(--ui-row-hover-background);padding:5px 0;margin:0 0 4px}
 .grd .line.hunk:not(:first-child){margin-top:12px}
 .grd .fold{position:relative;display:flex;align-items:center;gap:8px;padding:2px 0;color:var(--ui-text-tertiary);font-size:11px;cursor:default;user-select:none}
-.grd .fold:hover{color:var(--ui-text-secondary)}
 .grd .fold::before,.grd .fold::after{content:"";flex:1;border-top:1px solid var(--ui-stroke-tertiary)}
 .grd .fold-strip{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--ui-surface-background);pointer-events:none}
 .grd .fold-inner{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px}
@@ -379,7 +385,7 @@ const css = `
 @container(max-width:560px){.grd .body{grid-template-columns:minmax(0,1fr) minmax(150px,30%)}.grd .toolbar{gap:4px;padding-inline:6px}}
 .grd .fold,.grd .fold-inner{white-space:nowrap}
 .check-slot{display:inline-flex;align-items:center;justify-content:center;width:1rem;flex:0 0 1rem}
-@container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
+@container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .resizer{display:none}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
 `;
 
 // Fixed-width check column: unchecked rows keep the same indent as checked ones, so labels align.
@@ -521,11 +527,6 @@ function GitReview({ ctx }) {
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState({});
   const [contextModes, setContextModes] = useState({});
-  const [ignoreWs, setIgnoreWs] = useState(() => !!ctx.storage.get(SETTINGS_KEY, {}).ignoreWs);
-  const [wordWrap, setWordWrap] = useState(() => !!ctx.storage.get(SETTINGS_KEY, {}).wordWrap);
-  const [layout, setLayout] = useState(() => ctx.storage.get(SETTINGS_KEY, {}).layout || "unified"); // unified | split
-  const [showDeleted, setShowDeleted] = useState(() => ctx.storage.get(SETTINGS_KEY, {}).showDeleted !== false);
-  const [showTests, setShowTests] = useState(() => ctx.storage.get(SETTINGS_KEY, {}).showTests !== false);
   const [copied, setCopied] = useState("");
   const [collapsedFiles, setCollapsedFiles] = useState({});
   const [autoBase, setAutoBase] = useState("");
@@ -542,7 +543,6 @@ function GitReview({ ctx }) {
     setCollapsedFiles({});
     // re-derive when the file set changes (scope/repo switch)
   }, [chosen, scope]);
-  const [visible, setVisible] = useState(() => ({ files: ctx.storage.get(SETTINGS_KEY, {}).files !== false }));
   const [pr, setPr] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -556,6 +556,59 @@ function GitReview({ ctx }) {
   const profile = useValue(host.state.profile || EMPTY_ATOM);
   const connectionId = useValue(host.state.connectionId || EMPTY_ATOM);
   const identity = JSON.stringify([connectionId, profile]);
+
+  // Pane settings belong to the work they were chosen for, so coming back to a
+  // workspace restores the pane the way it was left instead of two different
+  // jobs sharing one set of toggles. The key is the connection/profile plus the
+  // focused workspace — the session identity a plugin may read: the loader's
+  // allowlist exposes no focused-session atom. The scope and the repository are
+  // deliberately not stored; they follow the session and the agent.
+  const settingsKey = settingsKeyFor(identity, cwd);
+  // Scoped first, then the unscoped key older versions wrote, so an existing
+  // install keeps its settings and a new workspace starts from them.
+  const readSettings = () => {
+    try {
+      const scoped = ctx.storage.get(settingsKey, {}) || {};
+      if (Object.keys(scoped).length) return scoped;
+      return ctx.storage.get(SETTINGS_KEY, {}) || {};
+    } catch { return {}; }
+  };
+  const [ignoreWs, setIgnoreWs] = useState(() => !!readSettings().ignoreWs);
+  const [wordWrap, setWordWrap] = useState(() => !!readSettings().wordWrap);
+  const [layout, setLayout] = useState(() => readSettings().layout || "unified"); // unified | split
+  const [showDeleted, setShowDeleted] = useState(() => readSettings().showDeleted !== false);
+  const [showTests, setShowTests] = useState(() => readSettings().showTests !== false);
+  const [visible, setVisible] = useState(() => ({ files: readSettings().files !== false }));
+  // The file list keeps its default share of the pane until it is dragged; the
+  // diff column stays minmax(0,1fr) so it reflows rather than overflowing.
+  const [filesWidth, setFilesWidth] = useState(() => {
+    const w = readSettings().filesWidth;
+    return typeof w === "number" ? w : null;
+  });
+  const filesWidthRef = useRef(filesWidth);
+  const resizeFrom = useRef(null);
+  const onResizeStart = (e) => {
+    const body = e?.currentTarget?.closest?.(".body");
+    if (!body || typeof e?.clientX !== "number") return;
+    resizeFrom.current = { right: body.getBoundingClientRect().right, id: e.pointerId };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    e.preventDefault?.();
+  };
+  const onResizeMove = (e) => {
+    if (!resizeFrom.current || typeof e?.clientX !== "number") return;
+    const room = resizeFrom.current.right;
+    // Clamp: the list stays usable and the diff keeps most of the pane.
+    const w = Math.max(180, Math.min(Math.round(room - e.clientX), Math.max(240, Math.round(room - 320))));
+    filesWidthRef.current = w;
+    setFilesWidth(w);
+  };
+  const onResizeEnd = () => {
+    if (!resizeFrom.current) return;
+    resizeFrom.current = null;
+    persist({ filesWidth: filesWidthRef.current });
+  };
+  const onResizeReset = () => { filesWidthRef.current = null; setFilesWidth(null); persist({ filesWidth: null }); };
+
   const [repositoryIdentity, setRepositoryIdentity] = useState(identity);
   const repositoryReady = repositoryIdentity === identity;
   const lastHandled = useRef(-1);
@@ -574,7 +627,29 @@ function GitReview({ ctx }) {
   // Selections are repo/scope bound: drop them when either changes.
   useEffect(() => { setLineSelection(null); }, [chosen, scope]);
 
-  const persist = (patch) => { try { ctx.storage.set(SETTINGS_KEY, { ...ctx.storage.get(SETTINGS_KEY, {}), ...patch }); } catch { /* best-effort */ } };
+  const persist = (patch) => { try { ctx.storage.set(settingsKey, { ...ctx.storage.get(settingsKey, {}), ...patch }); } catch { /* best-effort */ } };
+
+  // Switching the focused workspace switches the settings in play; re-apply the
+  // stored ones for the workspace being entered (the first run is the mount read).
+  const lastSession = useRef(settingsKey);
+  useEffect(() => {
+    if (lastSession.current === settingsKey) return;
+    lastSession.current = settingsKey;
+    let s = {};
+    try {
+      s = ctx.storage.get(settingsKey, {}) || {};
+      if (!Object.keys(s).length) s = ctx.storage.get(SETTINGS_KEY, {}) || {};
+    } catch { s = {}; }
+    setLayout(s.layout || "unified");
+    setWordWrap(!!s.wordWrap);
+    setIgnoreWs(!!s.ignoreWs);
+    setShowDeleted(s.showDeleted !== false);
+    setShowTests(s.showTests !== false);
+    setVisible({ files: s.files !== false });
+    const w = s.filesWidth;
+    filesWidthRef.current = typeof w === "number" ? w : null;
+    setFilesWidth(typeof w === "number" ? w : null);
+  }, [settingsKey, ctx]);
 
   // Follow the focused chat's workspace when it is a known worktree
   useEffect(() => {
@@ -693,6 +768,10 @@ function GitReview({ ctx }) {
     if (i < 0 || i >= commits.length) return;
     commitSelectionExplicit.current = true; setNavIndex(i); setPicked(new Set([commits[i].sha]));
   };
+
+  // With every loaded commit selected — the default — a position counter and a
+  // churn total describe the whole history rather than a reviewable selection.
+  const wholeHistorySelected = scope === "commits" && picked.size >= commits.length && !hasMore;
 
   // The commits-scope ref param: selected shas in commit order
   const commitsRef = useMemo(() => [...picked].join(","), [picked]);
@@ -841,9 +920,13 @@ function GitReview({ ctx }) {
     const file = s.filePath || s.path;
     setLineSelection((sel) => {
       if (sel && sel.file === file && sel.anchor != null) {
+        // Clicking the anchor line itself leaves selection mode.
+        if (sel.anchor === line) return null;
         const lo = Math.min(sel.anchor, line), hi = Math.max(sel.anchor, line);
         return { file, sha: s.sha, anchor: null, start: lo, end: hi };
       }
+      // Clicking the only selected line again leaves selection mode too.
+      if (sel && sel.file === file && sel.start === line && sel.end === line) return null;
       return { file, sha: s.sha, anchor: line, start: line, end: line };
     });
   };
@@ -945,7 +1028,7 @@ function GitReview({ ctx }) {
     });
   };
 
-  return jsxs("section", { className: "grd", "aria-label": "git-review", children: [
+  return jsxs("section", { className: "grd", "aria-label": "git-review", onClick: () => setLineSelection((sel) => (sel ? null : sel)), children: [
     jsx("style", { children: css }),
     // ── toolbar: scope · repo/branch · right group (PR · display ⋯ · collapse all · file list)
     jsxs("div", { className: "toolbar", children: [
@@ -954,7 +1037,7 @@ function GitReview({ ctx }) {
           jsx(Button, { variant: "ghost", size: "sm", className: "scope-btn", children: jsxs("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 }, children: [
             jsx(Codicon, { name: "git-branch", size: "0.85rem" }),
             jsx("span", { className: "scope-text", children: scopeLabel || "Scope" }),
-            diff && !diff.note && !busy ? jsx(DeltaCounts, { added: diff.added, removed: diff.removed }) : null,
+            diff && !diff.note && !busy && !wholeHistorySelected ? jsx(DeltaCounts, { added: diff.added, removed: diff.removed }) : null,
             jsx(Codicon, { name: "chevron-down", size: "0.8rem" })
           ] }) })
         }),
@@ -1075,7 +1158,7 @@ function GitReview({ ctx }) {
     (scope === "commits" && navIndex >= 0 && commits[navIndex]) && jsxs("div", { className: "notice commit-nav", role: "navigation", "aria-label": "Commit navigation", style: { display: "flex", alignItems: "center", gap: 6 }, children: [
       jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex <= 0, "aria-label": "Newer commit", onClick: () => goCommit(navIndex - 1), children: "◀" }),
       jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex >= commits.length - 1 && !hasMore, "aria-label": "Older commit", onClick: () => (navIndex >= commits.length - 1 ? loadOlder() : goCommit(navIndex + 1)), children: "▶" }),
-      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()} (${navIndex + 1}/${commits.length}${hasMore ? "+" : ""})` }),
+      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()}${wholeHistorySelected ? "" : ` (${navIndex + 1}/${commits.length}${hasMore ? "+" : ""})`}` }),
       jsx(Button, { size: "sm", variant: "ghost", onClick: () => { setNavIndex(-1); setPicked(new Set(commits.map((c) => c.sha))); }, children: "All commits" })
     ] }),
     (scope === "commits" && historyNote) && jsx("div", { className: "notice", role: "status", children: historyNote }),
@@ -1089,7 +1172,7 @@ function GitReview({ ctx }) {
         ? jsx(EmptyState, { title: error ? "Nothing to show" : (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits to show") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…"), description: error ? "See the message above, then retry or switch scope." : undefined })
         : !sections.length && !diff.note
           ? jsx(EmptyState, { title: "No changes in this scope", description: "Try a different scope or worktree." })
-          : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), children: [
+          : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), style: visible.files && filesWidth ? { "--files-w": `${filesWidth}px` } : undefined, children: [
             // MAIN: every changed file's diff stacked (Cursor Changes), scroll to the last one.
             jsxs("div", { className: "allfiles", children: [
               !visibleFiles.length && jsx(EmptyState, { title: q ? `No files match “${filter.trim()}”` : "All files are hidden by filters", description: sections.length ? "Clear the search or adjust the filters." : "" }),
@@ -1152,19 +1235,49 @@ function GitReview({ ctx }) {
                 const g = gaps.find((g) => g.key === `mid${beforeRowHunk}`);
                 return g || null;
               };
+              // One bar per hidden run. A gap bar (lines outside the patch,
+              // fetched on demand) and an in-patch fold that touch with no
+              // change between them are the same run, so they merge into one
+              // bar instead of stacking two "N unmodified lines" controls.
+              const runBars = (out) => {
+                let gap = null, foldRow = null;
+                const flush = () => {
+                  if (gap && foldRow) {
+                    const nums = (foldRow.rows || []).map((r) => r.after ?? r.before).filter((n) => typeof n === "number");
+                    if (nums.length) {
+                      const from = Math.min(gap.from, ...nums);
+                      const to = Math.max(gap.to, ...nums);
+                      // A bottom gap has no count: it runs to the end of the file.
+                      gap = { ...gap, from, to, count: gap.count == null ? null : to - from + 1 };
+                    }
+                  }
+                  if (gap) out.push(fold({ key: `gap${gap.key}`, count: gap.count, rows: [] }, gap));
+                  else if (foldRow) out.push(fold(foldRow, null));
+                  gap = null; foldRow = null;
+                };
+                return {
+                  fold: (row) => { foldRow = row; if (gap) flush(); },
+                  gap: (g) => { gap = g; if (foldRow) flush(); },
+                  // Anything that is not a bar ends the run.
+                  row: () => { if (gap || foldRow) flush(); },
+                  end: () => flush(),
+                };
+              };
               // Split layout pairs the rows, so the gap bars are interleaved
               // here the same way renderStream does for the unified stream.
               const splitStream = (pairs) => {
                 const out = [];
+                const run = runBars(out);
                 const top = gaps.find((g) => g.key === "top");
-                if (top) out.push(fold({ key: "gaptop", count: top.count, rows: [] }, top));
+                if (top) run.gap(top);
                 let lastHunk = null;
                 pairs.forEach((pair, i) => {
-                  if (pair.shared?.kind === "fold") { out.push(fold(pair.shared, null)); return; }
+                  if (pair.shared?.kind === "fold") { run.fold(pair.shared); return; }
+                  run.row();
                   const hunk = pair.shared?.hunk ?? pair.left?.hunk;
                   if (hunk != null && lastHunk != null && hunk !== lastHunk) {
                     const g = gapFor(hunk);
-                    if (g) out.push(fold({ key: `gap${g.key}`, count: g.count, rows: [] }, g));
+                    if (g) run.gap(g);
                   }
                   if (hunk != null) lastHunk = hunk;
                   out.push(pair.shared
@@ -1174,28 +1287,33 @@ function GitReview({ ctx }) {
                       ] }, i));
                 });
                 const bottom = gaps.find((g) => g.key === "bottom");
-                if (bottom) out.push(fold({ key: "gapbottom", count: null, rows: [] }, bottom));
+                if (bottom) run.gap(bottom);
+                run.end();
                 return out;
               };
               const renderStream = (rows, split) => {
                 const out = [];
                 // FullBar (mode full/hidden) always leads the stream.
                 for (const bar of bars) out.push(bar);
-                if (!split && gaps.find((g) => g.key === "top")) out.push(fold({ key: "gaptop", count: gaps.find((g) => g.key === "top").count, rows: [] }, gaps.find((g) => g.key === "top")));
+                const run = runBars(out);
+                const top = !split && gaps.find((g) => g.key === "top");
+                if (top) run.gap(top);
                 let lastHunk = null;
                 for (const row of rows) {
-                  if (row.kind === "fold") { out.push(fold(row, null)); continue; }
+                  if (row.kind === "fold") { run.fold(row); continue; }
+                  run.row();
                   if (!split && row.hunk != null && lastHunk != null && row.hunk !== lastHunk) {
                     const g = gapFor(row.hunk);
-                    if (g) out.push(fold({ key: `gap${g.key}`, count: g.count, rows: [] }, g));
+                    if (g) run.gap(g);
                   }
                   if (row.hunk != null) lastHunk = row.hunk;
                   out.push(split ? row : renderUnifiedRow(row, `${row.kind}:${row.before}:${row.after}:${row.hunk}`, clickFor, selectedLines, dragFor));
                 }
                 if (!split) {
                   const bottom = gaps.find((g) => g.key === "bottom");
-                  if (bottom) out.push(fold({ key: "gapbottom", count: null, rows: [] }, bottom));
+                  if (bottom) run.gap(bottom);
                 }
+                run.end();
                 return out;
               };
               const file = s.filePath || s.path;
@@ -1236,6 +1354,8 @@ function GitReview({ ctx }) {
             ] }),
             // RIGHT: the file tree list, hide/show via the toolbar toggle.
             visible.files ? jsxs("aside", { className: "tree-side", children: [
+              jsx("div", { className: "resizer", role: "separator", tabIndex: 0, title: "Drag to resize the file list; double-click to reset",
+                "aria-label": "Resize file list", onPointerDown: onResizeStart, onPointerMove: onResizeMove, onPointerUp: onResizeEnd, onPointerCancel: onResizeEnd, onDoubleClick: onResizeReset }),
               jsxs("div", { className: "search", children: [
                 jsx(SearchField, { containerClassName: "search-field", inputClassName: "search-input", value: filter, onChange: setFilter, placeholder: `Search ${sections.length} ${sections.length === 1 ? "file" : "files"}${hiddenByFilters ? ` (${hiddenByFilters} hidden)` : ""}`, "aria-label": "Search files" }),
                 jsx("div", { className: cn("filter-wrap", (!showDeleted || !showTests) && "active"), children:
@@ -1268,6 +1388,9 @@ function GitReview({ ctx }) {
 // style). Gap bars (above first hunk / between hunks / below last) have no
 // local rows — they fetch through the bounded /file-lines backend route.
 const EXPAND_STEP = 20;
+// One request may cover a whole gap run; the backend clamps it to the file end
+// and to its own per-request ceiling, and reports `done` when it reaches it.
+const GAP_RUN_WINDOW = 5000;
 // Pure gap math (exported as _gapInternals for regression tests): the next
 // bounded window to fetch and the old/new line-number mapping for gap rows
 // (delta = newStart - oldStart, so old = new - delta).
@@ -1280,6 +1403,9 @@ const nextGapWindow = (state, gap, step = EXPAND_STEP) => {
     return { start: Math.max(gap.from, end - step + 1), end };
   }
   const start = state?.le != null ? state.le + 1 : gap.from;
+  // The gap below the last hunk has no known end: it runs to the end of the file,
+  // so it asks for one bounded window and the backend clamps it.
+  if (gap.to == null) return { start, end: start + step - 1 };
   if (start > gap.to) return null;
   return { start, end: Math.min(gap.to, start + step - 1) };
 };
@@ -1316,7 +1442,10 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
     if (!onFetch || !isGap) return;
     // "all" fetches one bounded window: the backend caps /file-lines at
     // MAX_FILE_LINES (2000) lines per request, so no chunk loops are needed.
-    const w = nextGapWindow(gapState, gap, mode === "all" ? 2000 : EXPAND_STEP);
+    // A gap bar's single control reveals its whole run: bounded by the next
+    // change when the diff knows where that is, otherwise one window the backend
+    // clamps at the file end (and at its own per-request ceiling).
+    const w = nextGapWindow(gapState, gap, mode === "all" ? GAP_RUN_WINDOW : EXPAND_STEP);
     if (!w) { setGapState((p) => ({ ...(p || {}), done: true })); return; }
     setGapState((p) => ({ ...(p || { le: gap.from - 1, numbered: [] }), loading: true, failed: false }));
     try {
@@ -1331,7 +1460,11 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
         return {
           ls, le, numbered, total,
           loading: false, failed: false,
-          done: isTop ? ls <= gap.from : (r.end >= Math.min(gap.to, total ?? r.end) || r.lines.length < (w.end - w.start + 1)),
+          done: isTop
+            ? ls <= gap.from
+            : (gap.to == null
+              ? (total != null ? r.end >= total : r.lines.length < (w.end - w.start + 1))
+              : (r.end >= Math.min(gap.to, total ?? r.end) || r.lines.length < (w.end - w.start + 1))),
         };
       });
     } catch { setGapState((p) => ({ ...(p || { le: gap.from - 1, numbered: [] }), loading: false, failed: true })); }
@@ -1373,9 +1506,11 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
         !isGap && !compact ? btn(`⌃ ${Math.min(EXPAND_STEP, midHidden)}`, "up", `Expand ${Math.min(EXPAND_STEP, midHidden)} unchanged lines above for ${path}`) : null,
         !isGap && !compact ? btn(`⌄ ${Math.min(EXPAND_STEP, midHidden)}`, "down", `Expand ${Math.min(EXPAND_STEP, midHidden)} unchanged lines below for ${path}`) : null,
         isGap ? (gapState?.failed
-          ? btn("Retry", "down", `Retry expanding lines (${gap.key}) for ${path}`, gapState?.loading)
-          : btn(gapState?.loading ? "…" : `${isTop ? "⌃" : "⌄"} ${stepCount}`, "down", `Expand ${stepCount} lines (${gap.key}) for ${path}`, gapState?.loading)) : null,
-        remaining > 0 ? btn(`all (${remaining})`, "all", isGap ? `Expand all gap lines (${gap.key}) for ${path}` : `Expand all remaining unchanged lines for ${path}`, gapState?.loading) : null,
+          ? btn("Retry", "all", `Retry expanding lines (${gap.key}) for ${path}`, gapState?.loading)
+          : btn(gapState?.loading ? "…" : `${isTop ? "⌃" : "⌄"} ${remaining != null ? remaining : "more"}`, "all", remaining != null ? `Expand all ${remaining} unchanged lines (${gap.key}) for ${path}` : `Expand the remaining unchanged lines (${gap.key}) for ${path}`, gapState?.loading)) : null,
+        // In-patch folds keep the progressive arrows (their rows are already
+        // here); a gap bar reveals its whole run in one click.
+        !isGap && remaining > 0 ? btn(`all (${remaining})`, "all", `Expand all remaining unchanged lines for ${path}`, gapState?.loading) : null,
       ] }) : null,
     ] }, `${path}:${row.key}`),
     ...(isTop ? loadedRows : []),
@@ -1485,4 +1620,4 @@ const plugin_default = {
   }
 };
 
-export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, plugin_default as default };
+export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, settingsKeyFor, plugin_default as default };
