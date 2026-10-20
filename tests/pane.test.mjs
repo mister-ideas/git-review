@@ -126,9 +126,9 @@ test('60 full SHAs are sent intact and history truncation remains visible beside
   assert.ok(commitsQueries.every(u => !u.searchParams.get('base')), 'history must not inherit a branch base')
 })
 
-test('branch picker is informational only: checkmark on current, never changes scope or ref', async t => {
+test('branch picker picks a comparison base: never checks anything out, adds no scope of its own', async t => {
   const { root, requests } = await mount(t)
-  const branchMenu = root.findAll(n => n.props.className === 'repo-menu' && text(n).includes('main'))[0]
+  const branchMenu = root.findAll(n => (n.props.className || '').includes('repo-menu') && text(n).includes('main'))[0]
   assert.ok(branchMenu, 'branch menu missing')
   assert.ok(!requests.some(r => /checkout|switch/.test(r.url)))
   const scopeMenuItems = root.findAll(n => typeof n.props.onSelect === 'function' && text(n) === 'Branch vs base')
@@ -267,6 +267,29 @@ test('a hidden run renders one expander, never two stacked', async t => {
     return kids.indexOf(b) - kids.indexOf(prev) === 1
   })
   assert.equal(stacked.length, 0, `${stacked.length} pair(s) of expanders stack with no change between them`)
+})
+
+test('menu rows share one label slot, and the churn colours survive the portal', async t => {
+  const { root } = await mount(t)
+  // A menu portals to document.body, outside .grd, so a menu surface has to
+  // carry the class the stylesheet scopes its own content to — otherwise the
+  // churn colours, group headers and scroll cap silently stop applying.
+  const surfaces = root.findAll(n => typeof n.props.className === 'string' && n.props.className.includes('repo-menu'))
+  assert.ok(surfaces.length, 'menu surfaces missing')
+  assert.ok(surfaces.every(s => s.props.className.split(/\s+/).includes('gr-menu')),
+    'a menu surface is missing the menu scope class, so its content escapes every rule')
+  const css = root.findAll(n => n.type === 'style').map(n => (n.children || []).join('')).join('')
+  assert.match(css, /\.gr-menu \.fdelta \.add\{color:var\(--ui-green\)\}/, 'the added-line colour is not scoped to the menu surface')
+  assert.match(css, /\.gr-menu \.fdelta \.del\{color:var\(--ui-red\)\}/, 'the removed-line colour is not scoped to the menu surface')
+  // A row whose children are a bare array renders its label without the shared
+  // gap, so its text starts left of every neighbour's.
+  const rows = root.findAll(n => typeof n.props.onSelect === 'function'
+    && n.findAll(c => (c.props.className || '').includes('check-slot')).length)
+  assert.ok(rows.length > 3, `expected menu rows carrying a check slot, saw ${rows.length}`)
+  const unwrapped = rows.filter(r => Array.isArray(r.props.children))
+  assert.equal(unwrapped.length, 0, `${unwrapped.length} menu row(s) pass children as a bare array, so their label shifts left`)
+  const gaps = [...new Set(rows.map(r => (r.props.children.props.style || {}).gap))]
+  assert.deepEqual(gaps, [8], `menu rows use different label gaps: ${gaps}`)
 })
 
 test('search input callback filters real diff files case-insensitively', async t => {
