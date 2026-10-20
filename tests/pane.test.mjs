@@ -6,7 +6,7 @@ import { files, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
 import { host } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
-import { GitReview, filesToOpen, collapseRows } from '../desktop/plugin.js'
+import { GitReview, filesToOpen, collapseRows, settingsKeyFor } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -303,6 +303,16 @@ test('the menu headers sit on the menu surface, and the divider is the desktop s
   assert.ok(!/\.menu-group[^{]*\{[^}]*background:inherit/.test(css), 'inherit resolves to transparent inside the scroll wrapper')
   assert.match(css, /\.resizer\{[^}]*width:4px/, 'the divider must be a 4px sash, like the desktop\'s')
   assert.match(css, /\.resizer:hover[^{]*\{[^}]*ui-sash-hover-background/, 'the sash must fill with the desktop\'s hover token')
+})
+
+test('pane settings are scoped to profile, connection and workspace', () => {
+  const A = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a')
+  const B = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/b')
+  const C = settingsKeyFor(JSON.stringify(['other', 'default']), '/repo/a')
+  assert.notEqual(A, B, 'a different workspace must not share settings')
+  assert.notEqual(A, C, 'a different connection must not share settings')
+  assert.equal(A, settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a'), 'the same scope is stable across renders')
+  assert.ok(A.startsWith('display.v1:'), 'the key stays versioned so a future shape can migrate')
 })
 
 test('filesToOpen: only files whose changes changed, and only when collapsed', () => {

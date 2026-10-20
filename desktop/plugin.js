@@ -603,11 +603,11 @@ function GitReview({ ctx }) {
   const identity = JSON.stringify([connectionId, profile]);
 
   // Pane settings belong to the work they were chosen for, so coming back to a
-  // workspace restores the pane the way it was left instead of two different
-  // jobs sharing one set of toggles. The key is the connection/profile plus the
-  // focused workspace — the session identity a plugin may read: the loader's
-  // allowlist exposes no focused-session atom. The scope and the repository are
-  // deliberately not stored; they follow the session and the agent.
+  // workspace restores the pane the way it was left. The key is profile +
+  // connection + focused workspace: a plugin is never handed the focused session
+  // id (the loader's allowlist exposes no such atom), so chats on one workspace
+  // share this state. Scope and repository are deliberately not stored; they
+  // follow the workspace and the agent.
   const settingsKey = settingsKeyFor(identity, cwd);
   // Scoped first, then the unscoped key older versions wrote, so an existing
   // install keeps its settings and a new workspace starts from them.
