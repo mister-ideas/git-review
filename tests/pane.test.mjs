@@ -306,6 +306,16 @@ test('the menu headers sit on the menu surface, and the divider is the desktop s
   assert.match(css, /\.resizer:hover[^{]*\{[^}]*ui-sash-hover-background/, 'the sash must fill with the desktop\'s hover token')
 })
 
+test('toolbar icon buttons are ghost, so none of them draws a border', () => {
+  // The PR/MR button was the only icon-sm button on `outline`, which reads as an
+  // unwanted border next to its ghost siblings. Outline is reserved for the one
+  // text action (Cite in message) in the selection bar.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const outlined = src.match(/variant: "outline"/g) || [];
+  assert.equal(outlined.length, 1, 'exactly one outlined button, and it is text')
+  assert.match(src, /variant: "outline", size: "sm", "aria-label": "Cite selected lines/)
+})
+
 test('scrollToSelection lands the header exactly at the top of the diff column', () => {
   // A section 300px into the column, already scrolled 200px, must return the
   // absolute scrollTop that puts its header flush with the column's top edge.
