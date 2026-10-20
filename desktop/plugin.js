@@ -292,7 +292,7 @@ const css = `
 .grd .resizer::after{content:"";position:absolute;left:1px;top:0;bottom:0;width:2px;background:transparent}
 .grd .resizer:hover::after,.grd .resizer:focus-visible::after,.grd .resizer:active::after{background:var(--ui-sash-hover-border,var(--ui-accent))}
 .grd .body.tree-hidden{grid-template-columns:minmax(0,1fr)}
-.grd .allfiles{overflow:auto;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0;scrollbar-gutter:stable}
+.grd .allfiles{overflow:auto;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0}
 .grd .tree-side{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0;border-left:0;background:transparent}
 .grd .body{column-gap:0}
 .grd .tree-side .tree{overflow:auto;flex:1;min-height:0}
@@ -340,8 +340,6 @@ const css = `
   .dark .grd .line.remove .lineno{color:#f87171}
   .dark .grd .line.line-selected{background:#242426}
   .dark .grd .split-row > .line + .line{border-color:#2b2b2d}
-  .dark .grd .allfiles::-webkit-scrollbar-thumb{background:#2b2b2d}
-  .dark .grd .allfiles::-webkit-scrollbar-thumb:hover{background:#3b3b3b}
 
 .grd .search-field > svg{color:var(--ui-text-secondary);flex-shrink:0}
 .grd .search .filter-wrap{flex:0 0 auto;display:inline-flex}
@@ -384,10 +382,10 @@ const css = `
 .grd .fold::before,.grd .fold::after{content:"";flex:1;border-top:1px solid var(--ui-stroke-tertiary)}
 .grd .fold-strip{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--ui-surface-background);pointer-events:none}
 .grd .fold-inner{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px}
-/* Always-visible scrollbar on the changes pane (core CSS hides thumbs until
-   hover; unlayered scoped rules win over the layered global ones). */
-.grd .allfiles::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--dt-scrollbar-thumb) 35%,transparent)}
-.grd .allfiles::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--dt-scrollbar-thumb) 60%,transparent)}
+/* No scrollbar is styled here on purpose. Styling any ::-webkit-scrollbar part
+   makes Chromium draw a classic bar, which reserves its width forever. Left to
+   the system, the diff column gets an overlay scrollbar: nothing reserved, and
+   the bar only appears while the column is being scrolled. */
 /* Right sidebar: vertical scroll only; long names ellipsize, never overflow. */
 .grd .tree-side .tree{overflow-x:hidden}
 .grd .folder{min-width:0}

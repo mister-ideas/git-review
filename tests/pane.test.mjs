@@ -308,6 +308,17 @@ test('the menu headers sit on the menu surface, and the divider is the desktop s
   assert.match(css, /\.resizer:hover[^{]*\{[^}]*ui-sash-hover-background/, 'the sash must fill with the desktop\'s hover token')
 })
 
+test('the diff column reserves no scrollbar gutter and styles no scrollbar', () => {
+  // scrollbar-gutter: stable showed as permanent dead space, and styling any
+  // ::-webkit-scrollbar part makes Chromium draw a classic bar that never goes
+  // away. Left alone, the column gets the system overlay bar, only while scrolling.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const rule = src.match(/\.grd \.allfiles\{[^}]*\}/)?.[0] || '';
+  assert.ok(rule, 'the diff column style exists')
+  assert.ok(!/scrollbar-gutter/.test(rule), 'no reserved gutter')
+  assert.ok(!/\.grd \.allfiles::-webkit-scrollbar/.test(src), 'no styled scrollbar')
+})
+
 test('toolbar icon buttons are ghost, so none of them draws a border', () => {
   // The PR/MR button was the only icon-sm button on `outline`, which reads as an
   // unwanted border next to its ghost siblings. Outline is reserved for the one
