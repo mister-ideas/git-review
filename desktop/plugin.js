@@ -2,7 +2,9 @@
 // Plain ESM loaded uncompiled — jsx() calls, not JSX syntax. Imports restricted to the
 // loader allowlist: @hermes/plugin-sdk, react, react/jsx-runtime.
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
-import { useState, useEffect, useMemo, useRef, useCallback, forwardRef } from "react";
+import {
+  useState, useEffect, useMemo, useRef, useCallback, useDeferredValue, forwardRef,
+} from "react";
 import {
   Badge, Button, Codicon, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, EmptyState,
@@ -401,7 +403,9 @@ const css = `
 .grd .gr-menu [role="separator"]{margin:4px 0}
 .grd .menu-group,.gr-menu .menu-group{padding:8px 10px 4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
    child inheriting from the wrapper gets nothing, so name the token and stay opaque. */background:var(--ui-bg-elevated,var(--ui-surface-background))}
-.grd .af-file{scroll-margin-top:34px;border-bottom:1px solid var(--ui-stroke-tertiary)}
+.grd .af-file{scroll-margin-top:34px;/* Skip layout and paint for file sections that are off-screen. The browser
+   remembers each section's measured height, so the scrollbar does not jump. */
+  content-visibility:auto;contain-intrinsic-size:auto 600px;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-file.af-collapsed{border-bottom:0}
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-head:hover{background:var(--ui-surface-background)}
@@ -563,6 +567,7 @@ function GitReview({ ctx }) {
   const [diff, setDiff] = useState(null);
   const [selected, setSelected] = useState("");
   const [filter, setFilter] = useState("");
+  const deferredFilter = useDeferredValue(filter);
   const [expanded, setExpanded] = useState({});
   const [contextModes, setContextModes] = useState({});
   const [copied, setCopied] = useState("");
@@ -1001,15 +1006,16 @@ function GitReview({ ctx }) {
   const isTestPath = (p) => /(^|[/\\])(test|tests|__tests__|spec)([/\\]|$)|\.(test|spec)\.[^.]+$|\btest_[^/]*\.py$/i.test(p);
   // Stable across renders: a fresh array here invalidated every downstream memo
   // and re-mapped the whole diff tree on any click.
+  const dq = deferredFilter.trim().toLowerCase();
   const visibleFiles = useMemo(() => sections.filter((s) => {
     // Search covers the changes, not only the file names: a reviewer looks for
     // the identifier they changed, which is not in the path.
-    if (q && !(s.hay || "").includes(q)) return false;
+    if (dq && !(s.hay || "").includes(dq)) return false;
     const st = stats.get(s.path);
     if (!showDeleted && st?.status === "deleted") return false;
     if (!showTests && isTestPath(s.path)) return false;
     return true;
-  }), [sections, q, showDeleted, showTests, stats]);
+  }), [sections, dq, showDeleted, showTests, stats]);
   const hiddenByFilters = sections.filter((s) => (!showDeleted && stats.get(s.path)?.status === "deleted") || (!showTests && isTestPath(s.path))).length;
   const allCollapsed = visibleFiles.length > 0 && visibleFiles.every((s) => collapsedFiles[s.path]);
   const tree = useMemo(() => compactTree(buildTree(visibleFiles.map((s) => s.path))), [visibleFiles]);
