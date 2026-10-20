@@ -237,8 +237,11 @@ const css = `
 .grd .scope-btn .codicon,.grd .scope-btn .fdelta{flex-shrink:0}
 .grd .scope-btn{font-size:12px;font-variant-numeric:tabular-nums}
 .grd .repo-name{font-size:12px;color:var(--ui-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.grd .fdelta{font-family:var(--font-mono,monospace);font-size:10.5px;font-variant-numeric:tabular-nums;display:inline-flex;gap:6px}
-.grd .fdelta .add{color:var(--ui-green)}.grd .fdelta .del{color:var(--ui-red)}
+/* A menu portals to document.body, outside .grd, so the rules its content needs
+   carry the menu surface class as a second scope: churn colours, group headers
+   and the scroll cap all apply to the menu, not to the pane. */
+.grd .fdelta,.gr-menu .fdelta{font-family:var(--font-mono,monospace);font-size:10.5px;font-variant-numeric:tabular-nums;display:inline-flex;gap:6px}
+.grd .fdelta .add,.gr-menu .fdelta .add{color:var(--ui-green)}.grd .fdelta .del,.gr-menu .fdelta .del{color:var(--ui-red)}
 .grd .body{min-height:0;min-width:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,28%)}
 .grd .body.tree-hidden{grid-template-columns:minmax(0,1fr)}
 .grd .allfiles{overflow:auto;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0;scrollbar-gutter:stable}
@@ -275,7 +278,7 @@ const css = `
   .dark .grd .fold{color:#6b6b6b}
   .dark .grd .fold:hover{color:#c9c9c9}
   .dark .grd .fold-strip{background:#161618}
-  .dark .grd .menu-group{background:#161618;color:#6b6b6b}
+  .dark .grd .menu-group,.dark .gr-menu .menu-group{background:#161618;color:#6b6b6b}
   .dark .grd .af-head{background:#161618}
   .dark .grd .af-head:hover{background:#1c1c20}
   .dark .grd .af-head .fdir{color:#6b6b6b}
@@ -350,8 +353,8 @@ const css = `
 .grd .split-row .linecode{min-width:0}
 .grd .line.empty{background:transparent}
 .grd .splitwrap > .line{min-width:0}
-.grd .repo-menu{max-height:380px;overflow-y:auto}
-.grd .menu-group{padding:6px 10px 2px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;background:var(--ui-surface-background)}
+.grd .repo-menu,.gr-menu .repo-menu{max-height:380px;overflow-y:auto}
+.grd .menu-group,.gr-menu .menu-group{padding:6px 10px 2px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;background:var(--ui-surface-background)}
 .grd .af-file{border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-file.af-collapsed{border-bottom:0}
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
@@ -473,11 +476,11 @@ function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone, hasMore, l
     jsx(DropdownMenuItem, { disabled: !commits.length, onSelect: () => onOpen(0), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "Browse commit by commit"] }) }),
     jsx(DropdownMenuSeparator, {}),
     commits.length
-      ? commits.map((c) => jsxs(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onToggle(c.sha) }, children: [
-        jsx(CheckSlot, { on: selected.has(c.sha), size: "0.75rem" }),
+      ? commits.map((c) => jsxs(DropdownMenuItem, { onSelect: (event) => { event.preventDefault(); onToggle(c.sha) }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
+        jsx(CheckSlot, { on: selected.has(c.sha), size: "0.8rem" }),
         jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.subject || c.short }),
         jsx(DeltaCounts, { added: c.added, removed: c.removed })
-      ] }, c.sha))
+      ] }) }, c.sha))
       : jsx(DropdownMenuItem, { disabled: true, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), "No commits to show"] }) }),
     hasMore ? jsx(DropdownMenuItem, { disabled: loadingMore, onSelect: (event) => { event.preventDefault(); onMore() }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [jsx(CheckSlot, { on: false, size: "0.8rem" }), loadingMore ? "Loading older commits…" : "Load older commits"] }) }) : null
   ] });
@@ -955,7 +958,7 @@ function GitReview({ ctx }) {
             jsx(Codicon, { name: "chevron-down", size: "0.8rem" })
           ] }) })
         }),
-        jsxs(DropdownMenuContent, { children: [
+        jsxs(DropdownMenuContent, { className: "gr-menu", children: [
           SCOPES.map((s) => jsx(DropdownMenuItem, { onSelect: () => setScope(s.id), children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
             jsx(CheckSlot, { on: s.id === scope, size: "0.8rem" }),
             s.label
@@ -978,7 +981,7 @@ function GitReview({ ctx }) {
         jsx(DropdownMenuTrigger, { asChild: true, children:
           jsx(RepoButton, { icon: "repo", label: meta?.name || "Choose repo…" })
         }),
-        jsx(DropdownMenuContent, { className: "repo-menu", children: (() => {
+        jsx(DropdownMenuContent, { className: "gr-menu repo-menu", children: (() => {
           // Group worktrees by parent folder (their "category"): sibling checkouts
           // of the same repo across workspaces keep distinguishable context, and
           // same-named repos in different groups don't collide visually.
@@ -1010,7 +1013,7 @@ function GitReview({ ctx }) {
         jsx(DropdownMenuTrigger, { asChild: true, children:
           jsx(RepoButton, { icon: "git-branch", label: meta?.current || "branch…" })
         }),
-        jsx(DropdownMenuContent, { className: "repo-menu", children: [
+        jsx(DropdownMenuContent, { className: "gr-menu repo-menu", children: [
           jsx("div", { className: "menu-group", role: "presentation", children: "Commits since…" }, "hdr"),
           ...(meta?.local || []).concat((meta?.remote || []).filter((b) => b.includes("/") && !b.endsWith("/HEAD"))).map((b) => jsx(DropdownMenuItem, { onSelect: () => { setAllHistory(false); setBase(b); commitSelectionExplicit.current = false; }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
             jsx(CheckSlot, { on: base === b, size: "0.8rem" }),
@@ -1028,7 +1031,7 @@ function GitReview({ ctx }) {
         jsx(DropdownMenuTrigger, { asChild: true, children:
           jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Display options", children: jsx(Codicon, { name: "ellipsis", size: "0.9rem" }) })
         }),
-        jsxs(DropdownMenuContent, { children: [
+        jsxs(DropdownMenuContent, { className: "gr-menu", children: [
           jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", fontSize: 12 }, children: [
             jsx(Switch, { size: "xs", checked: ignoreWs, onCheckedChange: (v) => { setIgnoreWs(v); persist({ ignoreWs: v }); }, "aria-label": "Ignore whitespace" }),
             "Ignore whitespace"
@@ -1241,7 +1244,7 @@ function GitReview({ ctx }) {
             jsx(Button, { variant: "ghost", size: "icon-sm", className: "filter-btn", title: "Show filters", "aria-label": "Show filters",
               children: jsx(Codicon, { name: "filter", size: "0.85rem" }) })
           }),
-          jsxs(DropdownMenuContent, { align: "end", children: [
+          jsxs(DropdownMenuContent, { className: "gr-menu", align: "end", children: [
             jsx(DropdownMenuItem, { onSelect: () => { setShowDeleted((v) => { persist({ showDeleted: !v }); return !v; }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
               jsx(CheckSlot, { on: showDeleted, size: "0.8rem" }),
               "Deleted files"
