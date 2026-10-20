@@ -3,7 +3,7 @@
 // loader allowlist: @hermes/plugin-sdk, react, react/jsx-runtime.
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import {
-  useState, useEffect, useMemo, useRef, useCallback, useDeferredValue, forwardRef,
+  useState, useEffect, useMemo, useRef, useCallback, forwardRef,
 } from "react";
 import {
   Badge, Button, Codicon, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -567,7 +567,6 @@ function GitReview({ ctx }) {
   const [diff, setDiff] = useState(null);
   const [selected, setSelected] = useState("");
   const [filter, setFilter] = useState("");
-  const deferredFilter = useDeferredValue(filter);
   const [expanded, setExpanded] = useState({});
   const [contextModes, setContextModes] = useState({});
   const [copied, setCopied] = useState("");
@@ -1006,7 +1005,7 @@ function GitReview({ ctx }) {
   const isTestPath = (p) => /(^|[/\\])(test|tests|__tests__|spec)([/\\]|$)|\.(test|spec)\.[^.]+$|\btest_[^/]*\.py$/i.test(p);
   // Stable across renders: a fresh array here invalidated every downstream memo
   // and re-mapped the whole diff tree on any click.
-  const dq = deferredFilter.trim().toLowerCase();
+  const dq = filter.trim().toLowerCase();
   const visibleFiles = useMemo(() => sections.filter((s) => {
     // Search covers the changes, not only the file names: a reviewer looks for
     // the identifier they changed, which is not in the path.
