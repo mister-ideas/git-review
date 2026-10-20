@@ -208,6 +208,21 @@ test('scope interaction changes the actual REST scope; removed chat actions stay
   assert.ok(!text(byClass(root, 'toolbar')[0]).includes('Send to chat'))
 })
 
+test('a hidden run renders one expander, never two stacked', async t => {
+  const { root } = await mount(t)
+  const bars = byClass(root, 'fold')
+  assert.ok(bars.length > 0, 'no expanders rendered for the fixture')
+  // Expanders are siblings in the diff body; two in a row means one hidden run
+  // was split into two controls instead of one bar covering the whole run.
+  const stacked = bars.filter((b, i) => {
+    const prev = bars[i - 1]
+    if (!b.parent || prev?.parent !== b.parent) return false
+    const kids = (b.parent.children || []).filter((c) => c && typeof c === 'object')
+    return kids.indexOf(b) - kids.indexOf(prev) === 1
+  })
+  assert.equal(stacked.length, 0, `${stacked.length} pair(s) of expanders stack with no change between them`)
+})
+
 test('search input callback filters real diff files case-insensitively', async t => {
   const { root } = await mount(t)
   const search = root.findAll(n => n.props['aria-label'] === 'Search files' && typeof n.props.onChange === 'function')[0]

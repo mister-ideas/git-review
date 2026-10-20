@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, forwardRef } from "r
 import {
   Badge, Button, Codicon, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, EmptyState,
-  SearchField, Switch, Tip, cn, host, useValue,
+  SearchField, Switch, Tip, cn, host, useValue, $activeSessionId,
 } from "@hermes/plugin-sdk";
 
 // ───────────────────────── diff parsing ─────────────────────────
@@ -518,11 +518,18 @@ function GitReview({ ctx }) {
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState({});
   const [contextModes, setContextModes] = useState({});
-  const [ignoreWs, setIgnoreWs] = useState(() => !!ctx.storage.get(SETTINGS_KEY, {}).ignoreWs);
-  const [wordWrap, setWordWrap] = useState(() => !!ctx.storage.get(SETTINGS_KEY, {}).wordWrap);
-  const [layout, setLayout] = useState(() => ctx.storage.get(SETTINGS_KEY, {}).layout || "unified"); // unified | split
-  const [showDeleted, setShowDeleted] = useState(() => ctx.storage.get(SETTINGS_KEY, {}).showDeleted !== false);
-  const [showTests, setShowTests] = useState(() => ctx.storage.get(SETTINGS_KEY, {}).showTests !== false);
+  // Pane settings belong to the chat session they were chosen in, so coming back
+  // to a session restores the pane the way it was left and two sessions with
+  // different shapes of work do not fight over one set of toggles. The scope and
+  // the repository are not stored: they follow the session and the agent.
+  const sessionId = useValue($activeSessionId || EMPTY_ATOM);
+  const settingsKey = `${SETTINGS_KEY}:${sessionId || "shared"}`;
+  const readSettings = () => { try { return ctx.storage.get(settingsKey, {}) || {}; } catch { return {}; } };
+  const [ignoreWs, setIgnoreWs] = useState(() => !!readSettings().ignoreWs);
+  const [wordWrap, setWordWrap] = useState(() => !!readSettings().wordWrap);
+  const [layout, setLayout] = useState(() => readSettings().layout || "unified"); // unified | split
+  const [showDeleted, setShowDeleted] = useState(() => readSettings().showDeleted !== false);
+  const [showTests, setShowTests] = useState(() => readSettings().showTests !== false);
   const [copied, setCopied] = useState("");
   const [collapsedFiles, setCollapsedFiles] = useState({});
   const [autoBase, setAutoBase] = useState("");
@@ -539,7 +546,7 @@ function GitReview({ ctx }) {
     setCollapsedFiles({});
     // re-derive when the file set changes (scope/repo switch)
   }, [chosen, scope]);
-  const [visible, setVisible] = useState(() => ({ files: ctx.storage.get(SETTINGS_KEY, {}).files !== false }));
+  const [visible, setVisible] = useState(() => ({ files: readSettings().files !== false }));
   const [pr, setPr] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -571,7 +578,23 @@ function GitReview({ ctx }) {
   // Selections are repo/scope bound: drop them when either changes.
   useEffect(() => { setLineSelection(null); }, [chosen, scope]);
 
-  const persist = (patch) => { try { ctx.storage.set(SETTINGS_KEY, { ...ctx.storage.get(SETTINGS_KEY, {}), ...patch }); } catch { /* best-effort */ } };
+  const persist = (patch) => { try { ctx.storage.set(settingsKey, { ...ctx.storage.get(settingsKey, {}), ...patch }); } catch { /* best-effort */ } };
+
+  // Switching the focused chat switches the settings set in play; re-apply the
+  // stored ones for the session being entered (the first run is the mount read).
+  const lastSession = useRef(sessionId);
+  useEffect(() => {
+    if (lastSession.current === sessionId) return;
+    lastSession.current = sessionId;
+    let s = {};
+    try { s = ctx.storage.get(`${SETTINGS_KEY}:${sessionId || "shared"}`, {}) || {}; } catch { s = {}; }
+    setLayout(s.layout || "unified");
+    setWordWrap(!!s.wordWrap);
+    setIgnoreWs(!!s.ignoreWs);
+    setShowDeleted(s.showDeleted !== false);
+    setShowTests(s.showTests !== false);
+    setVisible({ files: s.files !== false });
+  }, [sessionId, ctx]);
 
   // Follow the focused chat's workspace when it is a known worktree
   useEffect(() => {
@@ -690,6 +713,10 @@ function GitReview({ ctx }) {
     if (i < 0 || i >= commits.length) return;
     commitSelectionExplicit.current = true; setNavIndex(i); setPicked(new Set([commits[i].sha]));
   };
+
+  // With every loaded commit selected — the default — a position counter and a
+  // churn total describe the whole history rather than a reviewable selection.
+  const wholeHistorySelected = scope === "commits" && picked.size >= commits.length && !hasMore;
 
   // The commits-scope ref param: selected shas in commit order
   const commitsRef = useMemo(() => [...picked].join(","), [picked]);
@@ -951,7 +978,7 @@ function GitReview({ ctx }) {
           jsx(Button, { variant: "ghost", size: "sm", className: "scope-btn", children: jsxs("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 }, children: [
             jsx(Codicon, { name: "git-branch", size: "0.85rem" }),
             jsx("span", { className: "scope-text", children: scopeLabel || "Scope" }),
-            diff && !diff.note && !busy ? jsx(DeltaCounts, { added: diff.added, removed: diff.removed }) : null,
+            diff && !diff.note && !busy && !wholeHistorySelected ? jsx(DeltaCounts, { added: diff.added, removed: diff.removed }) : null,
             jsx(Codicon, { name: "chevron-down", size: "0.8rem" })
           ] }) })
         }),
@@ -1072,7 +1099,7 @@ function GitReview({ ctx }) {
     (scope === "commits" && navIndex >= 0 && commits[navIndex]) && jsxs("div", { className: "notice commit-nav", role: "navigation", "aria-label": "Commit navigation", style: { display: "flex", alignItems: "center", gap: 6 }, children: [
       jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex <= 0, "aria-label": "Newer commit", onClick: () => goCommit(navIndex - 1), children: "◀" }),
       jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex >= commits.length - 1 && !hasMore, "aria-label": "Older commit", onClick: () => (navIndex >= commits.length - 1 ? loadOlder() : goCommit(navIndex + 1)), children: "▶" }),
-      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()} (${navIndex + 1}/${commits.length}${hasMore ? "+" : ""})` }),
+      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()}${wholeHistorySelected ? "" : ` (${navIndex + 1}/${commits.length}${hasMore ? "+" : ""})`}` }),
       jsx(Button, { size: "sm", variant: "ghost", onClick: () => { setNavIndex(-1); setPicked(new Set(commits.map((c) => c.sha))); }, children: "All commits" })
     ] }),
     (scope === "commits" && historyNote) && jsx("div", { className: "notice", role: "status", children: historyNote }),
@@ -1149,19 +1176,49 @@ function GitReview({ ctx }) {
                 const g = gaps.find((g) => g.key === `mid${beforeRowHunk}`);
                 return g || null;
               };
+              // One bar per hidden run. A gap bar (lines outside the patch,
+              // fetched on demand) and an in-patch fold that touch with no
+              // change between them are the same run, so they merge into one
+              // bar instead of stacking two "N unmodified lines" controls.
+              const runBars = (out) => {
+                let gap = null, foldRow = null;
+                const flush = () => {
+                  if (gap && foldRow) {
+                    const nums = (foldRow.rows || []).map((r) => r.after ?? r.before).filter((n) => typeof n === "number");
+                    if (nums.length) {
+                      const from = Math.min(gap.from, ...nums);
+                      const to = Math.max(gap.to, ...nums);
+                      // A bottom gap has no count: it runs to the end of the file.
+                      gap = { ...gap, from, to, count: gap.count == null ? null : to - from + 1 };
+                    }
+                  }
+                  if (gap) out.push(fold({ key: `gap${gap.key}`, count: gap.count, rows: [] }, gap));
+                  else if (foldRow) out.push(fold(foldRow, null));
+                  gap = null; foldRow = null;
+                };
+                return {
+                  fold: (row) => { foldRow = row; if (gap) flush(); },
+                  gap: (g) => { gap = g; if (foldRow) flush(); },
+                  // Anything that is not a bar ends the run.
+                  row: () => { if (gap || foldRow) flush(); },
+                  end: () => flush(),
+                };
+              };
               // Split layout pairs the rows, so the gap bars are interleaved
               // here the same way renderStream does for the unified stream.
               const splitStream = (pairs) => {
                 const out = [];
+                const run = runBars(out);
                 const top = gaps.find((g) => g.key === "top");
-                if (top) out.push(fold({ key: "gaptop", count: top.count, rows: [] }, top));
+                if (top) run.gap(top);
                 let lastHunk = null;
                 pairs.forEach((pair, i) => {
-                  if (pair.shared?.kind === "fold") { out.push(fold(pair.shared, null)); return; }
+                  if (pair.shared?.kind === "fold") { run.fold(pair.shared); return; }
+                  run.row();
                   const hunk = pair.shared?.hunk ?? pair.left?.hunk;
                   if (hunk != null && lastHunk != null && hunk !== lastHunk) {
                     const g = gapFor(hunk);
-                    if (g) out.push(fold({ key: `gap${g.key}`, count: g.count, rows: [] }, g));
+                    if (g) run.gap(g);
                   }
                   if (hunk != null) lastHunk = hunk;
                   out.push(pair.shared
@@ -1171,28 +1228,33 @@ function GitReview({ ctx }) {
                       ] }, i));
                 });
                 const bottom = gaps.find((g) => g.key === "bottom");
-                if (bottom) out.push(fold({ key: "gapbottom", count: null, rows: [] }, bottom));
+                if (bottom) run.gap(bottom);
+                run.end();
                 return out;
               };
               const renderStream = (rows, split) => {
                 const out = [];
                 // FullBar (mode full/hidden) always leads the stream.
                 for (const bar of bars) out.push(bar);
-                if (!split && gaps.find((g) => g.key === "top")) out.push(fold({ key: "gaptop", count: gaps.find((g) => g.key === "top").count, rows: [] }, gaps.find((g) => g.key === "top")));
+                const run = runBars(out);
+                const top = !split && gaps.find((g) => g.key === "top");
+                if (top) run.gap(top);
                 let lastHunk = null;
                 for (const row of rows) {
-                  if (row.kind === "fold") { out.push(fold(row, null)); continue; }
+                  if (row.kind === "fold") { run.fold(row); continue; }
+                  run.row();
                   if (!split && row.hunk != null && lastHunk != null && row.hunk !== lastHunk) {
                     const g = gapFor(row.hunk);
-                    if (g) out.push(fold({ key: `gap${g.key}`, count: g.count, rows: [] }, g));
+                    if (g) run.gap(g);
                   }
                   if (row.hunk != null) lastHunk = row.hunk;
                   out.push(split ? row : renderUnifiedRow(row, `${row.kind}:${row.before}:${row.after}:${row.hunk}`, clickFor, selectedLines, dragFor));
                 }
                 if (!split) {
                   const bottom = gaps.find((g) => g.key === "bottom");
-                  if (bottom) out.push(fold({ key: "gapbottom", count: null, rows: [] }, bottom));
+                  if (bottom) run.gap(bottom);
                 }
+                run.end();
                 return out;
               };
               const file = s.filePath || s.path;

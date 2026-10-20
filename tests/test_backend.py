@@ -304,26 +304,26 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(self.get('meta', repo=str(self.repo), cwd=str(other)).status_code, 200)
         self.assertNotIn(posix(other), [posix(p) for p in self.inventory(str(other))])
 
-    def test_http_selected_commits_supports_50_and_200_full_shas(self):
+    def test_http_selected_commits_supports_50_and_the_cap_full_shas(self):
         self.config(repos=str(self.repo))
         tree = self.git('rev-parse', 'HEAD^{tree}')
         shas = [self.first]
-        for i in range(200):
+        for i in range(gitx.MAX_COMMITS):
             shas.append(self.git('commit-tree', tree, '-p', shas[-1], '-m', f'commit {i}'))
         self.git('update-ref', 'refs/heads/main', shas[-1])
-        for count in [50, 200]:
+        for count in [50, gitx.MAX_COMMITS]:
             with self.subTest(count=count):
                 selected = shas[-count:][::-1]
                 response = self.get('diff', repo=str(self.repo), scope='commits', ref=','.join(selected))
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual([item['sha'] for item in response.json()['commits']], selected)
         history = self.get('commits', repo=str(self.repo)).json()
-        self.assertEqual(len(history['commits']), 200)
+        self.assertEqual(len(history['commits']), gitx.MAX_COMMITS)
         self.assertTrue(history['truncated'])
         self.assertIn('Load older', history['note'])
         response = self.get('diff', repo=str(self.repo), scope='commits')
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(len(response.json()['commits']), 200)
+        self.assertEqual(len(response.json()['commits']), gitx.MAX_COMMITS)
         self.assertEqual(response.json()['note'], history['note'])
         self.assertEqual(self.get('diff', repo=str(self.repo), scope='commits',
                                   ref=','.join(shas)).status_code, 422)
