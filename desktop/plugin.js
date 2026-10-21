@@ -311,10 +311,9 @@ const css = `
   .dark .grd .file:hover{background:#1c1c20}
   .dark .grd .file[aria-pressed=true]{background:#242426}
   .dark .grd .fname{color:#e8e8e8}
-/* The name takes the free space so the churn counts sit on the right edge, the
-   way a folder's file count does, instead of hugging the file name. */
-.grd .file .fname{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.grd .file .fdelta{margin-left:auto;flex-shrink:0}
+/* Churn counts sit immediately after the name, in the file tree as in the folders'
+   file counts: the numbers describe the row they follow, not a right-hand column. */
+.grd .file .fname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dark .grd .detailhead{border-color:#2b2b2d}
   .dark .grd .detailtitle .fdir{color:#6b6b6b}
   .dark .grd .search{border-bottom-color:#2b2b2d}
@@ -352,7 +351,7 @@ const css = `
 .grd .tree{overflow:auto;flex:1;min-height:0;padding-bottom:10px}
 .grd .folder{display:flex;align-items:center;gap:5px;padding:4px 10px;color:var(--ui-text-secondary);font-size:12px;cursor:pointer;user-select:none}
 .grd .folder:hover{background:var(--ui-row-hover-background)}
-.grd .folder .cnt{margin-left:auto;font-size:10.5px;color:var(--ui-text-tertiary)}
+.grd .folder .cnt{font-size:10.5px;color:var(--ui-text-tertiary)}
 .grd .file{width:100%;text-align:left;border:0;border-radius:0;padding:5px 10px 5px 24px;background:transparent;display:flex;align-items:center;gap:8px;min-width:0;color:inherit;font:inherit}
 .grd .file:hover{background:var(--ui-row-hover-background)}
 .grd .file[aria-pressed=true]{background:var(--ui-row-active-background)}

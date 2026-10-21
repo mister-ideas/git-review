@@ -328,12 +328,15 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   assert.match(list, /padding:0/, 'no padding above the sticky label')
 })
 
-test('file rows push their churn counts to the right edge', () => {
-  // The name did not take the free space, so +N -N sat against the file name while
-  // folder counts were already right-aligned.
+test('tree counts sit next to the name, in files and in folders', () => {
+  // Both carry their number immediately after the label; neither is pushed to the
+  // right edge of the column.
   const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
-  assert.match(src, /\.grd \.file \.fname\{[^}]*flex:1 1 auto/, 'the name must take the free space')
-  assert.match(src, /\.grd \.file \.fdelta\{[^}]*margin-left:auto/, 'the counts must sit on the right edge')
+  const cnt = src.match(/\.grd \.folder \.cnt\{[^}]*\}/)?.[0] || ''
+  assert.ok(cnt, 'the folder count style exists')
+  assert.ok(!/margin-left:auto/.test(cnt), 'the folder count must not be pushed right')
+  const file = src.match(/\.grd \.file \.fdelta\{[^}]*\}/)?.[0]
+  assert.equal(file, undefined, 'the file counts add no alignment rule')
 })
 
 test('toolbar icon buttons are ghost, so none of them draws a border', () => {
