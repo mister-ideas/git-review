@@ -402,6 +402,10 @@ const css = `
 .grd .splitwrap > .line{min-width:0}
 .grd .repo-menu,.gr-menu .repo-menu{max-height:380px;overflow-y:auto;padding:0;margin:0}
 .grd .menu-head,.gr-menu .menu-head{position:static;top:auto;z-index:auto;padding:6px 10px 3px}
+/* The menu surface carries no padding of its own: any top padding became a band
+   above a pinned group label, where a scrolled row could still show through.
+   Rows and labels bring their own spacing, so nothing needs it. */
+.grd .gr-menu,.gr-menu{padding:0}
 .grd .gr-menu [role="separator"]{margin:4px 0}
 .grd .menu-group,.gr-menu .menu-group{padding:4px 10px 3px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
    child inheriting from the wrapper gets nothing, so name the token and stay opaque. */background:var(--ui-bg-elevated,var(--ui-surface-background))}
