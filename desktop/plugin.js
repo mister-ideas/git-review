@@ -364,7 +364,7 @@ const css = `
 .grd .detailtitle .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .grd .diff{overflow:auto;flex:1;min-height:0;margin:0;tab-size:4;font:12px/1.75 var(--font-mono,monospace)}
-.grd .line{display:flex;min-width:max-content;white-space:pre;padding:0 6px;align-items:baseline;cursor:pointer}
+.grd .line{display:flex;width:max-content;min-width:100%;white-space:pre;padding:0 6px;align-items:baseline;cursor:pointer}
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
 .grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
@@ -420,8 +420,10 @@ const css = `
 .grd .menu-group,.gr-menu .menu-group{padding:4px 10px 3px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
    child inheriting from the wrapper gets nothing, so name the token and stay opaque. */background:var(--ui-bg-elevated,var(--ui-surface-background))}
 .grd .af-file{/* Skip layout and paint for file sections that are off-screen. The browser
-   remembers each section's measured height, so the scrollbar does not jump. */
-  content-visibility:auto;contain-intrinsic-size:auto 600px;border-bottom:1px solid var(--ui-stroke-tertiary)}
+   remembers each section's measured height, so the scrollbar does not jump. No
+   padding or margin of its own: the section's border is the only gap between files,
+   whether the file ends in a change line or in an unmodified-lines bar. */
+  content-visibility:auto;contain-intrinsic-size:auto 600px;padding:0;margin:0;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-file.af-collapsed{border-bottom:0}
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-head:hover{background:var(--ui-surface-background)}
