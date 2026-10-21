@@ -384,6 +384,13 @@ const css = `
 .grd .line.hunk:not(:first-child){margin-top:12px}
 .grd .fold{position:relative;display:flex;align-items:center;gap:8px;padding:2px 0;color:var(--ui-text-tertiary);font-size:11px;cursor:default;user-select:none}
 .grd .fold::before,.grd .fold::after{content:"";flex:1;border-top:1px solid var(--ui-stroke-tertiary)}
+/* One gap between files, never two: a fold bar that ends a file adds nothing
+   below itself, so the next file's header is separated by the section edge only.
+   Files that end in a change line already sit flush, which is why the spacing
+   looked right there and wrong after a trailing "N unmodified lines" bar. */
+.grd .af-file > :last-child,
+.grd .af-file > :last-child .fold,
+.grd .af-body > :last-child .fold{padding-bottom:0;margin-bottom:0}
 .grd .fold-strip{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--ui-surface-background);pointer-events:none}
 .grd .fold-inner{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px}
 /* Hermes core styles *::-webkit-scrollbar globally, so every scroller gets a
