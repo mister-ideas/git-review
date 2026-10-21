@@ -325,7 +325,7 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   // The sticky group label is pinned at top: 0; list padding above it let a
   // scrolled row show through as a clipped band above the label.
   const list = src.match(/\.gr-menu \.repo-menu\{[^}]*\}/)?.[0] || ''
-  assert.match(list, /padding-top:0/, 'no padding above the sticky label')
+  assert.match(list, /padding:0/, 'no padding above the sticky label')
 })
 
 test('toolbar icon buttons are ghost, so none of them draws a border', () => {
@@ -443,8 +443,26 @@ test('menu rows share one label slot, and the churn colours survive the portal',
   // churn colours, group headers and scroll cap silently stop applying.
   const surfaces = root.findAll(n => typeof n.props.className === 'string' && n.props.className.includes('repo-menu'))
   assert.ok(surfaces.length, 'menu surfaces missing')
-  assert.ok(surfaces.every(s => s.props.className.split(/\s+/).includes('gr-menu')),
-    'a menu surface is missing the menu scope class, so its content escapes every rule')
+  // The scroll container is a child of the menu surface, not the surface itself.
+  const inScope = (node) => {
+    for (let n = node; n; n = n.parent) {
+      const cls = typeof n.props?.className === 'string' ? n.props.className.split(/\s+/) : []
+      if (cls.includes('gr-menu')) return true
+    }
+    return false
+  }
+  // The branch label must not sit inside a scroll container: inside one, the
+  // list's padding let a scrolled row paint above the pinned label.
+  const head = root.findAll(n => typeof n.props?.children === 'string' && n.props.children.startsWith('Compare against'))
+  assert.ok(head.length, 'the compare label is missing')
+  for (const label of head) {
+    for (let n = label.parent; n; n = n.parent) {
+      const cls = typeof n.props?.className === 'string' ? n.props.className.split(/\s+/) : []
+      assert.ok(!cls.includes('repo-menu'), 'the label renders inside the scrolling list')
+    }
+  }
+  assert.ok(surfaces.every(inScope),
+    'a scroll container sits outside the menu scope class, so its content escapes every rule')
   const css = root.findAll(n => n.type === 'style').map(n => (n.children || []).join('')).join('')
   assert.match(css, /\.gr-menu \.fdelta \.add\{color:var\(--ui-green\)\}/, 'the added-line colour is not scoped to the menu surface')
   assert.match(css, /\.gr-menu \.fdelta \.del\{color:var\(--ui-red\)\}/, 'the removed-line colour is not scoped to the menu surface')

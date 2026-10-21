@@ -400,7 +400,8 @@ const css = `
 .grd .split-row .linecode{min-width:0}
 .grd .line.empty{background:transparent}
 .grd .splitwrap > .line{min-width:0}
-.grd .repo-menu,.gr-menu .repo-menu{max-height:380px;overflow-y:auto;padding-top:0;margin-top:0}
+.grd .repo-menu,.gr-menu .repo-menu{max-height:380px;overflow-y:auto;padding:0;margin:0}
+.grd .menu-head,.gr-menu .menu-head{position:static;top:auto;z-index:auto;padding:6px 10px 3px}
 .grd .gr-menu [role="separator"]{margin:4px 0}
 .grd .menu-group,.gr-menu .menu-group{padding:4px 10px 3px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
    child inheriting from the wrapper gets nothing, so name the token and stay opaque. */background:var(--ui-bg-elevated,var(--ui-surface-background))}
@@ -1258,9 +1259,12 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
           // sentence, never on the control.
           jsx(RepoButton, { icon: "git-branch", label: shortLabel(shownBase || "main") })
         }),
-        jsx(DropdownMenuContent, { className: "gr-menu repo-menu", children: [
-          jsx("div", { className: "menu-group", role: "presentation", children: "Compare against…" }, "hdr"),
-          ...branchRows.map((row) => jsx(DropdownMenuItem, { onSelect: () => {
+        jsx(DropdownMenuContent, { className: "gr-menu", children: [
+          // The label sits OUTSIDE the scrolling list. Inside it, the list's own
+          // padding showed a clipped row above the sticky label; outside, no row
+          // can ever render above it.
+          jsx("div", { className: "menu-group menu-head", role: "presentation", children: "Compare against…" }, "hdr"),
+          jsx("div", { className: "repo-menu", children: branchRows.map((row) => jsx(DropdownMenuItem, { onSelect: () => {
             // A different base is a different commit range: the previous picks no
             // longer belong to it, so they must not stay selected.
             setAllHistory(false); setBase(row.value); setPicked(new Set()); setNavIndex(-1); commitSelectionExplicit.current = false;
@@ -1270,7 +1274,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
             row.name === meta?.current
               ? jsx("span", { style: { color: "var(--ui-text-tertiary)", fontSize: 11 }, children: "current" })
               : (shortLabel(shownBase) === row.name && !base ? jsx("span", { style: { color: "var(--ui-text-tertiary)", fontSize: 11 }, children: "default" }) : null)
-          ] }) }, row.value))
+          ] }) }, row.value)) })
         ] })
       ] }),
       // Right-side controls group (PR · display · collapse all · file list); margin-left:
