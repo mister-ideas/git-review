@@ -383,6 +383,10 @@ const css = `
 .grd .line.hunk:not(:first-child){margin-top:12px}
 .grd .fold{position:relative;display:flex;align-items:center;gap:8px;padding:2px 0;color:var(--ui-text-tertiary);font-size:11px;cursor:default;user-select:none}
 .grd .fold::before,.grd .fold::after{content:"";flex:1;border-top:1px solid var(--ui-stroke-tertiary)}
+/* A fold bar is not a code line: inside a code row's height it centres itself and
+   leaves a band above and below, which reads as empty space between files when the
+   bar ends a file. The row collapses to the bar. */
+.grd .line:has(> .fold),.grd .line:has(.fold){min-height:0;padding-top:2px;padding-bottom:2px;align-items:center}
 /* One gap between files, never two: a fold bar that ends a file adds nothing
    below itself, so the next file's header is separated by the section edge only.
    Files that end in a change line already sit flush, which is why the spacing
