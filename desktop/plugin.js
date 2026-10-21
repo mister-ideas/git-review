@@ -311,6 +311,10 @@ const css = `
   .dark .grd .file:hover{background:#1c1c20}
   .dark .grd .file[aria-pressed=true]{background:#242426}
   .dark .grd .fname{color:#e8e8e8}
+/* The name takes the free space so the churn counts sit on the right edge, the
+   way a folder's file count does, instead of hugging the file name. */
+.grd .file .fname{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grd .file .fdelta{margin-left:auto;flex-shrink:0}
   .dark .grd .detailhead{border-color:#2b2b2d}
   .dark .grd .detailtitle .fdir{color:#6b6b6b}
   .dark .grd .search{border-bottom-color:#2b2b2d}

@@ -328,6 +328,14 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   assert.match(list, /padding:0/, 'no padding above the sticky label')
 })
 
+test('file rows push their churn counts to the right edge', () => {
+  // The name did not take the free space, so +N -N sat against the file name while
+  // folder counts were already right-aligned.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  assert.match(src, /\.grd \.file \.fname\{[^}]*flex:1 1 auto/, 'the name must take the free space')
+  assert.match(src, /\.grd \.file \.fdelta\{[^}]*margin-left:auto/, 'the counts must sit on the right edge')
+})
+
 test('toolbar icon buttons are ghost, so none of them draws a border', () => {
   // The PR/MR button was the only icon-sm button on `outline`, which reads as an
   // unwanted border next to its ghost siblings. Outline is reserved for the one
