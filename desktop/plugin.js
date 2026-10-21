@@ -314,6 +314,11 @@ const css = `
 /* Churn counts sit immediately after the name, in the file tree as in the folders'
    file counts: the numbers describe the row they follow, not a right-hand column. */
 .grd .file .fname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The counts are 10.5px against a 12px label. With normal line-height their text box
+   centres on a different baseline, so the digits read a pixel low next to the name;
+   one line-height for both boxes, and the numbers centre on the label. */
+.grd .file .fname,.grd .folder > span:first-of-type{line-height:1.2}
+.grd .file .fdelta,.grd .folder .cnt{line-height:1;align-self:center}
   .dark .grd .detailhead{border-color:#2b2b2d}
   .dark .grd .detailtitle .fdir{color:#6b6b6b}
   .dark .grd .search{border-bottom-color:#2b2b2d}

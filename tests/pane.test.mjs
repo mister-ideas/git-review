@@ -328,6 +328,13 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   assert.match(list, /padding:0/, 'no padding above the sticky label')
 })
 
+test('tree counts share the label line box, so they centre on it', () => {
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const nums = src.match(/\.grd \.file \.fdelta,\.grd \.folder \.cnt\{[^}]*\}/)?.[0] || ''
+  assert.ok(nums, 'the count alignment rule exists')
+  assert.match(nums, /line-height:1/, 'the counts use a single-line box')
+})
+
 test('tree counts sit next to the name, in files and in folders', () => {
   // Both carry their number immediately after the label; neither is pushed to the
   // right edge of the column.
