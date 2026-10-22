@@ -14,6 +14,16 @@ export async function click(node) {
   if (!node) throw new Error('Required interaction target not rendered')
   await act(async () => { await node.props.onClick({ stopPropagation() {}, preventDefault() {} }) })
 }
+// Line selection lives on the gutter (the code keeps its text cursor), so tests
+// press the line-number cell the way a user does.
+export async function gutterDown(node) {
+  if (!node) throw new Error('Required gutter not rendered')
+  await act(async () => { node.props.onClick({ button: 0, stopPropagation() {}, preventDefault() {} }) })
+}
+export async function gutterEnter(node) {
+  if (!node) throw new Error('Required gutter not rendered')
+  await act(async () => { node.props.onMouseEnter({ buttons: 1, stopPropagation() {}, preventDefault() {} }) })
+}
 export async function select(root, label) {
   const node = menuItem(root, label)
   if (!node) throw new Error(`Required menu item not rendered: ${label}`)

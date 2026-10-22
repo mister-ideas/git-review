@@ -1,7 +1,7 @@
 // Effect-driven plugin tests; SDK is a Node test double, never SDK layout proof.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mount, byClass, byLabel, click, text, select, paths, latestDiff, hasClass, file } from './render-harness.mjs'
+import { mount, gutterDown, byClass, byLabel, click, text, select, paths, latestDiff, hasClass, file } from './render-harness.mjs'
 import { files, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
 import { host } from '@hermes/plugin-sdk'
@@ -142,14 +142,14 @@ test('click line then another highlights the range; cite inserts native @line re
   host.composer = { ...original, insertText: (sessionId, value, opts) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); if (typeof value !== 'string') throw new Error('insertText(sessionId, text) — text must be the 2nd argument'); inserted.push(value) } }
   t.after(() => { host.composer = original })
   const { root } = await mount(t)
-  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
+  const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
   const selected = () => root.findAll(n => hasClass(n, 'line-selected'))
   // first click anchors (within one file — selections never cross files)
   const inFile = lines().filter((n) => { let p = n; while (p && !(p.props && p.props['data-path'])) p = p.parent; return p?.props?.['data-path'] === 'src/architecture/deep/main.ts' })
-  await click(inFile[0])
+  await gutterDown(inFile[0])
   assert.equal(selected().length, 1, 'anchor line must highlight')
   // second click in the same file completes the range (12 context lines apart in the fixture)
-  await click(inFile[inFile.length - 1])
+  await gutterDown(inFile[inFile.length - 1])
   assert.ok(selected().length > 1, `expected range highlight, got ${selected().length}`)
   // cite bar appears with native reference and inserts into the composer draft
   const cite = byLabel(root, 'Cite selected lines in focused message draft')
@@ -164,19 +164,19 @@ test('click line then another highlights the range; cite inserts native @line re
 
 test('clicking the only selected line again leaves selection mode', async t => {
   const { root } = await mount(t)
-  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
+  const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
   const selected = () => root.findAll(n => hasClass(n, 'line-selected'))
-  await click(lines()[0])
+  await gutterDown(lines()[0])
   assert.equal(selected().length, 1, 'first click anchors')
-  await click(lines()[0])
+  await gutterDown(lines()[0])
   assert.equal(selected().length, 0, 'clicking the selected line again must clear the selection')
 })
 
 test('a click that is not on a line leaves selection mode', async t => {
   const { root } = await mount(t)
-  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
+  const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
   const selected = () => root.findAll(n => hasClass(n, 'line-selected'))
-  await click(lines()[0])
+  await gutterDown(lines()[0])
   assert.equal(selected().length, 1)
   const pane = root.findAll(n => hasClass(n, 'grd'))[0]
   assert.ok(pane?.props?.onClick, 'the pane must clear a selection on an outside click')
@@ -192,15 +192,15 @@ test('a selection spanning a hidden run cites the exact range', async t => {
   const { root } = await mount(t)
   const path = 'src/architecture/deep/main.ts'
   const fileOf = (n) => { let p = n; while (p && !(p.props && p.props['data-path'])) p = p.parent; return p?.props?.['data-path'] }
-  const inFile = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function').filter((n) => fileOf(n) === path)
+  const inFile = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function').filter((n) => fileOf(n) === path)
   // Reveal the file, then hide it: the run between the two changes is only
   // hidden once the file is in "full" mode and the hide bar is used.
   await click(byLabel(root, `Expand the remaining unchanged lines (bottom) for ${path}`))
   await click(byLabel(root, `Hide all unchanged lines for ${path}`))
   const shown = inFile()
   assert.ok(shown.length >= 2, 'need two lines to select across the hidden run')
-  await click(shown[0])
-  await click(shown[shown.length - 1])
+  await gutterDown(shown[0])
+  await gutterDown(shown[shown.length - 1])
   await click(byLabel(root, 'Cite selected lines in focused message draft'))
   assert.equal(inserted.length, 1)
   const m = inserted[0].match(/^@line:(?:\/repositories\/[^:\s]+\/)?src\/architecture\/deep\/main\.ts:(\d+)-(\d+)$/)
@@ -214,9 +214,9 @@ test('clearing the line selection removes highlight and inserts nothing', async 
   host.composer = { ...original, insertText: (sessionId, value, opts) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); if (typeof value !== 'string') throw new Error('insertText(sessionId, text) — text must be the 2nd argument'); inserted.push(value) } }
   t.after(() => { host.composer = original })
   const { root } = await mount(t)
-  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
-  await click(lines()[0])
-  await click(lines()[2])
+  const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
+  await gutterDown(lines()[0])
+  await gutterDown(lines()[2])
   await click(byLabel(root, 'Clear line selection'))
   assert.equal(root.findAll(n => hasClass(n, 'line-selected')).length, 0)
   assert.equal(inserted.length, 0)

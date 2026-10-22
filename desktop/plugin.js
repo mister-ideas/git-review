@@ -386,6 +386,7 @@ const css = `
 .grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
 .grd .cite-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
 .grd .cite-bar .cite-ref{font-family:var(--font-mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.grd .gutter{display:flex;flex:none;cursor:pointer;user-select:none;-webkit-user-select:none}
 .grd .lineno{flex:0 0 calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);text-align:right;padding:0;color:var(--ui-text-tertiary);user-select:none;font-variant-numeric:tabular-nums;font:inherit;opacity:0.75}
 .grd .lineno + .lineno{flex-basis:calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);margin-left:4px;padding-left:4px;border-left:1px solid var(--ui-stroke-tertiary)}
 .grd .linecode{padding-left:6px;flex:1 0 auto;min-width:0}
@@ -719,7 +720,10 @@ function GitReview({ ctx }) {
   }, [identity, repositoryReady]);
 
   // Selections are repo/scope bound: drop them when either changes.
-  useEffect(() => { setLineSelection(null); }, [chosen, scope]);
+  // Only a scope switch invalidates a line selection. Keying this on `chosen` too
+  // wiped it on every background refresh, which is why a second click landed on an
+  // already-cleared state.
+  useEffect(() => { setLineSelection(null); }, [scope]);
 
   const persist = (patch) => { try { ctx.storage.set(settingsKey, { ...ctx.storage.get(settingsKey, {}), ...patch }); } catch { /* best-effort */ } };
 
@@ -1083,6 +1087,30 @@ function GitReview({ ctx }) {
   const [lineSelection, setLineSelection] = useState(null); // {file, sha, side, anchor?, start, end}
   // Only new-side lines of the CURRENT file reach here (callers gate on
   // scope and row kind): ranges always cite the file the composer will read.
+  // The gutter is the selection surface, the way an editor does it: the code itself
+  // keeps its text cursor and native copy, so a drag over code selects text while a
+  // drag down the line numbers selects a cite range.
+  const gutterAnchor = useRef(null);
+  const onGutterDown = (s, row) => (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const line = row.after;
+    if (line == null) return;
+    const file = s.filePath || s.path;
+    gutterAnchor.current = { file, line };
+    onLineClick(s, row)(event);
+  };
+  const onGutterEnter = (s, row) => (event) => {
+    if (event.buttons !== 1 || !gutterAnchor.current) return;
+    const line = row.after;
+    if (line == null) return;
+    const file = s.filePath || s.path;
+    if (gutterAnchor.current.file !== file) return;
+    const anchor = gutterAnchor.current.line;
+    const lo = Math.min(anchor, line), hi = Math.max(anchor, line);
+    setLineSelection({ file, sha: s.sha, anchor: null, start: lo, end: hi });
+  };
   const onLineClick = (s, row) => (event) => {
     event.stopPropagation();
     const line = row.after;
@@ -1144,6 +1172,20 @@ const EMPTY_SCOPE = {
 };
 const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
   const LINE_DRAG_MIME = "application/x-hermes-paths";
+  const gutterHandlers = (s, file) => (row) => {
+    if (!CITABLE_SCOPES.has(scope) || !row || row.after == null || row.kind === "remove") return null;
+    // The pane clears the selection on an outside click; the gutter is not outside,
+    // so the click must not reach it (the mousedown already set the selection).
+    return {
+      onClick: (event) => {
+        // The pane clears the selection on an outside click; the gutter is not outside.
+        event.stopPropagation();
+        gutterAnchor.current = { file, line: row.after };
+        onLineClick(s, row)(event);
+      },
+      onMouseEnter: onGutterEnter(s, row),
+    };
+  };
   const lineDragProps = (file) => (row) => {
     if (!CITABLE_SCOPES.has(scope)) return {};
     if (!chosen) return {};
@@ -1513,9 +1555,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
                   }
                   if (hunk != null) lastHunk = hunk;
                   out.push(pair.shared
-                    ? renderUnifiedRow(pair.shared, `shared:${i}`, clickFor, selectedLines, dragFor)
+                    ? renderUnifiedRow(pair.shared, `shared:${i}`, gutterFor, selectedLines, dragFor)
                     : jsxs("div", { className: "split-row", "data-diff-row": i, children: [
-                        renderSplitRow(pair.left, i, "left", clickFor, selectedLines, dragFor), renderSplitRow(pair.right, i, "right", clickFor, selectedLines, dragFor),
+                        renderSplitRow(pair.left, i, "left", gutterFor, selectedLines, dragFor), renderSplitRow(pair.right, i, "right", gutterFor, selectedLines, dragFor),
                       ] }, i));
                 });
                 const bottom = gaps.find((g) => g.key === "bottom");
@@ -1540,7 +1582,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
                     if (g) { run.gap(g); run.row(); }
                   }
                   if (row.hunk != null) lastHunk = row.hunk;
-                  out.push(split ? row : renderUnifiedRow(row, `${row.kind}:${row.before}:${row.after}:${row.hunk}`, clickFor, selectedLines, dragFor));
+                  out.push(split ? row : renderUnifiedRow(row, `${row.kind}:${row.before}:${row.after}:${row.hunk}`, gutterFor, selectedLines, dragFor));
                 }
                 if (!split) {
                   const bottom = gaps.find((g) => g.key === "bottom");
@@ -1554,7 +1596,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
                 ? new Set(Array.from({ length: lineSelection.end - lineSelection.start + 1 }, (_, n) => lineSelection.start + n))
                 : null;
               // Range selection drives citations — same eligibility as drag.
-              const clickFor = CITABLE_SCOPES.has(scope) ? (row) => (event) => onLineClick(s, row)(event) : null;
+              const gutterFor = CITABLE_SCOPES.has(scope) ? gutterHandlers(s, file) : null;
               const dragFor = lineDragProps(file);
               // Files whose patch carries no hunks (binary, mode-only, pure rename)
               // render a single muted note instead of an empty body.
@@ -1808,43 +1850,52 @@ const FullBar = ({ path, label, onToggle }) =>
 // Cite/drag only rows that exist in the CURRENT file (a new-side number).
 // Removed lines have only an old-side number: citing them would point the
 // agent at the wrong line of today's file, so they are not clickable.
-function renderUnifiedRow(row, key, onLineClick, selectedLines, lineDragProps) {
+function renderUnifiedRow(row, key, gutterFor, selectedLines, lineDragProps) {
   const line = row.after; // current-file number
   // Removed lines don't exist in the current file: citing or dragging them
-  // would point the agent at the wrong line — no click, no drag.
-  const clickable = onLineClick && line != null && row.kind !== "remove";
+  // would point the agent at the wrong line — no selection, no drag.
+  const selectable = gutterFor && line != null && row.kind !== "remove";
   const highlighted = selectedLines?.has(line);
-  const drag = clickable && lineDragProps ? lineDragProps(row) : {};
+  const drag = selectable && lineDragProps ? lineDragProps(row) : {};
   return jsxs("span", {
     className: cn(`line ${row.kind}`, highlighted && "line-selected"),
     "data-line": line,
-    onClick: clickable ? (event) => onLineClick(row)(event) : undefined,
-    ...drag,
+    // Clicking the code still selects the line for citation (unchanged); a drag over
+    // text selects text instead, and the gutter does the same editor-style job.
+    onClick: selectable ? gutterFor(row)?.onClick : undefined,
     children: [
-      jsxs(Fragment, { children: [
-        jsx("span", { className: "lineno", "aria-hidden": "true", children: row.before ?? "" }),
-        jsx("span", { className: "lineno", "aria-hidden": "true", children: row.after ?? "" }),
-      ] }),
+      jsx("span", {
+        className: "gutter",
+        ...(selectable ? gutterFor(row) || {} : {}),
+        ...(selectable ? drag : {}),
+        children: jsxs(Fragment, { children: [
+          jsx("span", { className: "lineno", "aria-hidden": "true", children: row.before ?? "" }),
+          jsx("span", { className: "lineno", "aria-hidden": "true", children: row.after ?? "" }),
+        ] }),
+      }),
       jsx("span", { className: "linecode", children: row.text || " " }),
     ],
   }, key);
 }
 
-function renderSplitRow(row, i, side, onLineClick, selectedLines, lineDragProps) {
+function renderSplitRow(row, i, side, gutterFor, selectedLines, lineDragProps) {
   const line = side === "left" ? row.before : row.after;
-  // Left (old-side) numbers don't exist in the current file: not clickable
-  // and not draggable (lineDragProps rejects them via row.after).
-  const clickable = onLineClick && line != null && side === "right";
+  // Left (old-side) numbers don't exist in the current file: not selectable and not
+  // draggable (lineDragProps rejects them via row.after).
+  const selectable = gutterFor && line != null && side === "right";
   const highlighted = selectedLines?.has(line);
-  const drag = clickable && lineDragProps ? lineDragProps(row) : {};
+  const drag = selectable && lineDragProps ? lineDragProps(row) : {};
   return jsxs("span", {
     className: cn(`line ${row.kind}`, highlighted && "line-selected"),
     "data-side": side,
     "data-line": line,
-    onClick: clickable ? (event) => onLineClick(row)(event) : undefined,
-    ...drag,
     children: [
-      jsx("span", { className: "lineno", "aria-hidden": "true", children: line ?? "" }),
+      jsx("span", {
+        className: "gutter",
+        ...(selectable ? gutterFor(row) || {} : {}),
+        ...(selectable ? drag : {}),
+        children: jsx("span", { className: "lineno", "aria-hidden": "true", children: line ?? "" }),
+      }),
       jsx("span", { className: "linecode", children: row.text || " " }),
     ],
   }, `${side}:${i}`);
