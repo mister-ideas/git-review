@@ -386,7 +386,16 @@ const css = `
 .grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
 .grd .cite-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
 .grd .cite-bar .cite-ref{font-family:var(--font-mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.grd .gutter{display:flex;align-items:baseline;flex:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+.grd .gutter{display:flex;align-items:baseline;flex:none;cursor:pointer;user-select:none;-webkit-user-select:none;position:relative}
+/* The gutter is the select/drag surface, so it says so on hover: a three-dot grip
+   drawn in CSS (no extra node per row) plus grab/grabbing cursors. */
+.grd .gutter::before{content:"";position:absolute;left:1px;top:50%;width:4px;height:4px;border-radius:50%;
+  background:var(--ui-text-secondary);transform:translateY(-50%);opacity:0;transition:opacity .12s ease;
+  box-shadow:0 -7px 0 var(--ui-text-secondary),0 7px 0 var(--ui-text-secondary)}
+.grd .line:hover .gutter::before,.grd .line-selected .gutter::before{opacity:0.9}
+.grd .line:hover .gutter{background:var(--ui-row-hover-background)}
+.grd .gutter,.grd .gutter:hover{cursor:grab}
+.grd .gutter:active{cursor:grabbing}
 .grd .lineno{flex:0 0 calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);text-align:right;padding:0;color:var(--ui-text-tertiary);user-select:none;font-variant-numeric:tabular-nums;font:inherit;opacity:0.75}
 .grd .lineno + .lineno{flex-basis:calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);margin-left:4px;padding-left:4px;border-left:1px solid var(--ui-stroke-tertiary)}
 .grd .linecode{padding-left:6px;flex:1 0 auto;min-width:0}
