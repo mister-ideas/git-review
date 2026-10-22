@@ -4,6 +4,7 @@ import { act, mount, byClass, byLabel, switchFor, click, select, paths, file, la
 import TestRenderer from 'react-test-renderer'
 import { jsx } from 'react/jsx-runtime'
 import { files, repo, makeContext, commits, contexts } from './fixtures.mjs'
+import { host } from '@hermes/plugin-sdk'
 
 import { GitReview } from '../desktop/plugin.js'
 
@@ -115,6 +116,22 @@ test('scope, comparison base and repository come back after leaving the session'
   assert.equal(latestDiff(back.requests).searchParams.get('repo'), savedRepo, 'the repository is restored')
 })
 
+test('settings survive a session switch into another workspace', async t => {
+  // A Hermes window can hold sessions on different worktrees. The pane is one
+  // surface, so its state must not be keyed by the focused workspace.
+  const storage = new Map()
+  const first = await mount(t, { storage })
+  await select(first.root, 'Staged')
+  const savedRepo = latestDiff(first.requests).searchParams.get('repo')
+  const keys = [...storage.keys()].filter((k) => k.startsWith('display.v1'))
+  assert.equal(keys.length, 1, 'one settings entry for the pane')
+  assert.ok(!keys[0].includes('/'), 'the key must not carry a workspace path')
+  assert.equal(keys[0].split(':').length, 2, 'one segment: profile + connection, no workspace suffix')
+  await act(async () => first.renderer.unmount())
+  const back = await mount(t, { storage })
+  assert.equal(latestDiff(back.requests).searchParams.get('scope'), 'staged', 'scope must survive the switch')
+  assert.equal(latestDiff(back.requests).searchParams.get('repo'), savedRepo, 'repository must survive the switch')
+})
 test('architecture folders default expanded; compact chain toggles descendants only', async t => {
   const { root } = await mount(t)
   const folders = byClass(root, 'folder')
