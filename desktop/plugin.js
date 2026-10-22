@@ -369,7 +369,11 @@ const css = `
 .grd .detailtitle .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .grd .diff{overflow:auto;flex:1;min-height:0;margin:0;tab-size:4;font:12px/1.75 var(--font-mono,monospace)}
-.grd .line{display:flex;width:auto;min-width:max-content;white-space:pre;padding:0 6px;align-items:baseline;cursor:pointer}
+/* The scroll width lives on the container, the rows fill it. With width on the
+   rows each one ended at its own text, so a change's background stopped mid-line
+   and the unmodified-lines bars stopped short of the scrolled area. */
+.grd .rows,.grd .af-body{width:max-content;min-width:100%}
+.grd .line{display:flex;width:100%;min-width:0;white-space:pre;padding:0 6px;align-items:baseline;cursor:pointer}
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
 .grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
@@ -405,7 +409,7 @@ const css = `
    classic bar that reserves its width. The column hides it and draws .ov-bar
    instead: absolutely positioned over the diff, so it takes no width, and it
    fades a moment after scrolling stops. */
-.grd .allfiles::-webkit-scrollbar{width:0;height:0}
+.grd .allfiles::-webkit-scrollbar,.grd .af-body::-webkit-scrollbar,.grd .rows::-webkit-scrollbar{width:0;height:0}
 .grd .ov-bar{position:absolute;right:2px;top:0;width:6px;border-radius:3px;pointer-events:none;z-index:6;
   background:color-mix(in srgb,var(--dt-scrollbar-thumb) 45%,transparent);opacity:0;transition:opacity .18s ease;will-change:transform}
 /* Right sidebar: vertical scroll only; long names ellipsize, never overflow. */

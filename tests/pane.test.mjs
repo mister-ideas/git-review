@@ -316,7 +316,7 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   assert.ok(!/scrollbar-gutter/.test(rule), 'no reserved gutter')
   // The core styles every scrollbar globally, which reserves width; the column
   // zeroes it and draws a floating bar over the diff instead.
-  assert.match(src, /\.grd \.allfiles::-webkit-scrollbar\{width:0;height:0\}/, 'the native bar takes no width')
+  assert.match(src, /::-webkit-scrollbar[^{]*\{width:0;height:0\}/, 'the native bars take no space')
   assert.match(src, /\.grd \.ov-bar\{/, 'a floating bar is the affordance')
   // Sticky file headers sit at z-index 2; a lower bar paints underneath them.
   const bar = src.match(/\.grd \.ov-bar\{[^}]*\}/)?.[0] || ''
