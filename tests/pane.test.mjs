@@ -1,12 +1,27 @@
 // Effect-driven plugin tests; SDK is a Node test double, never SDK layout proof.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mount, byClass, byLabel, click, text, select, paths, latestDiff, hasClass, file } from './render-harness.mjs'
+import { mount, gutterDown, byClass, byLabel, click, text, select, paths, latestDiff, hasClass, file } from './render-harness.mjs'
 import { files, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
 import { host } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
-import { GitReview, filesToOpen, collapseRows, settingsKeyFor } from '../desktop/plugin.js'
+import { readFileSync } from 'node:fs'
+
+// Citing must go through the SDK contract that hydrates an `@`-ref into a chip
+// (setDraft); insertText is the plain-text fallback for older hosts.
+const stubComposer = (original, inserted) => ({
+  ...original,
+  getDraft: async () => '',
+  setDraft: (sessionId, value) => {
+    if (sessionId !== null) throw new Error('cite must target the focused composer (null)')
+    if (typeof value !== 'string') throw new Error('setDraft(sessionId, text) — text must be the 2nd argument')
+    inserted.push(value)
+    return true
+  },
+  insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) },
+})
+import { GitReview, filesToOpen, collapseRows, scrollTopFor, settingsKeyFor } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -138,17 +153,17 @@ test('branch picker picks a comparison base: never checks anything out, adds no 
 test('click line then another highlights the range; cite inserts native @line reference in composer draft', async t => {
   const inserted = []
   const original = host.composer
-  host.composer = { ...original, insertText: (sessionId, value, opts) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); if (typeof value !== 'string') throw new Error('insertText(sessionId, text) — text must be the 2nd argument'); inserted.push(value) } }
+  host.composer = stubComposer(original, inserted)
   t.after(() => { host.composer = original })
   const { root } = await mount(t)
-  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
+  const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
   const selected = () => root.findAll(n => hasClass(n, 'line-selected'))
   // first click anchors (within one file — selections never cross files)
   const inFile = lines().filter((n) => { let p = n; while (p && !(p.props && p.props['data-path'])) p = p.parent; return p?.props?.['data-path'] === 'src/architecture/deep/main.ts' })
-  await click(inFile[0])
+  await gutterDown(inFile[0])
   assert.equal(selected().length, 1, 'anchor line must highlight')
   // second click in the same file completes the range (12 context lines apart in the fixture)
-  await click(inFile[inFile.length - 1])
+  await gutterDown(inFile[inFile.length - 1])
   assert.ok(selected().length > 1, `expected range highlight, got ${selected().length}`)
   // cite bar appears with native reference and inserts into the composer draft
   const cite = byLabel(root, 'Cite selected lines in focused message draft')
@@ -163,19 +178,19 @@ test('click line then another highlights the range; cite inserts native @line re
 
 test('clicking the only selected line again leaves selection mode', async t => {
   const { root } = await mount(t)
-  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
+  const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
   const selected = () => root.findAll(n => hasClass(n, 'line-selected'))
-  await click(lines()[0])
+  await gutterDown(lines()[0])
   assert.equal(selected().length, 1, 'first click anchors')
-  await click(lines()[0])
+  await gutterDown(lines()[0])
   assert.equal(selected().length, 0, 'clicking the selected line again must clear the selection')
 })
 
 test('a click that is not on a line leaves selection mode', async t => {
   const { root } = await mount(t)
-  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
+  const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
   const selected = () => root.findAll(n => hasClass(n, 'line-selected'))
-  await click(lines()[0])
+  await gutterDown(lines()[0])
   assert.equal(selected().length, 1)
   const pane = root.findAll(n => hasClass(n, 'grd'))[0]
   assert.ok(pane?.props?.onClick, 'the pane must clear a selection on an outside click')
@@ -186,20 +201,20 @@ test('a click that is not on a line leaves selection mode', async t => {
 test('a selection spanning a hidden run cites the exact range', async t => {
   const inserted = []
   const original = host.composer
-  host.composer = { ...original, insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) } }
+  host.composer = stubComposer(original, inserted)
   t.after(() => { host.composer = original })
   const { root } = await mount(t)
   const path = 'src/architecture/deep/main.ts'
   const fileOf = (n) => { let p = n; while (p && !(p.props && p.props['data-path'])) p = p.parent; return p?.props?.['data-path'] }
-  const inFile = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function').filter((n) => fileOf(n) === path)
+  const inFile = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function').filter((n) => fileOf(n) === path)
   // Reveal the file, then hide it: the run between the two changes is only
   // hidden once the file is in "full" mode and the hide bar is used.
   await click(byLabel(root, `Expand the remaining unchanged lines (bottom) for ${path}`))
   await click(byLabel(root, `Hide all unchanged lines for ${path}`))
   const shown = inFile()
   assert.ok(shown.length >= 2, 'need two lines to select across the hidden run')
-  await click(shown[0])
-  await click(shown[shown.length - 1])
+  await gutterDown(shown[0])
+  await gutterDown(shown[shown.length - 1])
   await click(byLabel(root, 'Cite selected lines in focused message draft'))
   assert.equal(inserted.length, 1)
   const m = inserted[0].match(/^@line:(?:\/repositories\/[^:\s]+\/)?src\/architecture\/deep\/main\.ts:(\d+)-(\d+)$/)
@@ -210,12 +225,12 @@ test('a selection spanning a hidden run cites the exact range', async t => {
 test('clearing the line selection removes highlight and inserts nothing', async t => {
   const inserted = []
   const original = host.composer
-  host.composer = { ...original, insertText: (sessionId, value, opts) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); if (typeof value !== 'string') throw new Error('insertText(sessionId, text) — text must be the 2nd argument'); inserted.push(value) } }
+  host.composer = stubComposer(original, inserted)
   t.after(() => { host.composer = original })
   const { root } = await mount(t)
-  const lines = () => root.findAll(n => hasClass(n, 'line') && typeof n.props.onClick === 'function')
-  await click(lines()[0])
-  await click(lines()[2])
+  const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
+  await gutterDown(lines()[0])
+  await gutterDown(lines()[2])
   await click(byLabel(root, 'Clear line selection'))
   assert.equal(root.findAll(n => hasClass(n, 'line-selected')).length, 0)
   assert.equal(inserted.length, 0)
@@ -293,7 +308,7 @@ test('picking a branch asks for commits since it, and the trigger names it', asy
   assert.ok(last, 'picking a branch must refetch the commit list')
   assert.match(decodeURIComponent(last.url), /[?&]base=main/, 'the commit query must carry the chosen base')
   const labels = root.findAll(n => typeof n.type === 'string' && typeof n.props?.className === 'string' && n.props.className.includes('repo-text')).map(text)
-  assert.ok(labels.some(t => t.trim() === 'main'), `the base control must name the base alone, got ${JSON.stringify(labels)}`)
+  assert.ok(labels.some(t => t.trim() === 'main'), `the base control must name the base, got ${JSON.stringify(labels)}`)
 })
 
 test('the menu headers sit on the menu surface, and the divider is the desktop sash', async t => {
@@ -305,14 +320,118 @@ test('the menu headers sit on the menu surface, and the divider is the desktop s
   assert.match(css, /\.resizer:hover[^{]*\{[^}]*ui-sash-hover-background/, 'the sash must fill with the desktop\'s hover token')
 })
 
-test('pane settings are scoped to profile, connection and workspace', () => {
-  const A = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a')
-  const B = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/b')
-  const C = settingsKeyFor(JSON.stringify(['other', 'default']), '/repo/a')
-  assert.notEqual(A, B, 'a different workspace must not share settings')
-  assert.notEqual(A, C, 'a different connection must not share settings')
-  assert.equal(A, settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a'), 'the same scope is stable across renders')
-  assert.ok(A.startsWith('display.v1:'), 'the key stays versioned so a future shape can migrate')
+test('the diff column reserves no scrollbar gutter and styles no scrollbar', () => {
+  // scrollbar-gutter: stable showed as permanent dead space, and styling any
+  // ::-webkit-scrollbar part makes Chromium draw a classic bar that never goes
+  // away. Left alone, the column gets the system overlay bar, only while scrolling.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const rule = src.match(/\.grd \.allfiles\{[^}]*\}/)?.[0] || '';
+  assert.ok(rule, 'the diff column style exists')
+  assert.ok(!/scrollbar-gutter/.test(rule), 'no reserved gutter')
+  // The core styles every scrollbar globally, which reserves width; the column
+  // zeroes it and draws a floating bar over the diff instead.
+  assert.match(src, /::-webkit-scrollbar[^{]*\{width:0;height:0\}/, 'the native bars take no space')
+  assert.match(src, /\.grd \.ov-bar\{/, 'a floating bar is the affordance')
+  // Sticky file headers sit at z-index 2; a lower bar paints underneath them.
+  const bar = src.match(/\.grd \.ov-bar\{[^}]*\}/)?.[0] || ''
+  assert.match(bar, /z-index:6/, 'the bar must paint over the sticky headers')
+
+  // The sticky group label is pinned at top: 0; list padding above it let a
+  // scrolled row show through as a clipped band above the label.
+  const list = src.match(/\.gr-menu \.repo-menu\{[^}]*\}/)?.[0] || ''
+  assert.match(list, /padding:0/, 'no padding above the sticky label')
+})
+
+test('each file diff: rows span the scrolled width, and no scrollbar band', () => {
+  // Measured in Chromium with the real Hermes stylesheet: the per-file scroller is
+  // .diff, so a row width of 100% is the VISIBLE width and every background stopped
+  // at the first screen. The grid column carries the width instead; rows carry none.
+  // Earlier tests asserted on .rows/.af-body, which do not exist, so they passed
+  // while the bug stayed - these selectors are the real DOM.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const diff = src.match(/\.grd \.diff\{display:grid[^}]*\}/)?.[0] || ''
+  assert.match(diff, /grid-template-columns:minmax\(max-content,1fr\)/, 'the column must reach the widest row and fill the view')
+  assert.match(src, /\.grd \.diff\.wordw\{grid-template-columns:minmax\(0,1fr\)\}/, 'wrapped, the column is the view')
+  const line = src.match(/\.grd \.line\{display:flex[^}]*\}/)?.[0] || ''
+  assert.ok(!/width:100%/.test(line), 'a percentage row width pins the column to the view')
+  assert.match(src, /\.grd \.diff,\.grd \.splitwrap\{scrollbar-width:none\}/, 'no horizontal scrollbar band under a file')
+  assert.ok(!/\.grd \.(rows|af-body)\b/.test(src), 'no rules for elements the pane never renders')
+})
+
+test('a fold label stays centred on the view while its strip spans the scroll', () => {
+  // The strip is as wide as the scrolled row; the label is pinned to the scroller's
+  // visible box (sticky, one cqw-view wide), so it tracks the pane width live.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  assert.match(src, /\.grd \.diff,\.grd \.splitwrap\{container-type:inline-size\}/, 'the per-file scroller is the size container')
+  const inner = src.match(/\.grd \.fold-inner\{position:sticky[^}]*\}/)?.[0] || ''
+  assert.match(inner, /left:0/, 'pinned to the visible left edge')
+  assert.match(inner, /width:100cqw/, 'one view wide, from the live scroller width')
+  assert.match(inner, /justify-content:center/, 'centred inside the view')
+})
+
+test('diff text can be selected and copied, gutter excluded', () => {
+  // The pane is a review surface first: a drag over code must select text like an
+  // editor does, and the line numbers must not come along in the copy.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const line = src.match(/\.grd \.line\{[^}]*\}/)?.[0] || ''
+  assert.match(line, /cursor:text/, 'the code uses a text cursor')
+  assert.match(line, /user-select:text/, 'the code is selectable')
+  const gutter = src.match(/\.grd \.lineno\{[^}]*\}/)?.[0] || ''
+  assert.match(gutter, /user-select:none/, 'line numbers stay out of the copy')
+})
+
+test('tree counts share the label line box, so they centre on it', () => {
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const nums = src.match(/\.grd \.file \.fdelta,\.grd \.folder \.cnt\{[^}]*\}/)?.[0] || ''
+  assert.ok(nums, 'the count alignment rule exists')
+  assert.match(nums, /line-height:1/, 'the counts use a single-line box')
+})
+
+test('tree counts sit next to the name, in files and in folders', () => {
+  // Both carry their number immediately after the label; neither is pushed to the
+  // right edge of the column.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const cnt = src.match(/\.grd \.folder \.cnt\{[^}]*\}/)?.[0] || ''
+  assert.ok(cnt, 'the folder count style exists')
+  assert.ok(!/margin-left:auto/.test(cnt), 'the folder count must not be pushed right')
+  const file = src.match(/\.grd \.file \.fdelta\{[^}]*\}/)?.[0]
+  assert.equal(file, undefined, 'the file counts add no alignment rule')
+})
+
+test('toolbar icon buttons are ghost, so none of them draws a border', () => {
+  // The PR/MR button was the only icon-sm button on `outline`, which reads as an
+  // unwanted border next to its ghost siblings. Outline is reserved for the one
+  // text action (Cite in message) in the selection bar.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const outlined = src.match(/variant: "outline"/g) || [];
+  assert.equal(outlined.length, 1, 'exactly one outlined button, and it is text')
+  assert.match(src, /variant: "outline", size: "sm", "aria-label": "Cite selected lines/)
+})
+
+test('scrollToSelection lands the header exactly at the top of the diff column', () => {
+  // A section 300px into the column, already scrolled 200px, must return the
+  // absolute scrollTop that puts its header flush with the column's top edge.
+  assert.equal(scrollTopFor({ elementTop: 100, scrollerTop: 0, scrollTop: 200 }), 300)
+  // The column itself offset down the viewport: only the delta matters.
+  assert.equal(scrollTopFor({ elementTop: 140, scrollerTop: 40, scrollTop: 200 }), 300)
+  // Never overscroll past the top when the header is already above the fold.
+  assert.equal(scrollTopFor({ elementTop: 10, scrollerTop: 0, scrollTop: 0 }), 10)
+  assert.equal(scrollTopFor({ elementTop: 10, scrollerTop: 0, scrollTop: 0, sticky: 34 }), 0)
+})
+
+test('the file section keeps no scroll margin, so a jump cannot stop short', () => {
+  // scroll-margin-top made the sticky header land below the previous file's
+  // header; the offset is computed instead. A stray margin is invisible in logic
+  // tests and only shows up as a misaligned jump, so it is pinned here.
+  const css = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  assert.ok(!/\.af-file\{[^}]*scroll-margin-top/.test(css), 'no scroll margin on .af-file')
+})
+
+test('a menu group title has a rule above it, never below', () => {
+  const css = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const group = css.match(/\.menu-group\{[^}]*\}/)?.[0] || '';
+  assert.ok(group, 'the group style exists')
+  assert.ok(!/border-bottom/.test(group), 'the divider lives above the title only')
 })
 
 test('filesToOpen: only files whose changes changed, and only when collapsed', () => {
@@ -394,8 +513,26 @@ test('menu rows share one label slot, and the churn colours survive the portal',
   // churn colours, group headers and scroll cap silently stop applying.
   const surfaces = root.findAll(n => typeof n.props.className === 'string' && n.props.className.includes('repo-menu'))
   assert.ok(surfaces.length, 'menu surfaces missing')
-  assert.ok(surfaces.every(s => s.props.className.split(/\s+/).includes('gr-menu')),
-    'a menu surface is missing the menu scope class, so its content escapes every rule')
+  // The scroll container is a child of the menu surface, not the surface itself.
+  const inScope = (node) => {
+    for (let n = node; n; n = n.parent) {
+      const cls = typeof n.props?.className === 'string' ? n.props.className.split(/\s+/) : []
+      if (cls.includes('gr-menu')) return true
+    }
+    return false
+  }
+  // The branch label must not sit inside a scroll container: inside one, the
+  // list's padding let a scrolled row paint above the pinned label.
+  const head = root.findAll(n => typeof n.props?.children === 'string' && n.props.children.startsWith('Compare against'))
+  assert.ok(head.length, 'the compare label is missing')
+  for (const label of head) {
+    for (let n = label.parent; n; n = n.parent) {
+      const cls = typeof n.props?.className === 'string' ? n.props.className.split(/\s+/) : []
+      assert.ok(!cls.includes('repo-menu'), 'the label renders inside the scrolling list')
+    }
+  }
+  assert.ok(surfaces.every(inScope),
+    'a scroll container sits outside the menu scope class, so its content escapes every rule')
   const css = root.findAll(n => n.type === 'style').map(n => (n.children || []).join('')).join('')
   assert.match(css, /\.gr-menu \.fdelta \.add\{color:var\(--ui-green\)\}/, 'the added-line colour is not scoped to the menu surface')
   assert.match(css, /\.gr-menu \.fdelta \.del\{color:var\(--ui-red\)\}/, 'the removed-line colour is not scoped to the menu surface')
@@ -419,4 +556,14 @@ test('search input callback filters real diff files case-insensitively', async t
   assert.deepEqual(paths(root), [files[2]])
   await act(async () => search.props.onChange(''))
   assert.deepEqual(paths(root), files)
+})
+
+test('pane settings are scoped to profile, connection and workspace', () => {
+  const A = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a')
+  const B = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/b')
+  const C = settingsKeyFor(JSON.stringify(['other', 'default']), '/repo/a')
+  assert.notEqual(A, B, 'a different workspace must not share settings')
+  assert.notEqual(A, C, 'a different connection must not share settings')
+  assert.equal(A, settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a'), 'the same scope is stable across renders')
+  assert.ok(A.startsWith('display.v1:'), 'the key stays versioned so a future shape can migrate')
 })

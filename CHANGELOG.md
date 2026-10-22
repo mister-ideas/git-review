@@ -2,6 +2,20 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.19 — 2026-10-22
+
+Measured against a real Chromium render of the pane rather than inferred from the
+source, which is how the last two rounds of layout reports were settled.
+
+- **Each file's diff scrolls to the width of its longest line.** The scroll width was on the rows, so a row was only as wide as the view: past the first screen a change lost its background and unmodified-lines bars stopped short. The column is a grid sized `minmax(max-content, 1fr)`; rows carry no width of their own. Wrapped, the column stays the view.
+- **No scrollbar band.** Hermes styles every scrollbar, which reserved a strip under each file that scrolls sideways; `.diff` and `.splitwrap` opt out, and horizontal scrolling stays available by trackpad and shift+wheel.
+- **The unmodified-lines label is centred on the view** while its strip still reaches the end of the scroll, and follows the pane width live.
+- **Line citation and text selection coexist.** The code keeps a text cursor and native selection; a click on a line still anchors a range and the gutter selects and drags with pointer capture, with a drag handle that has its own room in the gutter.
+- **Cite inserts a real reference.** Citation went through `insertText`, which appends plain text; it now reads the draft and appends through `setDraft`, the contract that hydrates an `@line:` token into a composer chip, with `insertText` as the fallback.
+- **Review next file reaches the next collapsed file**, and a file near the end of the list scrolls past the end by the missing distance so its header can reach the top.
+- **The tree's churn counts sit next to their name** in files and folders, centred on the same line box.
+- **Menu surfaces carry no padding**, so a pinned group label no longer shows a clipped row above it, and the branch label sits outside the scrolling list.
+
 ## 0.1.18 — 2026-10-20
 
 Everything since 0.1.16, from reports against a running pane: the fold geometry,

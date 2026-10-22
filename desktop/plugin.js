@@ -2,7 +2,9 @@
 // Plain ESM loaded uncompiled — jsx() calls, not JSX syntax. Imports restricted to the
 // loader allowlist: @hermes/plugin-sdk, react, react/jsx-runtime.
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
-import { useState, useEffect, useMemo, useRef, useCallback, forwardRef } from "react";
+import {
+  useState, useEffect, useMemo, useRef, useCallback, forwardRef,
+} from "react";
 import {
   Badge, Button, Codicon, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, EmptyState,
@@ -290,7 +292,7 @@ const css = `
 .grd .resizer::after{content:"";position:absolute;left:1px;top:0;bottom:0;width:2px;background:transparent}
 .grd .resizer:hover::after,.grd .resizer:focus-visible::after,.grd .resizer:active::after{background:var(--ui-sash-hover-border,var(--ui-accent))}
 .grd .body.tree-hidden{grid-template-columns:minmax(0,1fr)}
-.grd .allfiles{overflow:auto;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0;scrollbar-gutter:stable}
+.grd .allfiles{overflow:auto;position:relative;scrollbar-width:none;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0}
 .grd .tree-side{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0;border-left:0;background:transparent}
 .grd .body{column-gap:0}
 .grd .tree-side .tree{overflow:auto;flex:1;min-height:0}
@@ -309,6 +311,14 @@ const css = `
   .dark .grd .file:hover{background:#1c1c20}
   .dark .grd .file[aria-pressed=true]{background:#242426}
   .dark .grd .fname{color:#e8e8e8}
+/* Churn counts sit immediately after the name, in the file tree as in the folders'
+   file counts: the numbers describe the row they follow, not a right-hand column. */
+.grd .file .fname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The counts are 10.5px against a 12px label. With normal line-height their text box
+   centres on a different baseline, so the digits read a pixel low next to the name;
+   one line-height for both boxes, and the numbers centre on the label. */
+.grd .file .fname,.grd .folder > span:first-of-type{line-height:1.2}
+.grd .file .fdelta,.grd .folder .cnt{line-height:1;align-self:center}
   .dark .grd .detailhead{border-color:#2b2b2d}
   .dark .grd .detailtitle .fdir{color:#6b6b6b}
   .dark .grd .search{border-bottom-color:#2b2b2d}
@@ -319,10 +329,10 @@ const css = `
   .dark .grd .search-field > svg{color:#9b9b9b}
   .dark .grd .filter-wrap.active{color:#e8e8e8}
   .dark .grd .filter-wrap.active .filter-btn{background:#2b2b2d}
-  .dark .grd .lineno{color:#6b6b6b}
+  .dark .grd .lineno{color:#6b6b6b;user-select:none;-webkit-user-select:none}
   .dark .grd .line.hunk{color:#9a9a9a;background:#161618}
   .dark .grd .fold{color:#6b6b6b}
-  .dark .grd .fold-strip{background:#161618}
+  .dark .grd .fold-strip{background:var(--ui-surface-background)}
   .dark .grd .menu-group,.dark .gr-menu .menu-group{color:#6b6b6b}
   .dark .grd .af-head{background:#161618}
   .dark .grd .af-head:hover{background:#1c1c20}
@@ -330,7 +340,7 @@ const css = `
   .dark .grd .af-copy{color:#6b6b6b}
   .dark .grd .af-copy:hover{color:#c9c9c9}
   .dark .grd .notice{background:#161618;color:#9a9a9a}
-  .dark .grd .fold-inline{background:#161618}
+  .dark .grd .fold-inline{background:var(--ui-surface-background)}
   .dark .grd .fold-inline:hover{background:#242426}
   .dark .grd .line.add{background:#123a24}
   .dark .grd .line.add .lineno{color:#4ade80}
@@ -338,8 +348,6 @@ const css = `
   .dark .grd .line.remove .lineno{color:#f87171}
   .dark .grd .line.line-selected{background:#242426}
   .dark .grd .split-row > .line + .line{border-color:#2b2b2d}
-  .dark .grd .allfiles::-webkit-scrollbar-thumb{background:#2b2b2d}
-  .dark .grd .allfiles::-webkit-scrollbar-thumb:hover{background:#3b3b3b}
 
 .grd .search-field > svg{color:var(--ui-text-secondary);flex-shrink:0}
 .grd .search .filter-wrap{flex:0 0 auto;display:inline-flex}
@@ -348,7 +356,7 @@ const css = `
 .grd .tree{overflow:auto;flex:1;min-height:0;padding-bottom:10px}
 .grd .folder{display:flex;align-items:center;gap:5px;padding:4px 10px;color:var(--ui-text-secondary);font-size:12px;cursor:pointer;user-select:none}
 .grd .folder:hover{background:var(--ui-row-hover-background)}
-.grd .folder .cnt{margin-left:auto;font-size:10.5px;color:var(--ui-text-tertiary)}
+.grd .folder .cnt{font-size:10.5px;color:var(--ui-text-tertiary)}
 .grd .file{width:100%;text-align:left;border:0;border-radius:0;padding:5px 10px 5px 24px;background:transparent;display:flex;align-items:center;gap:8px;min-width:0;color:inherit;font:inherit}
 .grd .file:hover{background:var(--ui-row-hover-background)}
 .grd .file[aria-pressed=true]{background:var(--ui-row-active-background)}
@@ -361,12 +369,38 @@ const css = `
 .grd .detailtitle .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .grd .diff{overflow:auto;flex:1;min-height:0;margin:0;tab-size:4;font:12px/1.75 var(--font-mono,monospace)}
-.grd .line{display:flex;min-width:max-content;white-space:pre;padding:0 6px;align-items:baseline;cursor:pointer}
+/* Each file's diff is its own horizontal scroller, so a row's width:100% is the
+   VISIBLE width, never the scrolled one: past the first screen a change lost its
+   background. A one-column grid sized minmax(max-content, 1fr) is at least as wide
+   as the widest row and grows to fill the view when every line is short; rows
+   stretch to it, change backgrounds and unmodified-lines bars included. (Measured:
+   minmax(100%, max-content) stays at the view width in Chromium, and a bare
+   max-content column shrinks short files below the view.) Rows carry no width of
+   their own - a percentage there resolves to the view and pins the column to it.
+   Wrapped, the column is the view: nothing overflows. */
+.grd .diff{display:grid;grid-template-columns:minmax(max-content,1fr);align-content:start}
+.grd .diff.wordw{grid-template-columns:minmax(0,1fr)}
+.grd .line{display:flex;width:auto;min-width:0;white-space:pre;padding:0 6px;align-items:baseline;cursor:text;user-select:text;-webkit-user-select:text}
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
 .grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
-.grd .cite-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
+.grd .cite-bar{display:flex;align-items:center;line-height:1;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
 .grd .cite-bar .cite-ref{font-family:var(--font-mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.grd .gutter{display:flex;align-items:baseline;flex:none;cursor:pointer;user-select:none;-webkit-user-select:none;position:relative}
+/* Selection is click-based: click a line, click another to close the range. A grab
+   handle is deliberately not drawn - pressing the gutter began a selection that a
+   release dropped, which read as a broken affordance. Real drag-to-select needs
+   pointer capture, not hover handlers. */
+/* The handle needs its own room, or it lands on the digits. The gutter reserves it
+   permanently so the numbers never shift when the handle appears on hover. */
+.grd .gutter{padding-left:11px;cursor:grab}
+.grd .gutter:active{cursor:grabbing}
+.grd .gutter::before{content:"";position:absolute;left:2px;top:50%;width:3px;height:3px;border-radius:50%;
+  background:var(--ui-text-secondary);transform:translateY(-50%);opacity:0;transition:opacity .12s ease;
+  box-shadow:4px 0 0 var(--ui-text-secondary),
+             0 -5px 0 var(--ui-text-secondary),4px -5px 0 var(--ui-text-secondary),
+             0 5px 0 var(--ui-text-secondary),4px 5px 0 var(--ui-text-secondary)}
+.grd .line:hover .gutter::before,.grd .line-selected .gutter::before{opacity:0.85}
 .grd .lineno{flex:0 0 calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);text-align:right;padding:0;color:var(--ui-text-tertiary);user-select:none;font-variant-numeric:tabular-nums;font:inherit;opacity:0.75}
 .grd .lineno + .lineno{flex-basis:calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);margin-left:4px;padding-left:4px;border-left:1px solid var(--ui-stroke-tertiary)}
 .grd .linecode{padding-left:6px;flex:1 0 auto;min-width:0}
@@ -382,10 +416,19 @@ const css = `
 .grd .fold::before,.grd .fold::after{content:"";flex:1;border-top:1px solid var(--ui-stroke-tertiary)}
 .grd .fold-strip{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--ui-surface-background);pointer-events:none}
 .grd .fold-inner{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px}
-/* Always-visible scrollbar on the changes pane (core CSS hides thumbs until
-   hover; unlayered scoped rules win over the layered global ones). */
-.grd .allfiles::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--dt-scrollbar-thumb) 35%,transparent)}
-.grd .allfiles::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--dt-scrollbar-thumb) 60%,transparent)}
+/* Hermes core styles *::-webkit-scrollbar globally, so every scroller gets a
+   classic bar that reserves its width. The column hides it and draws .ov-bar
+   instead: absolutely positioned over the diff, so it takes no width, and it
+   fades a moment after scrolling stops. */
+.grd .allfiles::-webkit-scrollbar{width:0;height:0}
+/* Hermes styles every scrollbar, which reserves a band under each file that scrolls
+   sideways. scrollbar-width is the standard switch and, once set, Chromium ignores
+   the global ::-webkit-scrollbar rule; the pseudo-element covers older engines.
+   Horizontal scrolling stays available by trackpad and shift+wheel. */
+.grd .diff,.grd .splitwrap{scrollbar-width:none}
+.grd .diff::-webkit-scrollbar,.grd .splitwrap::-webkit-scrollbar{display:none;width:0;height:0}
+.grd .ov-bar{position:absolute;right:2px;top:0;width:6px;border-radius:3px;pointer-events:none;z-index:6;
+  background:color-mix(in srgb,var(--dt-scrollbar-thumb) 45%,transparent);opacity:0;transition:opacity .18s ease;will-change:transform}
 /* Right sidebar: vertical scroll only; long names ellipsize, never overflow. */
 .grd .tree-side .tree{overflow-x:hidden}
 .grd .folder{min-width:0}
@@ -397,11 +440,20 @@ const css = `
 .grd .split-row .linecode{min-width:0}
 .grd .line.empty{background:transparent}
 .grd .splitwrap > .line{min-width:0}
-.grd .repo-menu,.gr-menu .repo-menu{max-height:380px;overflow-y:auto}
+.grd .repo-menu,.gr-menu .repo-menu{max-height:380px;overflow-y:auto;padding:0;margin:0}
+.grd .menu-head,.gr-menu .menu-head{position:static;top:auto;z-index:auto;padding:6px 10px 3px}
+/* The menu surface carries no padding of its own: any top padding became a band
+   above a pinned group label, where a scrolled row could still show through.
+   Rows and labels bring their own spacing, so nothing needs it. */
+.grd .gr-menu,.gr-menu{padding:0}
 .grd .gr-menu [role="separator"]{margin:4px 0}
-.grd .menu-group,.gr-menu .menu-group{padding:8px 10px 4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
+.grd .menu-group,.gr-menu .menu-group{padding:4px 10px 3px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ui-text-tertiary);user-select:none;position:sticky;top:0;z-index:1;/* The menu paints its surface 96% opaque on the content element itself; a sticky
    child inheriting from the wrapper gets nothing, so name the token and stay opaque. */background:var(--ui-bg-elevated,var(--ui-surface-background))}
-.grd .af-file{scroll-margin-top:34px;border-bottom:1px solid var(--ui-stroke-tertiary)}
+.grd .af-file{/* Skip layout and paint for file sections that are off-screen. The browser
+   remembers each section's measured height, so the scrollbar does not jump. No
+   padding or margin of its own: the section's border is the only gap between files,
+   whether the file ends in a change line or in an unmodified-lines bar. */
+  content-visibility:auto;contain-intrinsic-size:auto 600px;padding:0;margin:0;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-file.af-collapsed{border-bottom:0}
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-head:hover{background:var(--ui-surface-background)}
@@ -427,6 +479,15 @@ const css = `
 .grd .fold:focus-visible{outline:2px solid var(--ui-accent);outline-offset:-2px}
 @container(max-width:560px){.grd .body{grid-template-columns:minmax(0,1fr) minmax(150px,30%)}.grd .toolbar{gap:4px;padding-inline:6px}}
 .grd .fold,.grd .fold-inner{white-space:nowrap}
+/* The fold row spans the whole scrolled width (its strip must reach the end), but
+   its label belongs to the view: centred in a row thousands of pixels wide it sat
+   off-screen. The label is pinned to the scroller's visible box - sticky at left 0,
+   one view wide (cqw of the per-file scroller) - and centres inside it. The rule
+   segments beside it were painted under the strip and never visible; without them
+   the label is the only flex item and nothing pushes it sideways. */
+.grd .diff,.grd .splitwrap{container-type:inline-size}
+.grd .fold::before,.grd .fold::after{display:none}
+.grd .fold-inner{position:sticky;left:0;flex:none;width:100cqw;justify-content:center}
 .check-slot{display:inline-flex;align-items:center;justify-content:center;width:1rem;flex:0 0 1rem}
 @container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .resizer{display:none}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
 `;
@@ -665,15 +726,49 @@ function GitReview({ ctx }) {
     lastHandled.current = -1;
     ++generation.current; ++focusGeneration.current;
     setWorktrees([]); setChosen(""); setMeta(null); setDiff(null); setPr(null);
-    setScope("uncommitted"); setBase(""); setRef(""); setPathFilter("");
+    // A different profile or connection is a different backend: its scope, base and
+    // repository do not carry over. A WORKSPACE switch inside one connection does not
+    // run this effect, which is what keeps the reviewer's choices across sessions.
+    setScope("uncommitted"); setBase("");
+    setRef(""); setPathFilter("");
     setCommits([]); setPicked(new Set()); setCommitsLoading(false); setHistoryNote(""); setAllHistory(false); setNavIndex(-1); setHasMore(false);
     commitSelectionOwner.current = ""; commitSelectionExplicit.current = false;
     setSelected(""); setFilter(""); setExpanded({}); setContextModes({}); setFullFiles({});
     setError(""); setRepositoryIdentity(identity);
   }, [identity, repositoryReady]);
 
+  // Saved on change only: the first run of each effect fires with the value restore
+  // just read, and writing it back would race the display-settings restore.
+  // Restore the reviewer's scope and comparison base once the settings are readable:
+  // they are pane state, not workspace state, so a session or workspace switch keeps
+  // them. This runs before the persist effects, whose first run is skipped.
+  const restoredScope = useRef(false);
+  useEffect(() => {
+    if (restoredScope.current) return;
+    restoredScope.current = true;
+    const saved = readSettings();
+    if (saved.scope) setScope(saved.scope);
+    if (typeof saved.base === "string" && saved.base) setBase(saved.base);
+  }, [readSettings]);
+  const firstPersist = useRef({ base: true, repo: true, scope: true });
+  useEffect(() => {
+    if (firstPersist.current.scope) { firstPersist.current.scope = false; return; }
+    persist({ scope });
+  }, [scope]);
+  useEffect(() => {
+    if (firstPersist.current.base) { firstPersist.current.base = false; return; }
+    persist({ base });
+  }, [base]);
+  useEffect(() => {
+    if (firstPersist.current.repo) { firstPersist.current.repo = false; return; }
+    if (chosen) persist({ repo: chosen });
+  }, [chosen]);
+
   // Selections are repo/scope bound: drop them when either changes.
-  useEffect(() => { setLineSelection(null); }, [chosen, scope]);
+  // Only a scope switch invalidates a line selection. Keying this on `chosen` too
+  // wiped it on every background refresh, which is why a second click landed on an
+  // already-cleared state.
+  useEffect(() => { setLineSelection(null); }, [scope]);
 
   const persist = (patch) => { try { ctx.storage.set(settingsKey, { ...ctx.storage.get(settingsKey, {}), ...patch }); } catch { /* best-effort */ } };
 
@@ -722,7 +817,12 @@ function GitReview({ ctx }) {
   }, [ctx, cwd, tick, identity, repositoryReady]);
 
   useEffect(() => {
-    if (repositoryReady && !chosen && worktrees.length) setChosen(worktrees[0].path);
+    if (!repositoryReady || chosen || !worktrees.length) return;
+    // Only the scoped entry: the unscoped fallback holds another connection's
+    // settings, and a repository path is not portable across connections.
+    let saved = "";
+    try { saved = (ctx.storage.get(settingsKey, {}) || {}).repo || ""; } catch { saved = ""; }
+    setChosen(saved && worktrees.some((w) => w.path === saved) ? saved : worktrees[0].path);
   }, [worktrees, chosen, repositoryReady]);
 
   // Agent-driven selection: the git_review_select tool pushes a request into the
@@ -957,6 +1057,22 @@ function GitReview({ ctx }) {
   // showing what is new without a click per edit. Signatures are kept per scope:
   // switching scope is not a change.
   const seenSections = useRef(null);
+  // The floating scrollbar updates the DOM directly: a scroll event must never
+  // re-render the diff tree, which is the expensive part of this pane.
+  const barRef = useRef(null);
+  const barTimer = useRef(null);
+  const onDiffScroll = (event) => {
+    const el = event.currentTarget;
+    const bar = barRef.current;
+    if (!bar) return;
+    const max = Math.max(1, el.scrollHeight - el.clientHeight);
+    const h = Math.max(28, (el.clientHeight * el.clientHeight) / el.scrollHeight);
+    bar.style.height = `${h}px`;
+    bar.style.transform = `translateY(${el.scrollTop + (el.scrollTop / max) * (el.clientHeight - h)}px)`;
+    bar.style.opacity = "1";
+    clearTimeout(barTimer.current);
+    barTimer.current = setTimeout(() => { bar.style.opacity = "0"; }, 800);
+  };
   useEffect(() => {
     const sigs = new Map(sections.map((s) => [s.path, sectionSignature(s)]));
     // Nothing loaded yet is not an observation: recording an empty list would make
@@ -1001,15 +1117,16 @@ function GitReview({ ctx }) {
   const isTestPath = (p) => /(^|[/\\])(test|tests|__tests__|spec)([/\\]|$)|\.(test|spec)\.[^.]+$|\btest_[^/]*\.py$/i.test(p);
   // Stable across renders: a fresh array here invalidated every downstream memo
   // and re-mapped the whole diff tree on any click.
+  const dq = filter.trim().toLowerCase();
   const visibleFiles = useMemo(() => sections.filter((s) => {
     // Search covers the changes, not only the file names: a reviewer looks for
     // the identifier they changed, which is not in the path.
-    if (q && !(s.hay || "").includes(q)) return false;
+    if (dq && !(s.hay || "").includes(dq)) return false;
     const st = stats.get(s.path);
     if (!showDeleted && st?.status === "deleted") return false;
     if (!showTests && isTestPath(s.path)) return false;
     return true;
-  }), [sections, q, showDeleted, showTests, stats]);
+  }), [sections, dq, showDeleted, showTests, stats]);
   const hiddenByFilters = sections.filter((s) => (!showDeleted && stats.get(s.path)?.status === "deleted") || (!showTests && isTestPath(s.path))).length;
   const allCollapsed = visibleFiles.length > 0 && visibleFiles.every((s) => collapsedFiles[s.path]);
   const tree = useMemo(() => compactTree(buildTree(visibleFiles.map((s) => s.path))), [visibleFiles]);
@@ -1020,6 +1137,30 @@ function GitReview({ ctx }) {
   const [lineSelection, setLineSelection] = useState(null); // {file, sha, side, anchor?, start, end}
   // Only new-side lines of the CURRENT file reach here (callers gate on
   // scope and row kind): ranges always cite the file the composer will read.
+  // The gutter is the selection surface, the way an editor does it: the code itself
+  // keeps its text cursor and native copy, so a drag over code selects text while a
+  // drag down the line numbers selects a cite range.
+  const gutterAnchor = useRef(null);
+  const onGutterDown = (s, row) => (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const line = row.after;
+    if (line == null) return;
+    const file = s.filePath || s.path;
+    gutterAnchor.current = { file, line };
+    onLineClick(s, row)(event);
+  };
+  const onGutterEnter = (s, row) => (event) => {
+    if (event.buttons !== 1 || !gutterAnchor.current) return;
+    const line = row.after;
+    if (line == null) return;
+    const file = s.filePath || s.path;
+    if (gutterAnchor.current.file !== file) return;
+    const anchor = gutterAnchor.current.line;
+    const lo = Math.min(anchor, line), hi = Math.max(anchor, line);
+    setLineSelection({ file, sha: s.sha, anchor: null, start: lo, end: hi });
+  };
   const onLineClick = (s, row) => (event) => {
     event.stopPropagation();
     const line = row.after;
@@ -1053,12 +1194,26 @@ function GitReview({ ctx }) {
     if (!lineSelection) return;
     if (!CITABLE_SCOPES.has(scope)) return; // stored selection predates a scope switch
     const { file, start, end } = lineSelection;
-    // Real SDK signature: insertText(sessionId, text, opts) — null targets the
-    // focused composer. 'inline' keeps the chip on the current line.
-    const result = host.composer.insertText(null, citeRefText(file, start, end), { mode: "inline" });
-    Promise.resolve(result).catch(() => {}).then((ok) => {
-      if (ok === false) host.notify({ kind: "info", message: "No focused composer — click into the chat input first." });
-    });
+    const ref = citeRefText(file, start, end);
+    // setDraft is the contract that turns an `@`-ref token into a composer chip: the
+    // app re-renders the draft through its own paint path (insertText only appends
+    // plain text). Read the draft first so the reference is appended, not the draft
+    // replaced; fall back to insertText on a host that predates getDraft/setDraft.
+    const composer = host.composer || {};
+    if (typeof composer.getDraft === "function" && typeof composer.setDraft === "function") {
+      Promise.resolve(composer.getDraft(null)).catch(() => null).then((base) => {
+        const draft = typeof base === "string" ? base : "";
+        const text = draft.trim() ? `${draft.trimEnd()} ${ref}` : ref;
+        return Promise.resolve(composer.setDraft(null, text));
+      }).then((ok) => {
+        if (ok === false) host.notify({ kind: "info", message: "No focused composer — click into the chat input first." });
+      }).catch(() => {});
+    } else {
+      const result = composer.insertText(null, ref, { mode: "inline" });
+      Promise.resolve(result).catch(() => {}).then((ok) => {
+        if (ok === false) host.notify({ kind: "info", message: "No focused composer — click into the chat input first." });
+      });
+    }
     setLineSelection(null);
   };
   // Drag-to-cite: every code line is draggable. The payload mirrors the composer's
@@ -1081,6 +1236,42 @@ const EMPTY_SCOPE = {
 };
 const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
   const LINE_DRAG_MIME = "application/x-hermes-paths";
+  const gutterHandlers = (s, file) => (row) => {
+    if (!CITABLE_SCOPES.has(scope) || !row || row.after == null || row.kind === "remove") return null;
+    // Press and drag, with pointer capture: the capture keeps pointermove events on
+    // the gutter, so the range extends across rows even when the pointer leaves the
+    // cell. A press without movement is the click that anchors one line.
+    const lineOf = (event) => {
+      const el = document.elementFromPoint(event.clientX, event.clientY);
+      const rowEl = el && el.closest ? el.closest(".line[data-line]") : null;
+      const n = rowEl && rowEl.getAttribute("data-line");
+      return n == null || n === "" ? null : Number(n);
+    };
+    return {
+      onPointerDown: (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();   // the pane clears a selection on an outside click
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* optional */ }
+        gutterAnchor.current = { file, line: row.after };
+        onLineClick(s, row)(event);
+      },
+      onPointerMove: (event) => {
+        const anchor = gutterAnchor.current;
+        if (!anchor || anchor.file !== file || event.buttons !== 1) return;
+        const target = lineOf(event);
+        if (target == null) return;
+        setLineSelection({
+          file, sha: s.sha, anchor: null,
+          start: Math.min(anchor.line, target), end: Math.max(anchor.line, target),
+        });
+      },
+      onPointerUp: (event) => {
+        try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* released */ }
+      },
+      onClick: (event) => event.stopPropagation(),
+    };
+  };
   const lineDragProps = (file) => (row) => {
     if (!CITABLE_SCOPES.has(scope)) return {};
     if (!chosen) return {};
@@ -1107,18 +1298,40 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
   // files that changed, opening each, without hunting in the tree.
   const reviewNext = () => {
     if (!visibleFiles.length) return;
+    // The destination is the next file the reviewer COLLAPSED - a collapsed file is
+    // the one still waiting for review - not simply the next row. With nothing
+    // collapsed the button still advances, so it never goes dead.
     const at = visibleFiles.findIndex((s) => s.path === active.path);
-    const next = visibleFiles[(at + 1) % visibleFiles.length];
-    if (next) scrollToSelection(next.path);
+    const after = [...visibleFiles.slice(at + 1), ...visibleFiles.slice(0, Math.max(0, at + 1))];
+    const next = after.find((s) => collapsedFiles[s.path]) || after.find((s) => s.path !== active.path);
+    // Stepping through files is navigation, not a layout edit: the target keeps its
+    // collapsed state and its header is the destination.
+    if (next) scrollToSelection(next.path, { reveal: false });
   };
 
   // Clicking a file in the tree scrolls the stacked diff to that file's section.
-  const scrollToSelection = (path) => {
+  // `reveal` is for the tree, where clicking a file means "show me this one". The
+  // toolbar's step-through does not pass it, so collapse state survives.
+  const scrollToSelection = (path, { reveal = true } = {}) => {
     setSelected(path);
-    setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
+    if (reveal) setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
     requestAnimationFrame(() => {
-      const section = document.querySelector(`.af-file[data-path="${CSS.escape(path)}"]`);
-      section?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const scroller = document.querySelector(".grd .allfiles");
+      const section = scroller?.querySelector(`.af-file[data-path="${CSS.escape(path)}"]`);
+      if (!scroller || !section) return;
+      const top = scrollTopFor({
+        elementTop: section.getBoundingClientRect().top,
+        scrollerTop: scroller.getBoundingClientRect().top,
+        scrollTop: scroller.scrollTop,
+      });
+      // A file near the end of the list (collapsed files are short) cannot reach the
+      // top: the column stops scrolling first, and the header stays under the
+      // previous file's sticky one. Scroll past the end by exactly the missing
+      // distance - the editor convention - and drop it on a jump that needs none.
+      const tail = parseFloat(scroller.style.paddingBottom) || 0;
+      const max = scroller.scrollHeight - tail - scroller.clientHeight;
+      scroller.style.paddingBottom = `${Math.max(0, Math.ceil(top - max))}px`;
+      scroller.scrollTo({ top, behavior: "smooth" });
     });
   };
   const scopeLabel = scope === "commits" ? (picked.size ? `Commits (${picked.size})` : "Commits")
@@ -1223,9 +1436,12 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
           // sentence, never on the control.
           jsx(RepoButton, { icon: "git-branch", label: shortLabel(shownBase || "main") })
         }),
-        jsx(DropdownMenuContent, { className: "gr-menu repo-menu", children: [
-          jsx("div", { className: "menu-group", role: "presentation", children: "Compare against…" }, "hdr"),
-          ...branchRows.map((row) => jsx(DropdownMenuItem, { onSelect: () => {
+        jsx(DropdownMenuContent, { className: "gr-menu", children: [
+          // The label sits OUTSIDE the scrolling list. Inside it, the list's own
+          // padding showed a clipped row above the sticky label; outside, no row
+          // can ever render above it.
+          jsx("div", { className: "menu-group menu-head", role: "presentation", children: "Compare against…" }, "hdr"),
+          jsx("div", { className: "repo-menu", children: branchRows.map((row) => jsx(DropdownMenuItem, { onSelect: () => {
             // A different base is a different commit range: the previous picks no
             // longer belong to it, so they must not stay selected.
             setAllHistory(false); setBase(row.value); setPicked(new Set()); setNavIndex(-1); commitSelectionExplicit.current = false;
@@ -1235,14 +1451,14 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
             row.name === meta?.current
               ? jsx("span", { style: { color: "var(--ui-text-tertiary)", fontSize: 11 }, children: "current" })
               : (shortLabel(shownBase) === row.name && !base ? jsx("span", { style: { color: "var(--ui-text-tertiary)", fontSize: 11 }, children: "default" }) : null)
-          ] }) }, row.value))
+          ] }) }, row.value)) })
         ] })
       ] }),
       // Right-side controls group (PR · display · collapse all · file list); margin-left:
       // auto pushes it right WITHOUT a spacer stealing flex space from the
       // repo/branch buttons.
       jsxs("div", { className: "toolbar-end", children: [
-      pr?.url ? jsx(Tip, { label: pr.title || "Open merge request", children: jsx(Button, { variant: "outline", size: "icon-sm", "aria-label": pr.iid != null ? `Open ${pr.url.includes("github") ? `PR #${pr.iid}` : `MR !${pr.iid}`}` : "Open pull request", onClick: openPR, children: jsx(Codicon, { name: "git-pull-request", size: "0.9rem" }) }) }) : null,
+      pr?.url ? jsx(Tip, { label: pr.title || "Open merge request", children: jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": pr.iid != null ? `Open ${pr.url.includes("github") ? `PR #${pr.iid}` : `MR !${pr.iid}`}` : "Open pull request", onClick: openPR, children: jsx(Codicon, { name: "git-pull-request", size: "0.9rem" }) }) }) : null,
       jsxs(DropdownMenu, { children: [
         jsx(DropdownMenuTrigger, { asChild: true, children:
           jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Display options", children: jsx(Codicon, { name: "ellipsis", size: "0.9rem" }) })
@@ -1309,7 +1525,8 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
           ? jsx(EmptyState, { title: (EMPTY_SCOPE[scope] || ["No changes in this scope"])[0], description: (EMPTY_SCOPE[scope] || [null, "Try a different scope or worktree."])[1] })
           : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), style: visible.files && filesWidth ? { "--files-w": `${filesWidth}px` } : undefined, children: [
             // MAIN: every changed file's diff stacked (Cursor Changes), scroll to the last one.
-            jsxs("div", { className: "allfiles", children: [
+            jsxs("div", { className: "allfiles", onScroll: onDiffScroll, children: [
+              jsx("div", { ref: barRef, className: "ov-bar", "aria-hidden": true }),
               !visibleFiles.length && jsx(EmptyState, { title: q ? `No files match “${filter.trim()}”` : "All files are hidden by filters", description: sections.length ? "Clear the search or adjust the filters." : "" }),
               visibleFiles.map((s) => {
               const collapsed = !!collapsedFiles[s.path];
@@ -1424,9 +1641,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
                   }
                   if (hunk != null) lastHunk = hunk;
                   out.push(pair.shared
-                    ? renderUnifiedRow(pair.shared, `shared:${i}`, clickFor, selectedLines, dragFor)
+                    ? renderUnifiedRow(pair.shared, `shared:${i}`, gutterFor, selectedLines, dragFor)
                     : jsxs("div", { className: "split-row", "data-diff-row": i, children: [
-                        renderSplitRow(pair.left, i, "left", clickFor, selectedLines, dragFor), renderSplitRow(pair.right, i, "right", clickFor, selectedLines, dragFor),
+                        renderSplitRow(pair.left, i, "left", gutterFor, selectedLines, dragFor), renderSplitRow(pair.right, i, "right", gutterFor, selectedLines, dragFor),
                       ] }, i));
                 });
                 const bottom = gaps.find((g) => g.key === "bottom");
@@ -1451,7 +1668,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
                     if (g) { run.gap(g); run.row(); }
                   }
                   if (row.hunk != null) lastHunk = row.hunk;
-                  out.push(split ? row : renderUnifiedRow(row, `${row.kind}:${row.before}:${row.after}:${row.hunk}`, clickFor, selectedLines, dragFor));
+                  out.push(split ? row : renderUnifiedRow(row, `${row.kind}:${row.before}:${row.after}:${row.hunk}`, gutterFor, selectedLines, dragFor));
                 }
                 if (!split) {
                   const bottom = gaps.find((g) => g.key === "bottom");
@@ -1465,7 +1682,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
                 ? new Set(Array.from({ length: lineSelection.end - lineSelection.start + 1 }, (_, n) => lineSelection.start + n))
                 : null;
               // Range selection drives citations — same eligibility as drag.
-              const clickFor = CITABLE_SCOPES.has(scope) ? (row) => (event) => onLineClick(s, row)(event) : null;
+              const gutterFor = CITABLE_SCOPES.has(scope) ? gutterHandlers(s, file) : null;
               const dragFor = lineDragProps(file);
               // Files whose patch carries no hunks (binary, mode-only, pure rename)
               // render a single muted note instead of an empty body.
@@ -1719,43 +1936,55 @@ const FullBar = ({ path, label, onToggle }) =>
 // Cite/drag only rows that exist in the CURRENT file (a new-side number).
 // Removed lines have only an old-side number: citing them would point the
 // agent at the wrong line of today's file, so they are not clickable.
-function renderUnifiedRow(row, key, onLineClick, selectedLines, lineDragProps) {
+function renderUnifiedRow(row, key, gutterFor, selectedLines, lineDragProps) {
   const line = row.after; // current-file number
   // Removed lines don't exist in the current file: citing or dragging them
-  // would point the agent at the wrong line — no click, no drag.
-  const clickable = onLineClick && line != null && row.kind !== "remove";
+  // would point the agent at the wrong line — no selection, no drag.
+  const selectable = gutterFor && line != null && row.kind !== "remove";
   const highlighted = selectedLines?.has(line);
-  const drag = clickable && lineDragProps ? lineDragProps(row) : {};
+  // A draggable element starts a native drag on press, which swallows the hover the
+  // range selection needs. Drag is therefore offered only once the line is selected;
+  // press-drag extends a range, drag from a selected line still cites.
+  const drag = selectable && highlighted && lineDragProps ? lineDragProps(row) : {};
   return jsxs("span", {
     className: cn(`line ${row.kind}`, highlighted && "line-selected"),
     "data-line": line,
-    onClick: clickable ? (event) => onLineClick(row)(event) : undefined,
-    ...drag,
+    // Clicking the code still selects the line for citation (unchanged); a drag over
+    // text selects text instead, and the gutter does the same editor-style job.
+    onClick: selectable ? gutterFor(row)?.onClick : undefined,
     children: [
-      jsxs(Fragment, { children: [
-        jsx("span", { className: "lineno", "aria-hidden": "true", children: row.before ?? "" }),
-        jsx("span", { className: "lineno", "aria-hidden": "true", children: row.after ?? "" }),
-      ] }),
+      jsx("span", {
+        className: "gutter",
+        ...(selectable ? gutterFor(row) || {} : {}),
+        ...(selectable ? drag : {}),
+        children: jsxs(Fragment, { children: [
+          jsx("span", { className: "lineno", "aria-hidden": "true", children: row.before ?? "" }),
+          jsx("span", { className: "lineno", "aria-hidden": "true", children: row.after ?? "" }),
+        ] }),
+      }),
       jsx("span", { className: "linecode", children: row.text || " " }),
     ],
   }, key);
 }
 
-function renderSplitRow(row, i, side, onLineClick, selectedLines, lineDragProps) {
+function renderSplitRow(row, i, side, gutterFor, selectedLines, lineDragProps) {
   const line = side === "left" ? row.before : row.after;
-  // Left (old-side) numbers don't exist in the current file: not clickable
-  // and not draggable (lineDragProps rejects them via row.after).
-  const clickable = onLineClick && line != null && side === "right";
+  // Left (old-side) numbers don't exist in the current file: not selectable and not
+  // draggable (lineDragProps rejects them via row.after).
+  const selectable = gutterFor && line != null && side === "right";
   const highlighted = selectedLines?.has(line);
-  const drag = clickable && lineDragProps ? lineDragProps(row) : {};
+  const drag = selectable && lineDragProps ? lineDragProps(row) : {};
   return jsxs("span", {
     className: cn(`line ${row.kind}`, highlighted && "line-selected"),
     "data-side": side,
     "data-line": line,
-    onClick: clickable ? (event) => onLineClick(row)(event) : undefined,
-    ...drag,
     children: [
-      jsx("span", { className: "lineno", "aria-hidden": "true", children: line ?? "" }),
+      jsx("span", {
+        className: "gutter",
+        ...(selectable ? gutterFor(row) || {} : {}),
+        ...(selectable ? drag : {}),
+        children: jsx("span", { className: "lineno", "aria-hidden": "true", children: line ?? "" }),
+      }),
       jsx("span", { className: "linecode", children: row.text || " " }),
     ],
   }, `${side}:${i}`);
@@ -1771,4 +2000,11 @@ const plugin_default = {
   }
 };
 
-export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, filesToOpen, plugin_default as default };
+// Where to scroll so a file's sticky header sits exactly at the top of the diff
+// column. Measured from live rects rather than scrollIntoView: the target may be a
+// section the browser skipped (content-visibility), and scroll margins left the
+// header under the previous file's sticky header instead of at the top.
+const scrollTopFor = ({ elementTop, scrollerTop, scrollTop, sticky = 0 }) =>
+  Math.max(0, elementTop - scrollerTop + scrollTop - sticky);
+
+export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, filesToOpen, scrollTopFor, plugin_default as default };

@@ -12,6 +12,36 @@ import { GitReview } from '../desktop/plugin.js'
 const paneSettings = (storage) => storage.get(
   [...storage.keys()].filter(k => k.startsWith('display.v1')).sort((a, b) => b.length - a.length)[0])
 
+test('Review next file skips expanded files and lands on the next collapsed one', async t => {
+  const raf = globalThis.requestAnimationFrame
+  globalThis.requestAnimationFrame = () => 0
+  t.after(() => { globalThis.requestAnimationFrame = raf })
+  const { root } = await mount(t)
+  // Collapse the third file only; the second stays expanded.
+  await click(byClass(file(root, files[2]), 'file-toggle')[0])
+  await click(byLabel(root, 'Review next file'))
+  assert.equal(byClass(file(root, files[2]), 'diff').length, 0, 'the collapsed file stays collapsed')
+  // Selection moved to it rather than to the expanded neighbour: exactly one tree
+  // row is pressed, and it is the collapsed file.
+  const pressed = byClass(root, 'file').filter(n => n.props['aria-pressed'] === true)
+  assert.equal(pressed.length, 1, 'exactly one file is selected')
+  assert.ok(text(pressed[0]).includes(files[2].split('/').pop()), `selected ${text(pressed[0])}, expected the collapsed file`)
+})
+
+test('Review next file lands on a collapsed file without expanding it', async t => {
+  // The jump itself is browser work; the state it must not change is what this covers.
+  const raf = globalThis.requestAnimationFrame
+  globalThis.requestAnimationFrame = () => 0
+  t.after(() => { globalThis.requestAnimationFrame = raf })
+  const { root } = await mount(t)
+  // The first file is active, so the step-through target is the second one.
+  await click(byClass(file(root, files[1]), 'file-toggle')[0])
+  assert.equal(byClass(file(root, files[1]), 'diff').length, 0, 'precondition: collapsed')
+  await click(byLabel(root, 'Review next file'))
+  assert.equal(byClass(file(root, files[1]), 'diff').length, 0, 'stepping is navigation, not an expand')
+  assert.equal(byClass(root, 'af-file')[1].props['data-path'], files[1])
+})
+
 test('Ignore whitespace requests false → true → false and persists each value', async t => {
   const { root, requests, storage } = await mount(t)
   assert.equal(latestDiff(requests).searchParams.get('ignore_ws'), 'false')
@@ -65,6 +95,24 @@ test('files hide/show persists through a real unmount/remount', async t => {
   await click(byLabel(root, 'Show file list'))
   assert.equal(root.findAllByType('aside').length, 1)
   assert.equal(paneSettings(storage).files, true)
+})
+
+test('scope, comparison base and repository come back after leaving the session', async t => {
+  // The reviewer's choices are pane state: switching session or coming back to the
+  // workspace must restore them instead of resetting to Uncommitted/first repo.
+  const storage = new Map()
+  const first = await mount(t, { storage })
+  await select(first.root, 'Staged')
+  assert.equal(latestDiff(first.requests).searchParams.get('scope'), 'staged')
+  const savedRepo = latestDiff(first.requests).searchParams.get('repo')
+  assert.ok(savedRepo, 'the pane asked for a repository')
+  assert.equal(paneSettings(storage).scope, 'staged', 'the scope is written to the pane settings')
+  assert.equal(paneSettings(storage).repo, savedRepo, 'the repository is written to the pane settings')
+
+  await act(async () => first.renderer.unmount())
+  const back = await mount(t, { storage })
+  assert.equal(latestDiff(back.requests).searchParams.get('scope'), 'staged', 'the scope is restored')
+  assert.equal(latestDiff(back.requests).searchParams.get('repo'), savedRepo, 'the repository is restored')
 })
 
 test('architecture folders default expanded; compact chain toggles descendants only', async t => {
