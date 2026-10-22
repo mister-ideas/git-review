@@ -2,6 +2,19 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.20 — 2026-10-22
+
+### Fixed
+- **The pane no longer resets when you switch session.** Settings were keyed by
+  profile + connection + focused workspace, but a window holds sessions on different
+  worktrees, so every switch produced a different key - and `cwd` is not known at
+  mount, so the first read missed the saved entry too. The key is now profile +
+  connection only, which is as fine-grained as the host allows for state that must
+  survive a switch. Scope, comparison base, repository, layout and the rest come back
+  with it.
+- Two tests pin the contract: the key carries no workspace segment, and a remount
+  after changing scope restores scope and repository.
+
 ## 0.1.19 — 2026-10-22
 
 Measured against a real Chromium render of the pane rather than inferred from the

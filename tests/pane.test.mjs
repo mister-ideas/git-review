@@ -558,12 +558,15 @@ test('search input callback filters real diff files case-insensitively', async t
   assert.deepEqual(paths(root), files)
 })
 
-test('pane settings are scoped to profile, connection and workspace', () => {
-  const A = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a')
-  const B = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/b')
-  const C = settingsKeyFor(JSON.stringify(['other', 'default']), '/repo/a')
-  assert.notEqual(A, B, 'a different workspace must not share settings')
+test('pane settings are scoped to profile and connection, never to the workspace', () => {
+  const A = settingsKeyFor(JSON.stringify(['conn', 'default']))
+  const B = settingsKeyFor(JSON.stringify(['conn', 'default']))
+  const C = settingsKeyFor(JSON.stringify(['other', 'default']))
+  // A Hermes window can hold sessions on different worktrees: keying by cwd was
+  // exactly what reset the pane on every session switch.
+  assert.equal(A, B, 'the focused workspace must not split the pane settings')
   assert.notEqual(A, C, 'a different connection must not share settings')
-  assert.equal(A, settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a'), 'the same scope is stable across renders')
+  assert.equal(A, settingsKeyFor(JSON.stringify(['conn', 'default'])), 'the same scope is stable across renders')
+  assert.equal(A, `display.v1:${JSON.stringify(['conn', 'default'])}`, 'the key carries profile and connection only')
   assert.ok(A.startsWith('display.v1:'), 'the key stays versioned so a future shape can migrate')
 })

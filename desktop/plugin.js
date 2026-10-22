@@ -241,7 +241,7 @@ const SETTINGS_KEY = "display.v1";
 // Pane settings are scoped to the work they were chosen for: the connection and
 // profile, plus the focused workspace. Shared with the tests so both sides build
 // the same key.
-const settingsKeyFor = (identity, cwd) => `${SETTINGS_KEY}:${identity}:${cwd || ""}`;
+const settingsKeyFor = (identity) => `${SETTINGS_KEY}:${identity}`;
 // Which files a new diff opens: ones the reviewer had collapsed whose changes
 // just changed (a fresh edit), and files that were not in the previous diff at
 // all (a new file). The first observation of a scope is not a change, so a file
@@ -663,13 +663,14 @@ function GitReview({ ctx }) {
   const connectionId = useValue(host.state.connectionId || EMPTY_ATOM);
   const identity = JSON.stringify([connectionId, profile]);
 
-  // Pane settings belong to the work they were chosen for, so coming back to a
-  // workspace restores the pane the way it was left. The key is profile +
-  // connection + focused workspace: a plugin is never handed the focused session
-  // id (the loader's allowlist exposes no such atom), so chats on one workspace
-  // share this state. Scope and repository are deliberately not stored; they
-  // follow the workspace and the agent.
-  const settingsKey = settingsKeyFor(identity, cwd);
+  // Pane settings belong to the person, not to the chat: switching session must
+  // hand the pane back the way it was left. The key is profile + connection only.
+  // Keying it by the focused workspace looked tidier, but a window can hold
+  // sessions on different worktrees, so every switch produced a fresh key and the
+  // pane reset - and cwd is not even known at mount, so the first read missed the
+  // saved entry. The plugin is never handed the focused session id (the loader's
+  // allowlist exposes no such atom), so this is as fine-grained as the host allows.
+  const settingsKey = settingsKeyFor(identity);
   // Scoped first, then the unscoped key older versions wrote, so an existing
   // install keeps its settings and a new workspace starts from them.
   const readSettings = () => {
