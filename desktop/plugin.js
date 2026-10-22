@@ -329,7 +329,7 @@ const css = `
   .dark .grd .search-field > svg{color:#9b9b9b}
   .dark .grd .filter-wrap.active{color:#e8e8e8}
   .dark .grd .filter-wrap.active .filter-btn{background:#2b2b2d}
-  .dark .grd .lineno{color:#6b6b6b}
+  .dark .grd .lineno{color:#6b6b6b;user-select:none;-webkit-user-select:none}
   .dark .grd .line.hunk{color:#9a9a9a;background:#161618}
   .dark .grd .fold{color:#6b6b6b}
   .dark .grd .fold-strip{background:var(--ui-surface-background)}
@@ -373,7 +373,7 @@ const css = `
    rows each one ended at its own text, so a change's background stopped mid-line
    and the unmodified-lines bars stopped short of the scrolled area. */
 .grd .rows,.grd .af-body{width:max-content;min-width:100%}
-.grd .line{display:flex;width:100%;min-width:0;white-space:pre;padding:0 6px;align-items:baseline;cursor:pointer}
+.grd .line{display:flex;width:100%;min-width:0;white-space:pre;padding:0 6px;align-items:baseline;cursor:text;user-select:text;-webkit-user-select:text}
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
 .grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}

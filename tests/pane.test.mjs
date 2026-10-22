@@ -328,6 +328,17 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   assert.match(list, /padding:0/, 'no padding above the sticky label')
 })
 
+test('diff text can be selected and copied, gutter excluded', () => {
+  // The pane is a review surface first: a drag over code must select text like an
+  // editor does, and the line numbers must not come along in the copy.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const line = src.match(/\.grd \.line\{[^}]*\}/)?.[0] || ''
+  assert.match(line, /cursor:text/, 'the code uses a text cursor')
+  assert.match(line, /user-select:text/, 'the code is selectable')
+  const gutter = src.match(/\.grd \.lineno\{[^}]*\}/)?.[0] || ''
+  assert.match(gutter, /user-select:none/, 'line numbers stay out of the copy')
+})
+
 test('tree counts share the label line box, so they centre on it', () => {
   const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
   const nums = src.match(/\.grd \.file \.fdelta,\.grd \.folder \.cnt\{[^}]*\}/)?.[0] || ''
