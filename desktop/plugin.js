@@ -1158,12 +1158,26 @@ function GitReview({ ctx }) {
     if (!lineSelection) return;
     if (!CITABLE_SCOPES.has(scope)) return; // stored selection predates a scope switch
     const { file, start, end } = lineSelection;
-    // Real SDK signature: insertText(sessionId, text, opts) — null targets the
-    // focused composer. 'inline' keeps the chip on the current line.
-    const result = host.composer.insertText(null, citeRefText(file, start, end), { mode: "inline" });
-    Promise.resolve(result).catch(() => {}).then((ok) => {
-      if (ok === false) host.notify({ kind: "info", message: "No focused composer — click into the chat input first." });
-    });
+    const ref = citeRefText(file, start, end);
+    // setDraft is the contract that turns an `@`-ref token into a composer chip: the
+    // app re-renders the draft through its own paint path (insertText only appends
+    // plain text). Read the draft first so the reference is appended, not the draft
+    // replaced; fall back to insertText on a host that predates getDraft/setDraft.
+    const composer = host.composer || {};
+    if (typeof composer.getDraft === "function" && typeof composer.setDraft === "function") {
+      Promise.resolve(composer.getDraft(null)).catch(() => null).then((base) => {
+        const draft = typeof base === "string" ? base : "";
+        const text = draft.trim() ? `${draft.trimEnd()} ${ref}` : ref;
+        return Promise.resolve(composer.setDraft(null, text));
+      }).then((ok) => {
+        if (ok === false) host.notify({ kind: "info", message: "No focused composer — click into the chat input first." });
+      }).catch(() => {});
+    } else {
+      const result = composer.insertText(null, ref, { mode: "inline" });
+      Promise.resolve(result).catch(() => {}).then((ok) => {
+        if (ok === false) host.notify({ kind: "info", message: "No focused composer — click into the chat input first." });
+      });
+    }
     setLineSelection(null);
   };
   // Drag-to-cite: every code line is draggable. The payload mirrors the composer's

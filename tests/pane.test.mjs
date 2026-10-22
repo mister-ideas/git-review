@@ -7,6 +7,20 @@ import { act } from './render-harness.mjs'
 import { host } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
 import { readFileSync } from 'node:fs'
+
+// Citing must go through the SDK contract that hydrates an `@`-ref into a chip
+// (setDraft); insertText is the plain-text fallback for older hosts.
+const stubComposer = (original, inserted) => ({
+  ...original,
+  getDraft: async () => '',
+  setDraft: (sessionId, value) => {
+    if (sessionId !== null) throw new Error('cite must target the focused composer (null)')
+    if (typeof value !== 'string') throw new Error('setDraft(sessionId, text) — text must be the 2nd argument')
+    inserted.push(value)
+    return true
+  },
+  insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) },
+})
 import { GitReview, filesToOpen, collapseRows, scrollTopFor } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
@@ -139,7 +153,7 @@ test('branch picker picks a comparison base: never checks anything out, adds no 
 test('click line then another highlights the range; cite inserts native @line reference in composer draft', async t => {
   const inserted = []
   const original = host.composer
-  host.composer = { ...original, insertText: (sessionId, value, opts) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); if (typeof value !== 'string') throw new Error('insertText(sessionId, text) — text must be the 2nd argument'); inserted.push(value) } }
+  host.composer = stubComposer(original, inserted)
   t.after(() => { host.composer = original })
   const { root } = await mount(t)
   const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
@@ -187,7 +201,7 @@ test('a click that is not on a line leaves selection mode', async t => {
 test('a selection spanning a hidden run cites the exact range', async t => {
   const inserted = []
   const original = host.composer
-  host.composer = { ...original, insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) } }
+  host.composer = stubComposer(original, inserted)
   t.after(() => { host.composer = original })
   const { root } = await mount(t)
   const path = 'src/architecture/deep/main.ts'
@@ -211,7 +225,7 @@ test('a selection spanning a hidden run cites the exact range', async t => {
 test('clearing the line selection removes highlight and inserts nothing', async t => {
   const inserted = []
   const original = host.composer
-  host.composer = { ...original, insertText: (sessionId, value, opts) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); if (typeof value !== 'string') throw new Error('insertText(sessionId, text) — text must be the 2nd argument'); inserted.push(value) } }
+  host.composer = stubComposer(original, inserted)
   t.after(() => { host.composer = original })
   const { root } = await mount(t)
   const lines = () => root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
