@@ -12,6 +12,22 @@ import { GitReview } from '../desktop/plugin.js'
 const paneSettings = (storage) => storage.get(
   [...storage.keys()].filter(k => k.startsWith('display.v1')).sort((a, b) => b.length - a.length)[0])
 
+test('Review next file skips expanded files and lands on the next collapsed one', async t => {
+  const raf = globalThis.requestAnimationFrame
+  globalThis.requestAnimationFrame = () => 0
+  t.after(() => { globalThis.requestAnimationFrame = raf })
+  const { root } = await mount(t)
+  // Collapse the third file only; the second stays expanded.
+  await click(byClass(file(root, files[2]), 'file-toggle')[0])
+  await click(byLabel(root, 'Review next file'))
+  assert.equal(byClass(file(root, files[2]), 'diff').length, 0, 'the collapsed file stays collapsed')
+  // Selection moved to it rather than to the expanded neighbour: exactly one tree
+  // row is pressed, and it is the collapsed file.
+  const pressed = byClass(root, 'file').filter(n => n.props['aria-pressed'] === true)
+  assert.equal(pressed.length, 1, 'exactly one file is selected')
+  assert.ok(text(pressed[0]).includes(files[2].split('/').pop()), `selected ${text(pressed[0])}, expected the collapsed file`)
+})
+
 test('Review next file lands on a collapsed file without expanding it', async t => {
   // The jump itself is browser work; the state it must not change is what this covers.
   const raf = globalThis.requestAnimationFrame

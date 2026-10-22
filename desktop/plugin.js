@@ -1159,10 +1159,14 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
   // files that changed, opening each, without hunting in the tree.
   const reviewNext = () => {
     if (!visibleFiles.length) return;
+    // The destination is the next file the reviewer COLLAPSED - a collapsed file is
+    // the one still waiting for review - not simply the next row. With nothing
+    // collapsed the button still advances, so it never goes dead.
     const at = visibleFiles.findIndex((s) => s.path === active.path);
-    const next = visibleFiles[(at + 1) % visibleFiles.length];
-    // Stepping through files is navigation, not a layout edit: a file the reviewer
-    // collapsed stays collapsed and its header is the destination.
+    const after = [...visibleFiles.slice(at + 1), ...visibleFiles.slice(0, Math.max(0, at + 1))];
+    const next = after.find((s) => collapsedFiles[s.path]) || after.find((s) => s.path !== active.path);
+    // Stepping through files is navigation, not a layout edit: the target keeps its
+    // collapsed state and its header is the destination.
     if (next) scrollToSelection(next.path, { reveal: false });
   };
 
