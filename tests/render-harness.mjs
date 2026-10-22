@@ -18,7 +18,13 @@ export async function click(node) {
 // press the line-number cell the way a user does.
 export async function gutterDown(node) {
   if (!node) throw new Error('Required gutter not rendered')
-  await act(async () => { node.props.onClick({ button: 0, stopPropagation() {}, preventDefault() {} }) })
+  await act(async () => {
+    node.props.onPointerDown({
+      button: 0, buttons: 1, pointerId: 1,
+      stopPropagation() {}, preventDefault() {},
+      currentTarget: { setPointerCapture() {} },
+    })
+  })
 }
 export async function gutterEnter(node) {
   if (!node) throw new Error('Required gutter not rendered')

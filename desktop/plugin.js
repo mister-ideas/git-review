@@ -387,17 +387,20 @@ const css = `
 .grd .cite-bar{display:flex;align-items:center;line-height:1;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
 .grd .cite-bar .cite-ref{font-family:var(--font-mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .grd .gutter{display:flex;align-items:baseline;flex:none;cursor:pointer;user-select:none;-webkit-user-select:none;position:relative}
-/* The gutter is the select/drag surface, so it says so on hover: a three-dot grip
-   drawn in CSS (no extra node per row) plus grab/grabbing cursors. */
-.grd .gutter::before{content:"";position:absolute;left:50%;top:50%;width:3px;height:3px;border-radius:50%;
-  background:var(--ui-text-secondary);transform:translate(-50%,-50%);opacity:0;transition:opacity .12s ease;
-  box-shadow:5px 0 0 var(--ui-text-secondary),
-             0 -6px 0 var(--ui-text-secondary),5px -6px 0 var(--ui-text-secondary),
-             0 6px 0 var(--ui-text-secondary),5px 6px 0 var(--ui-text-secondary)}
-.grd .line:hover .gutter::before,.grd .line-selected .gutter::before{opacity:0.9}
-.grd .line:hover .gutter{background:var(--ui-row-hover-background)}
-.grd .gutter,.grd .gutter:hover{cursor:grab}
+/* Selection is click-based: click a line, click another to close the range. A grab
+   handle is deliberately not drawn - pressing the gutter began a selection that a
+   release dropped, which read as a broken affordance. Real drag-to-select needs
+   pointer capture, not hover handlers. */
+/* The handle needs its own room, or it lands on the digits. The gutter reserves it
+   permanently so the numbers never shift when the handle appears on hover. */
+.grd .gutter{padding-left:11px;cursor:grab}
 .grd .gutter:active{cursor:grabbing}
+.grd .gutter::before{content:"";position:absolute;left:2px;top:50%;width:3px;height:3px;border-radius:50%;
+  background:var(--ui-text-secondary);transform:translateY(-50%);opacity:0;transition:opacity .12s ease;
+  box-shadow:4px 0 0 var(--ui-text-secondary),
+             0 -5px 0 var(--ui-text-secondary),4px -5px 0 var(--ui-text-secondary),
+             0 5px 0 var(--ui-text-secondary),4px 5px 0 var(--ui-text-secondary)}
+.grd .line:hover .gutter::before,.grd .line-selected .gutter::before{opacity:0.85}
 .grd .lineno{flex:0 0 calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);text-align:right;padding:0;color:var(--ui-text-tertiary);user-select:none;font-variant-numeric:tabular-nums;font:inherit;opacity:0.75}
 .grd .lineno + .lineno{flex-basis:calc(var(--gr-gutter-width,4ch) + 5px);width:calc(var(--gr-gutter-width,4ch) + 5px);min-width:calc(var(--gr-gutter-width,4ch) + 5px);margin-left:4px;padding-left:4px;border-left:1px solid var(--ui-stroke-tertiary)}
 .grd .linecode{padding-left:6px;flex:1 0 auto;min-width:0}
@@ -1185,20 +1188,38 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
   const LINE_DRAG_MIME = "application/x-hermes-paths";
   const gutterHandlers = (s, file) => (row) => {
     if (!CITABLE_SCOPES.has(scope) || !row || row.after == null || row.kind === "remove") return null;
-    // The pane clears the selection on an outside click; the gutter is not outside,
-    // so the click must not reach it (the mousedown already set the selection).
+    // Press and drag, with pointer capture: the capture keeps pointermove events on
+    // the gutter, so the range extends across rows even when the pointer leaves the
+    // cell. A press without movement is the click that anchors one line.
+    const lineOf = (event) => {
+      const el = document.elementFromPoint(event.clientX, event.clientY);
+      const rowEl = el && el.closest ? el.closest(".line[data-line]") : null;
+      const n = rowEl && rowEl.getAttribute("data-line");
+      return n == null || n === "" ? null : Number(n);
+    };
     return {
-      onMouseDown: (event) => {
-        // The drag anchor has to exist before the pointer moves, not after the click.
-        if (event.button === 0) gutterAnchor.current = { file, line: row.after };
-      },
-      onClick: (event) => {
-        // The pane clears the selection on an outside click; the gutter is not outside.
-        event.stopPropagation();
+      onPointerDown: (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();   // the pane clears a selection on an outside click
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* optional */ }
         gutterAnchor.current = { file, line: row.after };
         onLineClick(s, row)(event);
       },
-      onMouseEnter: onGutterEnter(s, row),
+      onPointerMove: (event) => {
+        const anchor = gutterAnchor.current;
+        if (!anchor || anchor.file !== file || event.buttons !== 1) return;
+        const target = lineOf(event);
+        if (target == null) return;
+        setLineSelection({
+          file, sha: s.sha, anchor: null,
+          start: Math.min(anchor.line, target), end: Math.max(anchor.line, target),
+        });
+      },
+      onPointerUp: (event) => {
+        try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* released */ }
+      },
+      onClick: (event) => event.stopPropagation(),
     };
   };
   const lineDragProps = (file) => (row) => {
