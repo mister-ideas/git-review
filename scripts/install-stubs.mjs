@@ -31,7 +31,8 @@ await writeModule('@hermes/plugin-sdk', `
 // Components render their CHILDREN (unlike the real Radix-based ones, which mount
 // content only when open): static render tests can then assert menu/button labels.
 const Component = ({ children }) => children ?? null;
-const atom = { get: () => '' };
+let atomValue = '';
+const atom = { get: () => atomValue, set: (v) => { atomValue = v; }, reset: () => { atomValue = ''; } };
 const host = {
   state: new Proxy({}, { get: () => atom }),
   revealPane: () => true, undismissPane: () => true, paneVisibility: () => atom,
@@ -44,7 +45,7 @@ export const Badge = Component, Button = Component, Codicon = Component,
   EmptyState = Component, ErrorState = Component, SearchField = Component,
   ScrollArea = Component, Switch = Component, Tip = Component;
 export const cn = (...v) => v.filter(Boolean).join(' ');
-export { host };
+export { host, atom as $hostStateAtom };
 export const useValue = (a) => (a && typeof a.get === 'function' ? a.get() : '');
 // Mirrors the real SDK atom the pane keys per-session settings on.
 export const $activeSessionId = { get: () => null };

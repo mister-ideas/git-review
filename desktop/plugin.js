@@ -244,6 +244,11 @@ const SETTINGS_KEY = "display.v1";
 const settingsKeyFor = (identity) => `${SETTINGS_KEY}:${identity}`;
 // A partial identity sample (no profile or no connection) means "not known yet",
 // never "another backend": resolve it against the last fully resolved identity.
+// Should the pane adopt the focused workspace's repository? Only when the reviewer
+// has not chosen one: following cwd on every session switch silently overrode the
+// chosen repository and reset the pane to the workspace's own worktree.
+const shouldFollowWorkspace = ({ cwd, saved, picked }) =>
+  Boolean(cwd) && !saved && !picked;
 const resolveIdentity = (raw, last) => {
   try {
     const [connection, profile] = JSON.parse(raw);
@@ -663,7 +668,12 @@ function GitReview({ ctx }) {
   const [tick, setTick] = useState(0);
   const generation = useRef(0);
   const focusGeneration = useRef(0);
-  const chooseRepository = (repo) => { ++focusGeneration.current; setChosen(repo); };
+  const chooseRepository = (repo) => {
+    ++focusGeneration.current;
+    pickedRepo.current = true;
+    if (repo) savedRepo.current = repo;
+    setChosen(repo);
+  };
 
   const cwd = useValue(host.state.cwd);
   // ctx.rest follows the ambient gateway route, not the focused chat's profile.
@@ -688,6 +698,11 @@ function GitReview({ ctx }) {
   // saved entry. The plugin is never handed the focused session id (the loader's
   // allowlist exposes no such atom), so this is as fine-grained as the host allows.
   const settingsKey = settingsKeyFor(identity);
+  // The repository the reviewer chose last time, read once: it outranks the focused
+  // workspace so a session switch does not drag the pane back to that worktree.
+  const savedRepo = useRef("");
+  const pickedRepo = useRef(false);
+  try { savedRepo.current = (ctx.storage.get(settingsKey, {}) || {}).repo || ""; } catch { /* no storage */ }
   // Scoped first, then the unscoped key older versions wrote, so an existing
   // install keeps its settings and a new workspace starts from them.
   const readSettings = () => {
@@ -813,9 +828,11 @@ function GitReview({ ctx }) {
     setFilesWidth(typeof w === "number" ? w : null);
   }, [settingsKey, ctx]);
 
-  // Follow the focused chat's workspace when it is a known worktree
+  // Follow the focused chat's workspace only while the reviewer has not chosen a
+  // repository: a session switch changes cwd, and adopting it reset the pane.
   useEffect(() => {
-    if (!repositoryReady || !cwd) return;
+    if (!repositoryReady) return;
+    if (!shouldFollowWorkspace({ cwd, saved: savedRepo.current, picked: pickedRepo.current })) return;
     const current = ++focusGeneration.current;
     let gone = false;
     ctx.rest(`/meta?repo=${encodeURIComponent(cwd)}`, { timeoutMs: 10000 })
@@ -836,10 +853,7 @@ function GitReview({ ctx }) {
 
   useEffect(() => {
     if (!repositoryReady || chosen || !worktrees.length) return;
-    // Only the scoped entry: the unscoped fallback holds another connection's
-    // settings, and a repository path is not portable across connections.
-    let saved = "";
-    try { saved = (ctx.storage.get(settingsKey, {}) || {}).repo || ""; } catch { saved = ""; }
+    const saved = savedRepo.current;
     setChosen(saved && worktrees.some((w) => w.path === saved) ? saved : worktrees[0].path);
   }, [worktrees, chosen, repositoryReady]);
 
@@ -2025,4 +2039,4 @@ const plugin_default = {
 const scrollTopFor = ({ elementTop, scrollerTop, scrollTop, sticky = 0 }) =>
   Math.max(0, elementTop - scrollerTop + scrollTop - sticky);
 
-export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, resolveIdentity, filesToOpen, scrollTopFor, plugin_default as default };
+export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, resolveIdentity, shouldFollowWorkspace, filesToOpen, scrollTopFor, plugin_default as default };
