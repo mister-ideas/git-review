@@ -384,14 +384,16 @@ const css = `
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
 .grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
-.grd .cite-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
+.grd .cite-bar{display:flex;align-items:center;line-height:1;gap:8px;padding:6px 12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);font-size:12px}
 .grd .cite-bar .cite-ref{font-family:var(--font-mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .grd .gutter{display:flex;align-items:baseline;flex:none;cursor:pointer;user-select:none;-webkit-user-select:none;position:relative}
 /* The gutter is the select/drag surface, so it says so on hover: a three-dot grip
    drawn in CSS (no extra node per row) plus grab/grabbing cursors. */
-.grd .gutter::before{content:"";position:absolute;left:1px;top:50%;width:4px;height:4px;border-radius:50%;
-  background:var(--ui-text-secondary);transform:translateY(-50%);opacity:0;transition:opacity .12s ease;
-  box-shadow:0 -7px 0 var(--ui-text-secondary),0 7px 0 var(--ui-text-secondary)}
+.grd .gutter::before{content:"";position:absolute;left:50%;top:50%;width:3px;height:3px;border-radius:50%;
+  background:var(--ui-text-secondary);transform:translate(-50%,-50%);opacity:0;transition:opacity .12s ease;
+  box-shadow:5px 0 0 var(--ui-text-secondary),
+             0 -6px 0 var(--ui-text-secondary),5px -6px 0 var(--ui-text-secondary),
+             0 6px 0 var(--ui-text-secondary),5px 6px 0 var(--ui-text-secondary)}
 .grd .line:hover .gutter::before,.grd .line-selected .gutter::before{opacity:0.9}
 .grd .line:hover .gutter{background:var(--ui-row-hover-background)}
 .grd .gutter,.grd .gutter:hover{cursor:grab}
@@ -1186,6 +1188,10 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
     // The pane clears the selection on an outside click; the gutter is not outside,
     // so the click must not reach it (the mousedown already set the selection).
     return {
+      onMouseDown: (event) => {
+        // The drag anchor has to exist before the pointer moves, not after the click.
+        if (event.button === 0) gutterAnchor.current = { file, line: row.after };
+      },
       onClick: (event) => {
         // The pane clears the selection on an outside click; the gutter is not outside.
         event.stopPropagation();
@@ -1865,7 +1871,10 @@ function renderUnifiedRow(row, key, gutterFor, selectedLines, lineDragProps) {
   // would point the agent at the wrong line — no selection, no drag.
   const selectable = gutterFor && line != null && row.kind !== "remove";
   const highlighted = selectedLines?.has(line);
-  const drag = selectable && lineDragProps ? lineDragProps(row) : {};
+  // A draggable element starts a native drag on press, which swallows the hover the
+  // range selection needs. Drag is therefore offered only once the line is selected;
+  // press-drag extends a range, drag from a selected line still cites.
+  const drag = selectable && highlighted && lineDragProps ? lineDragProps(row) : {};
   return jsxs("span", {
     className: cn(`line ${row.kind}`, highlighted && "line-selected"),
     "data-line": line,
