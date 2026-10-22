@@ -4,7 +4,7 @@ import { act, mount, byClass, byLabel, switchFor, click, select, paths, file, la
 import TestRenderer from 'react-test-renderer'
 import { jsx } from 'react/jsx-runtime'
 import { files, repo, makeContext, commits, contexts } from './fixtures.mjs'
-import { host } from '@hermes/plugin-sdk'
+import { host, $hostStateAtom } from '@hermes/plugin-sdk'
 
 import { GitReview } from '../desktop/plugin.js'
 
@@ -132,6 +132,24 @@ test('settings survive a session switch into another workspace', async t => {
   assert.equal(latestDiff(back.requests).searchParams.get('scope'), 'staged', 'scope must survive the switch')
   assert.equal(latestDiff(back.requests).searchParams.get('repo'), savedRepo, 'repository must survive the switch')
 })
+test('a session switch that briefly reports no profile keeps the pane state', async t => {
+  // The profile/connection atoms are absent for a render or two during a switch. That
+  // used to read as a different backend: the reset effect wiped scope, base and
+  // repository, so the pane came back on the first worktree with "main".
+  const storage = new Map()
+  t.after(() => $hostStateAtom.reset())
+  $hostStateAtom.set('default') // a settled profile/connection before the switch
+  const p = await mount(t, { storage })
+  await select(p.root, 'Staged')
+  const repoNow = latestDiff(p.requests).searchParams.get('repo')
+  await act(async () => { $hostStateAtom.set(undefined) })
+  await act(async () => switchFor(p.root, 'Word wrap').props.onCheckedChange(true))
+  await act(async () => { $hostStateAtom.set('default') })
+  await act(async () => switchFor(p.root, 'Word wrap').props.onCheckedChange(false))
+  assert.equal(paneSettings(storage).scope, 'staged', 'the chosen scope is still what is stored')
+  assert.equal(latestDiff(p.requests).searchParams.get('repo'), repoNow, 'repository survives the dip')
+})
+
 test('architecture folders default expanded; compact chain toggles descendants only', async t => {
   const { root } = await mount(t)
   const folders = byClass(root, 'folder')

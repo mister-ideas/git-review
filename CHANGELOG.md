@@ -2,6 +2,17 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.22 — 2026-10-22
+
+### Fixed
+- **The pane no longer jumps back to the focused workspace's repository.** A
+  `useEffect` followed `cwd` on every change and called `setChosen(...)`, so each
+  session switch silently replaced the repository the reviewer had open - the pane
+  landed on the worktree of the chat and `main`. Following now happens only while
+  nothing has been chosen; a saved or deliberately picked repository wins.
+- Test: the deferred-metadata case now expects the saved repository, and
+  `shouldFollowWorkspace` pins the rule. Red on the previous code.
+
 ## 0.1.21 — 2026-10-22
 
 ### Fixed

@@ -21,7 +21,7 @@ const stubComposer = (original, inserted) => ({
   },
   insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) },
 })
-import { GitReview, filesToOpen, collapseRows, scrollTopFor, settingsKeyFor, resolveIdentity } from '../desktop/plugin.js'
+import { GitReview, filesToOpen, collapseRows, scrollTopFor, settingsKeyFor, resolveIdentity, shouldFollowWorkspace } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -107,9 +107,11 @@ for (const winner of ['focusB', 'manual', 'agent']) {
     }, { cwd: '/cwdA' })
     let expected = repo
     if (winner === 'focusB') {
+      // A repository the reviewer already had open outranks the newly focused
+      // workspace: following cwd here is what reset the pane on every session switch.
       await update({ cwd: '/cwdB' })
-      expected = '/repoB'
-      await act(async () => b.resolve({ repo: expected }))
+      expected = repo
+      await act(async () => b.resolve({ repo: '/repoB' }))
     } else if (winner === 'manual') {
       // Choosing the already selected worktree is still a deliberate action.
       const item = root.findAll(n => typeof n.props.onSelect === 'function' && n.key !== '' && text(n).includes(repo.split('/').at(-1)))[0]
@@ -556,6 +558,13 @@ test('search input callback filters real diff files case-insensitively', async t
   assert.deepEqual(paths(root), [files[2]])
   await act(async () => search.props.onChange(''))
   assert.deepEqual(paths(root), files)
+})
+
+test('the focused workspace is only followed before the reviewer chooses', () => {
+  assert.equal(shouldFollowWorkspace({ cwd: '/w', saved: '', picked: false }), true, 'nothing chosen yet')
+  assert.equal(shouldFollowWorkspace({ cwd: '/w', saved: '/repo', picked: false }), false, 'a saved repository wins')
+  assert.equal(shouldFollowWorkspace({ cwd: '/w', saved: '', picked: true }), false, 'a deliberate pick wins')
+  assert.equal(shouldFollowWorkspace({ cwd: '', saved: '', picked: false }), false, 'no focused workspace')
 })
 
 test('a partial identity is not a different backend', () => {
