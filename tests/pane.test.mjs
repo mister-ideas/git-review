@@ -21,7 +21,7 @@ const stubComposer = (original, inserted) => ({
   },
   insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) },
 })
-import { GitReview, filesToOpen, collapseRows, scrollTopFor, settingsKeyFor } from '../desktop/plugin.js'
+import { GitReview, filesToOpen, collapseRows, scrollTopFor, settingsKeyFor, resolveIdentity } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -556,6 +556,18 @@ test('search input callback filters real diff files case-insensitively', async t
   assert.deepEqual(paths(root), [files[2]])
   await act(async () => search.props.onChange(''))
   assert.deepEqual(paths(root), files)
+})
+
+test('a partial identity is not a different backend', () => {
+  // Session switches momentarily report no profile/connection. Treating that as a new
+  // identity wiped scope, base and repository and dropped the pane back on the first
+  // worktree with 'main' - the reported "always resets to dapp-2624" behaviour.
+  const settled = JSON.stringify(['conn-1', 'default'])
+  assert.equal(resolveIdentity('[null,null]', settled), settled, 'no profile/connection yet')
+  assert.equal(resolveIdentity(JSON.stringify(['conn-1', null]), settled), settled, 'profile missing')
+  assert.equal(resolveIdentity(JSON.stringify([undefined, undefined]), settled), settled, 'both undefined')
+  assert.equal(resolveIdentity('not json', settled), settled, 'unparseable sample')
+  assert.equal(resolveIdentity(JSON.stringify(['conn-2', 'default']), settled), JSON.stringify(['conn-2', 'default']), 'a real change counts')
 })
 
 test('pane settings are scoped to profile and connection, never to the workspace', () => {

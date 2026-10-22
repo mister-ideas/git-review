@@ -242,6 +242,14 @@ const SETTINGS_KEY = "display.v1";
 // profile, plus the focused workspace. Shared with the tests so both sides build
 // the same key.
 const settingsKeyFor = (identity) => `${SETTINGS_KEY}:${identity}`;
+// A partial identity sample (no profile or no connection) means "not known yet",
+// never "another backend": resolve it against the last fully resolved identity.
+const resolveIdentity = (raw, last) => {
+  try {
+    const [connection, profile] = JSON.parse(raw);
+    return connection == null || profile == null ? last : raw;
+  } catch { return last; }
+};
 // Which files a new diff opens: ones the reviewer had collapsed whose changes
 // just changed (a fresh edit), and files that were not in the previous diff at
 // all (a new file). The first observation of a scope is not a change, so a file
@@ -661,7 +669,16 @@ function GitReview({ ctx }) {
   // ctx.rest follows the ambient gateway route, not the focused chat's profile.
   const profile = useValue(host.state.profile || EMPTY_ATOM);
   const connectionId = useValue(host.state.connectionId || EMPTY_ATOM);
-  const identity = JSON.stringify([connectionId, profile]);
+  // A session switch can momentarily report no profile/connection (the atoms are
+  // absent for a render or two). Stringifying that gives "[null,null]", which read as
+  // a different backend and wiped the reviewer's scope, base and repository on every
+  // switch - the pane came back on the first worktree and "main". Only a fully
+  // resolved identity counts; a partial sample keeps the last resolved one.
+  const identityRef = useRef("");
+  const identity = (identityRef.current = resolveIdentity(
+    JSON.stringify([connectionId, profile]),
+    identityRef.current,
+  ));
 
   // Pane settings belong to the person, not to the chat: switching session must
   // hand the pane back the way it was left. The key is profile + connection only.
@@ -2008,4 +2025,4 @@ const plugin_default = {
 const scrollTopFor = ({ elementTop, scrollerTop, scrollTop, sticky = 0 }) =>
   Math.max(0, elementTop - scrollerTop + scrollTop - sticky);
 
-export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, filesToOpen, scrollTopFor, plugin_default as default };
+export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, resolveIdentity, filesToOpen, scrollTopFor, plugin_default as default };

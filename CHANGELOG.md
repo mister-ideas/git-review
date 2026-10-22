@@ -2,6 +2,16 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.21 — 2026-10-22
+
+### Fixed
+- **The pane no longer resets to the first worktree and `main` on a session switch.**
+  Root cause: the profile/connection atoms are briefly absent during a switch, so the
+  identity sample became `[null,null]`. The reset effect read that as a different
+  backend and wiped scope, comparison base and repository. A partial sample now keeps
+  the last fully resolved identity; only a real profile/connection change resets.
+- Test: `a partial identity is not a different backend` (red on the previous code).
+
 ## 0.1.20 — 2026-10-22
 
 ### Fixed
