@@ -144,6 +144,17 @@ The pane follows the focused chat's workspace automatically. To offer other repo
 
 Settings are stored under `plugins.entries.git-review.settings`. None of them are secrets.
 
+### What the pane remembers
+
+Display state — layout, word wrap, ignore whitespace, the deleted/test filters, the file list's visibility and width, and which files you collapsed — is kept in desktop plugin storage, keyed by **profile + connection + focused workspace**. Come back to a workspace and the pane is as you left it.
+
+Two things it deliberately does not store:
+
+- **The scope and the repository.** They follow the focused workspace and what the agent asked to review, so a stale scope cannot outlive the work it described.
+- **Anything per chat session.** A desktop plugin is not given the focused session id — the loader's allowlist exposes no such atom, and the smoke harness rejects the import — so several chats on the same workspace share one set of pane settings. That is the closest a plugin can get to "per session"; separate state per chat is not something the plugin API allows today.
+
+A workspace with no saved state yet starts from the settings the pre-0.1.16 versions wrote, so upgrading does not reset a pane you had already tuned.
+
 ## Privacy and disclosure
 
 - **Shell commands.** The backend runs `git` as a subprocess, read-only: `rev-parse`, `status`, `diff`, `log`, `show`, `cat-file`, `ls-files`, `for-each-ref`, `branch`, `remote`, `rev-list` and `hash-object` (without `-w`, to compute the empty tree). It never fetches, checks out, stages, commits or changes repository content. External diff and textconv drivers are disabled, and every call overrides `core.fsmonitor`, `core.hooksPath` and `log.showSignature` and blanks the clean, smudge and process filter drivers that the repository itself defines, so a checkout cannot make the pane run its programs. Your own global filters, such as git-lfs, are left alone. Every call has a timeout and an output cap.
@@ -161,10 +172,11 @@ Settings are stored under `plugins.entries.git-review.settings`. None of them ar
 
 ## Limits
 
-- Diffs above 2 MiB are refused with a note rather than silently truncated.
-- The commit list loads 200 commits at a time; **Load older commits** pages further back, so no history is unreachable.
-- Each unchanged-line expansion reads at most 2000 lines.
+- Diffs above 8 MiB are refused with a note rather than silently truncated.
+- The commit list loads 250 commits at a time; **Load older commits** pages further back, so no history is unreachable.
+- Each unchanged-line expansion reads at most 5,000 lines.
 - New untracked files in a turn diff are capped at 200.
+- Pane display state is per workspace, not per chat: several chats on one workspace share it (see [What the pane remembers](#what-the-pane-remembers)).
 
 ## Troubleshooting
 

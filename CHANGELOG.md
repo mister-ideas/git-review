@@ -2,6 +2,20 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.19 — 2026-10-22
+
+Measured against a real Chromium render of the pane rather than inferred from the
+source, which is how the last two rounds of layout reports were settled.
+
+- **Each file's diff scrolls to the width of its longest line.** The scroll width was on the rows, so a row was only as wide as the view: past the first screen a change lost its background and unmodified-lines bars stopped short. The column is a grid sized `minmax(max-content, 1fr)`; rows carry no width of their own. Wrapped, the column stays the view.
+- **No scrollbar band.** Hermes styles every scrollbar, which reserved a strip under each file that scrolls sideways; `.diff` and `.splitwrap` opt out, and horizontal scrolling stays available by trackpad and shift+wheel.
+- **The unmodified-lines label is centred on the view** while its strip still reaches the end of the scroll, and follows the pane width live.
+- **Line citation and text selection coexist.** The code keeps a text cursor and native selection; a click on a line still anchors a range and the gutter selects and drags with pointer capture, with a drag handle that has its own room in the gutter.
+- **Cite inserts a real reference.** Citation went through `insertText`, which appends plain text; it now reads the draft and appends through `setDraft`, the contract that hydrates an `@line:` token into a composer chip, with `insertText` as the fallback.
+- **Review next file reaches the next collapsed file**, and a file near the end of the list scrolls past the end by the missing distance so its header can reach the top.
+- **The tree's churn counts sit next to their name** in files and folders, centred on the same line box.
+- **Menu surfaces carry no padding**, so a pinned group label no longer shows a clipped row above it, and the branch label sits outside the scrolling list.
+
 ## 0.1.18 — 2026-10-20
 
 Everything since 0.1.16, from reports against a running pane: the fold geometry,
@@ -35,7 +49,7 @@ Pane interactions, from reports against a running pane. Two pull requests.
 - **One expander per hidden run.** A gap bar (lines outside the patch, fetched on demand) and an in-patch fold that touch with no change between them describe the same run; they stacked two "N unmodified lines" controls with nothing between them. They merge into one bar whose range covers both, in both layouts.
 - **A gap bar reveals its whole run in one click.** The label already carried the true count, but a click fetched 20 lines and left a separate "all" control to ask for the rest. The step is gone for gap bars: one control shows exactly as many lines as the label promised, bounded by the next change or the file edge — which is what the run is. The bar surface no longer changes colour on hover, where it promised a click that only the small step button acted on.
 - **No count when the selection is everything.** With all commits selected — the default — the navigator showed a position counter and the scope button a churn total, both describing the whole history rather than a reviewable selection.
-- **Pane settings are restored per workspace** (connection/profile plus the focused workspace) instead of one global set, with a fallback to the key older versions wrote. Scope and repository are deliberately not stored: they follow the session and the agent.
+- **Pane settings are restored per workspace** — the key is profile + connection + focused workspace — instead of one global set, with a fallback to the key older versions wrote. Scope and repository are deliberately not stored: they follow the workspace and the agent. Per chat session is not available: a desktop plugin is not given the focused session id (the loader's allowlist exposes no such atom), so several chats on one workspace share one set of pane settings.
 - **Selection has a way out.** Clicking the selected line again, or any click that is not on a code line, leaves selection mode. A selection spanning a hidden run cites the exact range, covered by a test that reveals a file, hides its context, selects across the hidden run and asserts the ref.
 - **The file list resizes.** It keeps its default share of the pane until the divider is dragged; double-click resets, the width is stored with the other pane settings, the diff column reflows rather than overflowing, and the divider hides once the narrow layout stacks the two.
 - **Ceilings come from the hosts people compare against rather than invented numbers.** GitHub lists at most 250 commits between two revisions and refuses a diff past 3,000 lines; GitLab renders 5,000 diff lines before collapsing the rest. The commit list is 250 (was 200) and one expansion reads 5,000 lines (was 2,000). The 8 MiB whole-diff ceiling is ours.

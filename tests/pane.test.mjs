@@ -21,7 +21,7 @@ const stubComposer = (original, inserted) => ({
   },
   insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) },
 })
-import { GitReview, filesToOpen, collapseRows, scrollTopFor } from '../desktop/plugin.js'
+import { GitReview, filesToOpen, collapseRows, scrollTopFor, settingsKeyFor } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -556,4 +556,14 @@ test('search input callback filters real diff files case-insensitively', async t
   assert.deepEqual(paths(root), [files[2]])
   await act(async () => search.props.onChange(''))
   assert.deepEqual(paths(root), files)
+})
+
+test('pane settings are scoped to profile, connection and workspace', () => {
+  const A = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a')
+  const B = settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/b')
+  const C = settingsKeyFor(JSON.stringify(['other', 'default']), '/repo/a')
+  assert.notEqual(A, B, 'a different workspace must not share settings')
+  assert.notEqual(A, C, 'a different connection must not share settings')
+  assert.equal(A, settingsKeyFor(JSON.stringify(['conn', 'default']), '/repo/a'), 'the same scope is stable across renders')
+  assert.ok(A.startsWith('display.v1:'), 'the key stays versioned so a future shape can migrate')
 })
