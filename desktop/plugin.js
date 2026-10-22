@@ -1191,14 +1191,19 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
       const scroller = document.querySelector(".grd .allfiles");
       const section = scroller?.querySelector(`.af-file[data-path="${CSS.escape(path)}"]`);
       if (!scroller || !section) return;
-      scroller.scrollTo({
-        top: scrollTopFor({
-          elementTop: section.getBoundingClientRect().top,
-          scrollerTop: scroller.getBoundingClientRect().top,
-          scrollTop: scroller.scrollTop,
-        }),
-        behavior: "smooth",
+      const top = scrollTopFor({
+        elementTop: section.getBoundingClientRect().top,
+        scrollerTop: scroller.getBoundingClientRect().top,
+        scrollTop: scroller.scrollTop,
       });
+      // A file near the end of the list (collapsed files are short) cannot reach the
+      // top: the column stops scrolling first, and the header stays under the
+      // previous file's sticky one. Scroll past the end by exactly the missing
+      // distance - the editor convention - and drop it on a jump that needs none.
+      const tail = parseFloat(scroller.style.paddingBottom) || 0;
+      const max = scroller.scrollHeight - tail - scroller.clientHeight;
+      scroller.style.paddingBottom = `${Math.max(0, Math.ceil(top - max))}px`;
+      scroller.scrollTo({ top, behavior: "smooth" });
     });
   };
   const scopeLabel = scope === "commits" ? (picked.size ? `Commits (${picked.size})` : "Commits")
