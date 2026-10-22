@@ -344,6 +344,17 @@ test('each file diff: rows span the scrolled width, and no scrollbar band', () =
   assert.ok(!/\.grd \.(rows|af-body)\b/.test(src), 'no rules for elements the pane never renders')
 })
 
+test('a fold label stays centred on the view while its strip spans the scroll', () => {
+  // The strip is as wide as the scrolled row; the label is pinned to the scroller's
+  // visible box (sticky, one cqw-view wide), so it tracks the pane width live.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  assert.match(src, /\.grd \.diff,\.grd \.splitwrap\{container-type:inline-size\}/, 'the per-file scroller is the size container')
+  const inner = src.match(/\.grd \.fold-inner\{position:sticky[^}]*\}/)?.[0] || ''
+  assert.match(inner, /left:0/, 'pinned to the visible left edge')
+  assert.match(inner, /width:100cqw/, 'one view wide, from the live scroller width')
+  assert.match(inner, /justify-content:center/, 'centred inside the view')
+})
+
 test('diff text can be selected and copied, gutter excluded', () => {
   // The pane is a review surface first: a drag over code must select text like an
   // editor does, and the line numbers must not come along in the copy.

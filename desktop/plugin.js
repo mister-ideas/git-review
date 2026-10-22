@@ -464,6 +464,15 @@ const css = `
 .grd .fold:focus-visible{outline:2px solid var(--ui-accent);outline-offset:-2px}
 @container(max-width:560px){.grd .body{grid-template-columns:minmax(0,1fr) minmax(150px,30%)}.grd .toolbar{gap:4px;padding-inline:6px}}
 .grd .fold,.grd .fold-inner{white-space:nowrap}
+/* The fold row spans the whole scrolled width (its strip must reach the end), but
+   its label belongs to the view: centred in a row thousands of pixels wide it sat
+   off-screen. The label is pinned to the scroller's visible box - sticky at left 0,
+   one view wide (cqw of the per-file scroller) - and centres inside it. The rule
+   segments beside it were painted under the strip and never visible; without them
+   the label is the only flex item and nothing pushes it sideways. */
+.grd .diff,.grd .splitwrap{container-type:inline-size}
+.grd .fold::before,.grd .fold::after{display:none}
+.grd .fold-inner{position:sticky;left:0;flex:none;width:100cqw;justify-content:center}
 .check-slot{display:inline-flex;align-items:center;justify-content:center;width:1rem;flex:0 0 1rem}
 @container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .resizer{display:none}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
 `;
