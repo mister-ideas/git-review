@@ -97,6 +97,24 @@ test('files hide/show persists through a real unmount/remount', async t => {
   assert.equal(paneSettings(storage).files, true)
 })
 
+test('scope, comparison base and repository come back after leaving the session', async t => {
+  // The reviewer's choices are pane state: switching session or coming back to the
+  // workspace must restore them instead of resetting to Uncommitted/first repo.
+  const storage = new Map()
+  const first = await mount(t, { storage })
+  await select(first.root, 'Staged')
+  assert.equal(latestDiff(first.requests).searchParams.get('scope'), 'staged')
+  const savedRepo = latestDiff(first.requests).searchParams.get('repo')
+  assert.ok(savedRepo, 'the pane asked for a repository')
+  assert.equal(paneSettings(storage).scope, 'staged', 'the scope is written to the pane settings')
+  assert.equal(paneSettings(storage).repo, savedRepo, 'the repository is written to the pane settings')
+
+  await act(async () => first.renderer.unmount())
+  const back = await mount(t, { storage })
+  assert.equal(latestDiff(back.requests).searchParams.get('scope'), 'staged', 'the scope is restored')
+  assert.equal(latestDiff(back.requests).searchParams.get('repo'), savedRepo, 'the repository is restored')
+})
+
 test('architecture folders default expanded; compact chain toggles descendants only', async t => {
   const { root } = await mount(t)
   const folders = byClass(root, 'folder')

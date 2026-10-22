@@ -726,12 +726,43 @@ function GitReview({ ctx }) {
     lastHandled.current = -1;
     ++generation.current; ++focusGeneration.current;
     setWorktrees([]); setChosen(""); setMeta(null); setDiff(null); setPr(null);
-    setScope("uncommitted"); setBase(""); setRef(""); setPathFilter("");
+    // A different profile or connection is a different backend: its scope, base and
+    // repository do not carry over. A WORKSPACE switch inside one connection does not
+    // run this effect, which is what keeps the reviewer's choices across sessions.
+    setScope("uncommitted"); setBase("");
+    setRef(""); setPathFilter("");
     setCommits([]); setPicked(new Set()); setCommitsLoading(false); setHistoryNote(""); setAllHistory(false); setNavIndex(-1); setHasMore(false);
     commitSelectionOwner.current = ""; commitSelectionExplicit.current = false;
     setSelected(""); setFilter(""); setExpanded({}); setContextModes({}); setFullFiles({});
     setError(""); setRepositoryIdentity(identity);
   }, [identity, repositoryReady]);
+
+  // Saved on change only: the first run of each effect fires with the value restore
+  // just read, and writing it back would race the display-settings restore.
+  // Restore the reviewer's scope and comparison base once the settings are readable:
+  // they are pane state, not workspace state, so a session or workspace switch keeps
+  // them. This runs before the persist effects, whose first run is skipped.
+  const restoredScope = useRef(false);
+  useEffect(() => {
+    if (restoredScope.current) return;
+    restoredScope.current = true;
+    const saved = readSettings();
+    if (saved.scope) setScope(saved.scope);
+    if (typeof saved.base === "string" && saved.base) setBase(saved.base);
+  }, [readSettings]);
+  const firstPersist = useRef({ base: true, repo: true, scope: true });
+  useEffect(() => {
+    if (firstPersist.current.scope) { firstPersist.current.scope = false; return; }
+    persist({ scope });
+  }, [scope]);
+  useEffect(() => {
+    if (firstPersist.current.base) { firstPersist.current.base = false; return; }
+    persist({ base });
+  }, [base]);
+  useEffect(() => {
+    if (firstPersist.current.repo) { firstPersist.current.repo = false; return; }
+    if (chosen) persist({ repo: chosen });
+  }, [chosen]);
 
   // Selections are repo/scope bound: drop them when either changes.
   // Only a scope switch invalidates a line selection. Keying this on `chosen` too
@@ -786,7 +817,12 @@ function GitReview({ ctx }) {
   }, [ctx, cwd, tick, identity, repositoryReady]);
 
   useEffect(() => {
-    if (repositoryReady && !chosen && worktrees.length) setChosen(worktrees[0].path);
+    if (!repositoryReady || chosen || !worktrees.length) return;
+    // Only the scoped entry: the unscoped fallback holds another connection's
+    // settings, and a repository path is not portable across connections.
+    let saved = "";
+    try { saved = (ctx.storage.get(settingsKey, {}) || {}).repo || ""; } catch { saved = ""; }
+    setChosen(saved && worktrees.some((w) => w.path === saved) ? saved : worktrees[0].path);
   }, [worktrees, chosen, repositoryReady]);
 
   // Agent-driven selection: the git_review_select tool pushes a request into the
