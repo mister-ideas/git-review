@@ -369,11 +369,18 @@ const css = `
 .grd .detailtitle .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .grd .diff{overflow:auto;flex:1;min-height:0;margin:0;tab-size:4;font:12px/1.75 var(--font-mono,monospace)}
-/* The scroll width lives on the container, the rows fill it. With width on the
-   rows each one ended at its own text, so a change's background stopped mid-line
-   and the unmodified-lines bars stopped short of the scrolled area. */
-.grd .rows,.grd .af-body{width:max-content;min-width:100%}
-.grd .line{display:flex;width:100%;min-width:0;white-space:pre;padding:0 6px;align-items:baseline;cursor:text;user-select:text;-webkit-user-select:text}
+/* Each file's diff is its own horizontal scroller, so a row's width:100% is the
+   VISIBLE width, never the scrolled one: past the first screen a change lost its
+   background. A one-column grid sized minmax(max-content, 1fr) is at least as wide
+   as the widest row and grows to fill the view when every line is short; rows
+   stretch to it, change backgrounds and unmodified-lines bars included. (Measured:
+   minmax(100%, max-content) stays at the view width in Chromium, and a bare
+   max-content column shrinks short files below the view.) Rows carry no width of
+   their own - a percentage there resolves to the view and pins the column to it.
+   Wrapped, the column is the view: nothing overflows. */
+.grd .diff{display:grid;grid-template-columns:minmax(max-content,1fr);align-content:start}
+.grd .diff.wordw{grid-template-columns:minmax(0,1fr)}
+.grd .line{display:flex;width:auto;min-width:0;white-space:pre;padding:0 6px;align-items:baseline;cursor:text;user-select:text;-webkit-user-select:text}
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
 .grd .line.line-selected.line:is(.add,.remove,.context,.meta){background-image:linear-gradient(color-mix(in srgb,var(--ui-accent) 16%,transparent),color-mix(in srgb,var(--ui-accent) 16%,transparent))}
@@ -392,24 +399,19 @@ const css = `
 .grd .line.hunk:not(:first-child){margin-top:12px}
 .grd .fold{position:relative;display:flex;align-items:center;gap:8px;padding:2px 0;color:var(--ui-text-tertiary);font-size:11px;cursor:default;user-select:none}
 .grd .fold::before,.grd .fold::after{content:"";flex:1;border-top:1px solid var(--ui-stroke-tertiary)}
-/* A fold bar is not a code line: inside a code row's height it centres itself and
-   leaves a band above and below, which reads as empty space between files when the
-   bar ends a file. The row collapses to the bar. */
-.grd .line:has(> .fold),.grd .line:has(.fold){min-height:0;padding-top:2px;padding-bottom:2px;align-items:center}
-/* One gap between files, never two: a fold bar that ends a file adds nothing
-   below itself, so the next file's header is separated by the section edge only.
-   Files that end in a change line already sit flush, which is why the spacing
-   looked right there and wrong after a trailing "N unmodified lines" bar. */
-.grd .af-file > :last-child,
-.grd .af-file > :last-child .fold,
-.grd .af-body > :last-child .fold{padding-bottom:0;margin-bottom:0}
 .grd .fold-strip{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--ui-surface-background);pointer-events:none}
 .grd .fold-inner{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px}
 /* Hermes core styles *::-webkit-scrollbar globally, so every scroller gets a
    classic bar that reserves its width. The column hides it and draws .ov-bar
    instead: absolutely positioned over the diff, so it takes no width, and it
    fades a moment after scrolling stops. */
-.grd .allfiles::-webkit-scrollbar,.grd .af-body::-webkit-scrollbar,.grd .rows::-webkit-scrollbar{width:0;height:0}
+.grd .allfiles::-webkit-scrollbar{width:0;height:0}
+/* Hermes styles every scrollbar, which reserves a band under each file that scrolls
+   sideways. scrollbar-width is the standard switch and, once set, Chromium ignores
+   the global ::-webkit-scrollbar rule; the pseudo-element covers older engines.
+   Horizontal scrolling stays available by trackpad and shift+wheel. */
+.grd .diff,.grd .splitwrap{scrollbar-width:none}
+.grd .diff::-webkit-scrollbar,.grd .splitwrap::-webkit-scrollbar{display:none;width:0;height:0}
 .grd .ov-bar{position:absolute;right:2px;top:0;width:6px;border-radius:3px;pointer-events:none;z-index:6;
   background:color-mix(in srgb,var(--dt-scrollbar-thumb) 45%,transparent);opacity:0;transition:opacity .18s ease;will-change:transform}
 /* Right sidebar: vertical scroll only; long names ellipsize, never overflow. */

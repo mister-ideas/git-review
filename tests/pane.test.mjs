@@ -328,6 +328,22 @@ test('the diff column reserves no scrollbar gutter and styles no scrollbar', () 
   assert.match(list, /padding:0/, 'no padding above the sticky label')
 })
 
+test('each file diff: rows span the scrolled width, and no scrollbar band', () => {
+  // Measured in Chromium with the real Hermes stylesheet: the per-file scroller is
+  // .diff, so a row width of 100% is the VISIBLE width and every background stopped
+  // at the first screen. The grid column carries the width instead; rows carry none.
+  // Earlier tests asserted on .rows/.af-body, which do not exist, so they passed
+  // while the bug stayed - these selectors are the real DOM.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
+  const diff = src.match(/\.grd \.diff\{display:grid[^}]*\}/)?.[0] || ''
+  assert.match(diff, /grid-template-columns:minmax\(max-content,1fr\)/, 'the column must reach the widest row and fill the view')
+  assert.match(src, /\.grd \.diff\.wordw\{grid-template-columns:minmax\(0,1fr\)\}/, 'wrapped, the column is the view')
+  const line = src.match(/\.grd \.line\{display:flex[^}]*\}/)?.[0] || ''
+  assert.ok(!/width:100%/.test(line), 'a percentage row width pins the column to the view')
+  assert.match(src, /\.grd \.diff,\.grd \.splitwrap\{scrollbar-width:none\}/, 'no horizontal scrollbar band under a file')
+  assert.ok(!/\.grd \.(rows|af-body)\b/.test(src), 'no rules for elements the pane never renders')
+})
+
 test('diff text can be selected and copied, gutter excluded', () => {
   // The pane is a review surface first: a drag over code must select text like an
   // editor does, and the line numbers must not come along in the copy.
