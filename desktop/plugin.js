@@ -1238,7 +1238,15 @@ function GitReview({ ctx }) {
         const text = draft.trim() ? `${draft.trimEnd()} ${ref}` : ref;
         return Promise.resolve(composer.setDraft(null, text));
       }).then((ok) => {
-        if (ok === false) host.notify({ kind: "info", message: "No focused composer — click into the chat input first." });
+        // setDraft fails closed when no mounted composer answers for the address: the
+        // chat may be on another surface, or the pane has focus. Append through
+        // insertText instead of leaving the reviewer with a toast and no citation.
+        if (ok !== false) return undefined;
+        const insert = host.composer && host.composer.insertText;
+        if (typeof insert !== "function") throw new Error("no composer verbs");
+        return Promise.resolve(insert(null, ref, { mode: "inline" })).then((done) => {
+          if (done === false) host.notify({ kind: "info", message: "No focused composer — click into the chat input first." });
+        });
       }).catch(() => {});
     } else {
       const result = composer.insertText(null, ref, { mode: "inline" });
