@@ -152,6 +152,29 @@ test('branch picker picks a comparison base: never checks anything out, adds no 
   assert.equal(scopeMenuItems.length, 0, 'Branch vs base must be removed from the scope menu')
 })
 
+test('lines stay selectable and citable in the Commits scope', async t => {
+  // The scope whitelist used to exclude commits/staged, which silently removed every
+  // row handler: clicking a line did nothing and no cite bar appeared.
+  const inserted = []
+  const original = host.composer
+  host.composer = { ...original, getDraft: async () => '', setDraft: (id, v) => { inserted.push(v); return true } }
+  t.after(() => { host.composer = original })
+  const { root } = await mount(t)
+  await select(root, 'Commits')
+  const pathOf = (n) => { let p = n; while (p && !(p.props && p.props['data-path'])) p = p.parent; return p?.props?.['data-path'] }
+  const all = root.findAll(n => hasClass(n, 'gutter') && typeof n.props.onClick === 'function')
+  assert.ok(all.length > 0, 'commits rows expose a click handler')
+  const first = pathOf(all[0])
+  const gutters = all.filter(n => pathOf(n) === first)
+  await gutterDown(gutters[0])
+  await gutterDown(gutters[Math.min(3, gutters.length - 1)])
+  assert.ok(root.findAll(n => hasClass(n, 'line-selected')).length > 0, 'the line highlights')
+  const cite = byLabel(root, 'Cite selected lines in focused message draft')
+  assert.ok(cite, 'the cite bar appears in the commits scope')
+  await click(cite)
+  assert.equal(inserted.length, 1)
+})
+
 test('click line then another highlights the range; cite inserts native @line reference in composer draft', async t => {
   const inserted = []
   const original = host.composer

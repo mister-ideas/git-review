@@ -1274,7 +1274,10 @@ const EMPTY_SCOPE = {
   unstaged: ["No unstaged changes", "The worktree matches the index."],
   commits: ["No changes in the selected commits", "Pick different commits or a different comparison base."],
 };
-const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "agent_turn"]);
+// Every scope can be cited. Restricting this to the working-tree scopes left the
+// gutter inert on "Commits" and "Staged" - clicks, drags and the cite bar all
+// disappeared with no explanation, because the row handlers were never attached.
+const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn", "commits"]);
   const LINE_DRAG_MIME = "application/x-hermes-paths";
   const gutterHandlers = (s, file) => (row) => {
     if (!CITABLE_SCOPES.has(scope) || !row || row.after == null || row.kind === "remove") return null;
