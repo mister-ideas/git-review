@@ -2,6 +2,18 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.23 — 2026-10-22
+
+### Fixed
+- **Citing falls back to `insertText` when `setDraft` cannot reach a composer.** The
+  SDK's `setDraft` fails closed (`false`) when no mounted composer answers for the
+  address — the chat may live on another surface, or the pane holds focus. The pane
+  only showed a toast, so "Cite in message" looked broken. It now appends the
+  reference through `insertText` and notifies only if that fails too.
+- Verified in real Chromium against the shipped file: gutter drag selects the range,
+  the cite bar shows `@line:<path>:<start>-<end>`, and the reference reaches the
+  composer (`window.__composerInserts` = `["@line:src/architecture/deep/main.ts:10011-10012"]`).
+
 ## 0.1.22 — 2026-10-22
 
 ### Fixed
