@@ -2,6 +2,16 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.24 — 2026-10-23
+
+### Fixed
+- **Lines are selectable and citable in every scope.** `CITABLE_SCOPES` only listed
+  the working-tree scopes, so on **Commits** (and Staged) `gutterFor` was `null` and no
+  row handler was attached at all: clicking a line did nothing, dragging did nothing,
+  and the cite bar never appeared. Commits and staged are citable now.
+- Test: `lines stay selectable and citable in the Commits scope` — red on the previous
+  code (`commits rows expose a click handler`), green now.
+
 ## 0.1.23 — 2026-10-22
 
 ### Fixed
