@@ -1,8 +1,8 @@
 {
   "name": "git-review",
   "label": "Git review",
-  "version": "0.1.27",
-  "description": "Read-only Git diff review for focused and configured repositories.",
+  "version": "0.2.0",
+  "description": "Git review pane: every changed file in one scroll, with stage, commit, push and pull requests.",
   "tab": { "hidden": true },
   "entry": "index.js",
   "api": "plugin_api.py"

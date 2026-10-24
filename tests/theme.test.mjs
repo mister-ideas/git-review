@@ -35,6 +35,8 @@ test('every colour token the pane uses is one Desktop defines', () => {
     'ui-diff-remove-background', 'ui-diff-remove-foreground', 'ui-green', 'ui-red', 'ui-row-active-background',
     'ui-row-hover-background', 'ui-sash-hover-background', 'ui-sash-hover-border', 'ui-stroke-secondary',
     'ui-stroke-tertiary', 'ui-surface-background', 'ui-text-primary', 'ui-text-secondary', 'ui-text-tertiary',
+    // Syntax colours: Desktop's accent hues (styles.css :root, redefined per skin).
+    'ui-purple', 'ui-cyan', 'ui-yellow',
   ]);
   const unknown = [...used].filter((t) => !known.has(t));
   assert.deepEqual(unknown, [], `tokens Desktop does not define: ${unknown.join(', ')}`);

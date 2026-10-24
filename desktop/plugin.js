@@ -1,4 +1,4 @@
-// Git review — a read-only pane over the focused repository and configured roots.
+// Git review — a review pane over the focused repository and configured roots.
 // Plain ESM loaded uncompiled — jsx() calls, not JSX syntax. Imports restricted to the
 // loader allowlist: @hermes/plugin-sdk, react, react/jsx-runtime.
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger, EmptyState,
   SearchField, Switch, Tip, cn, host, useValue,
 } from "@hermes/plugin-sdk";
+import * as sdk from "@hermes/plugin-sdk";
 
 // ───────────────────────── diff parsing ─────────────────────────
 
@@ -234,6 +235,7 @@ const SCOPES = [
   { id: "uncommitted", label: "Uncommitted" },
   { id: "staged", label: "Staged" },
   { id: "unstaged", label: "Unstaged" },
+  { id: "branch", label: "Branch" },
   { id: "commits", label: "Commits" },
 ];
 
@@ -446,6 +448,47 @@ const css = `
 .grd .af-head .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .af-copy{display:inline-flex;color:var(--ui-text-tertiary);cursor:pointer}
 .grd .af-copy:hover{color:var(--ui-text-secondary)}
+/* Stage / unstage / discard: quiet until the header is hovered or focused. */
+.grd .af-act{display:inline-flex;color:var(--ui-text-tertiary);opacity:0;transition:opacity .12s}
+.grd .af-head:hover .af-act,.grd .af-head:focus-within .af-act{opacity:1}
+.grd .af-act:hover{color:var(--ui-text-primary)}
+@media (hover:none){.grd .af-act{opacity:1}}
+.grd .af-head .ftype{color:var(--ui-text-tertiary);flex-shrink:0}
+.grd .af-staged{flex-shrink:0;font-size:10.5px;line-height:1;padding:2px 5px;border-radius:4px;color:var(--ui-text-secondary);border:1px solid var(--ui-stroke-tertiary)}
+.grd .file .fhint{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ui-text-tertiary);font-size:10.5px}
+/* Syntax colours: the theme's hues pulled toward the text colour, so they keep
+   contrast on light and dark skins alike. */
+.grd .tk-k{color:color-mix(in srgb,var(--ui-purple) 50%,var(--ui-text-primary))}
+.grd .tk-s{color:color-mix(in srgb,var(--ui-cyan) 72%,var(--ui-text-primary))}
+.grd .tk-n{color:color-mix(in srgb,var(--ui-orange) 64%,var(--ui-text-primary))}
+.grd .tk-f{color:color-mix(in srgb,var(--ui-blue) 62%,var(--ui-text-primary))}
+.grd .tk-t{color:color-mix(in srgb,var(--ui-yellow) 60%,var(--ui-text-primary))}
+/* Desktop sets color-scheme on the root from the rendered mode: on dark skins the
+   light text would wash the hues out, so they keep more of their own colour. */
+.grd .tk-k{color:light-dark(color-mix(in srgb,var(--ui-purple) 50%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-purple) 92%,var(--ui-text-primary)))}
+.grd .tk-s{color:light-dark(color-mix(in srgb,var(--ui-cyan) 72%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-cyan) 92%,var(--ui-text-primary)))}
+.grd .tk-n{color:light-dark(color-mix(in srgb,var(--ui-orange) 64%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-orange) 90%,var(--ui-text-primary)))}
+.grd .tk-t{color:light-dark(color-mix(in srgb,var(--ui-yellow) 60%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-yellow) 90%,var(--ui-text-primary)))}
+.grd .tk-p{color:color-mix(in srgb,var(--ui-blue) 50%,var(--ui-text-primary))}
+.grd .tk-c{color:var(--ui-text-secondary);font-style:italic}
+/* Commit box under the diff. */
+.grd .commit-bar{flex-shrink:0;display:flex;flex-direction:column;gap:6px;padding:8px 12px;border-top:1px solid var(--ui-stroke-tertiary)}
+.grd .commit-field{position:relative}
+.grd .commit-field textarea{width:100%;min-height:30px;max-height:160px;resize:none;padding:6px 34px 6px 8px;font:12px/1.4 var(--font-sans,system-ui);color:var(--ui-text-primary);background:var(--ui-bg-quinary);border:1px solid var(--ui-stroke-tertiary);border-radius:6px;outline:none;field-sizing:content}
+.grd .commit-field textarea:hover{border-color:var(--ui-stroke-secondary)}
+.grd .commit-field textarea:focus{border-color:var(--ui-accent)}
+.grd .commit-field textarea::placeholder{color:var(--ui-text-tertiary)}
+.grd .commit-gen{position:absolute;top:2px;right:2px;color:var(--ui-text-tertiary)}
+.grd .commit-gen:hover{color:var(--ui-text-primary)}
+.grd .commit-actions{display:flex;align-items:center;gap:4px;min-width:0}
+.grd .commit-split{display:flex;flex:1 1 0;min-width:0}
+.grd .commit-split .commit-main{flex:1 1 0;min-width:0;border-top-right-radius:0;border-bottom-right-radius:0}
+.grd .commit-split .commit-more{border-top-left-radius:0;border-bottom-left-radius:0;border-left:1px solid color-mix(in srgb,var(--ui-text-primary) 18%,transparent);padding-inline:6px}
+.grd .commit-label{display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grd .commit-push{font-variant-numeric:tabular-nums}
+.grd .commit-note{font-size:10.5px;color:var(--ui-text-secondary)}
+.grd .gr-skeleton{display:flex;flex-direction:column;gap:10px;padding:14px 12px}
+.grd .gr-skel-row{height:12px;border-radius:4px}
 .grd .notice{padding:8px 14px;font-size:12px;border-bottom:1px solid var(--ui-stroke-tertiary);color:var(--ui-text-secondary);display:flex;align-items:center;gap:8px}
 .grd .wordw .line{min-width:0;width:100%;white-space:pre-wrap}
 .grd .wordw .linecode{flex:1 1 0;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal}
@@ -502,9 +545,53 @@ function DeltaCounts({ added, removed, className }) {
 
 // Sidebar tree with collapsible folders and per-file churn. repoRoot anchors
 // composer-native drags (absolute path payload, core files-tree contract).
-function Tree({ tree, filter, selected, onSelect, stats, repoRoot }) {
+// A row's right-click menu, when the host exports a context menu; `null` items are separators.
+function withRowMenu(items, row, key) {
+  if (!SDK_CONTEXT_MENU || !items || !items.length) return row;
+  const M = SDK_CONTEXT_MENU;
+  return jsxs(M.Menu, { children: [
+    jsx(M.Trigger, { asChild: true, children: row }),
+    jsx(M.Content, { className: "gr-menu", children: items.map((item, i) => item
+      ? jsx(M.Item, { variant: item.destructive ? "destructive" : undefined, onSelect: item.run, children: item.label }, item.label)
+      : (M.Separator ? jsx(M.Separator, {}, `sep${i}`) : null)) }),
+  ] }, key);
+}
+
+function Tree({ tree, filter, selected, onSelect, stats, repoRoot, flat = false, files = [], menuItems }) {
   const [open, setOpen] = useState({});
   const q = filter.trim().toLowerCase();
+  const fileRow = (file, depth, hint) => {
+    const st = stats.get(file) || { added: 0, removed: 0, isNew: false, status: "modified" };
+    const glyph = STATUS_GLYPH[st.status] || STATUS_GLYPH.modified;
+    // Composer-native drag (core files tree contract): one absolute-path entry.
+    const row = jsxs("button", { className: "file", style: { paddingLeft: 10 + depth * 12 + 14 },
+      draggable: true,
+      onDragStart: (event) => {
+        try {
+          const root = (repoRoot || "").replace(/\/$/, "");
+          const abs = root ? `${root}/${file}` : file;
+          event.dataTransfer.effectAllowed = "copy";
+          event.dataTransfer.setData("application/x-hermes-paths", JSON.stringify([{ isDirectory: false, path: abs }]));
+          event.dataTransfer.setData("text/plain", abs);
+        } catch { /* DataTransfer may be unavailable; a failed drag payload is non-fatal */ }
+      },
+      "aria-pressed": file === selected, onClick: () => onSelect(file), children: [
+      jsx(Codicon, { className: cn("shrink-0", glyph.tone), name: glyph.icon, size: "0.8rem" }),
+      jsx("span", { className: "fname", children: basename(file) }),
+      hint ? jsx("span", { className: "fhint", children: hint }) : null,
+      st.isNew ? jsx(Badge, { size: "xs", children: "new" }) : null,
+      jsx(DeltaCounts, { added: st.added, removed: st.removed })
+    ] }, file);
+    return withRowMenu(menuItems ? menuItems(file) : null, row, file);
+  };
+  if (flat) {
+    // List view: every file on one level, its folder as a muted hint.
+    // `files` is already narrowed by the search (names and changes alike).
+    const rows = [...files]
+      .sort((a, b) => basename(a).localeCompare(basename(b)) || a.localeCompare(b))
+      .map((f) => fileRow(f, -1, f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : ""));
+    return jsx("div", { className: "tree", children: rows });
+  }
   const renderNode = (node, prefix, depth) => {
     const rows = [];
     const folders = Object.keys(node).filter((k) => k !== "__files").sort();
@@ -524,26 +611,7 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot }) {
     }
     for (const file of node.__files || []) {
       if (q && !file.toLowerCase().includes(q)) continue;
-      const st = stats.get(file) || { added: 0, removed: 0, isNew: false, status: "modified" };
-      const glyph = STATUS_GLYPH[st.status] || STATUS_GLYPH.modified;
-      // Composer-native drag (core files tree contract): one absolute-path entry.
-      rows.push(jsxs("button", { className: "file", style: { paddingLeft: 10 + depth * 12 + 14 },
-        draggable: true,
-        onDragStart: (event) => {
-          try {
-            const root = (repoRoot || "").replace(/\/$/, "");
-            const abs = root ? `${root}/${file}` : file;
-            event.dataTransfer.effectAllowed = "copy";
-            event.dataTransfer.setData("application/x-hermes-paths", JSON.stringify([{ isDirectory: false, path: abs }]));
-            event.dataTransfer.setData("text/plain", abs);
-          } catch { /* DataTransfer may be unavailable; a failed drag payload is non-fatal */ }
-        },
-        "aria-pressed": file === selected, onClick: () => onSelect(file), children: [
-        jsx(Codicon, { className: cn("shrink-0", glyph.tone), name: glyph.icon, size: "0.8rem" }),
-        jsx("span", { className: "fname", children: basename(file) }),
-        st.isNew ? jsx(Badge, { size: "xs", children: "new" }) : null,
-        jsx(DeltaCounts, { added: st.added, removed: st.removed })
-      ] }, file));
+      rows.push(fileRow(file, depth));
     }
     return rows;
   };
@@ -577,6 +645,266 @@ function CommitsSubmenu({ commits, selected, onToggle, onAll, onNone, hasMore, l
 // On a busy rising edge for the focused cwd we snapshot HEAD + untracked files
 // (POST /turn-base); the agent_turn scope diffs working tree vs that snapshot
 // (POST /turn-diff), so committed + uncommitted + terminal-made edits all show.
+// ───────────────────────── optional host pieces ─────────────────────────
+// Read from the SDK namespace, not named imports: a name an older Desktop does not
+// export would fail the whole module at link time, while a namespace member is
+// simply undefined and the pane falls back.
+const SDK_CONFIRM = sdk.ConfirmDialog;
+const SDK_TEXTAREA = sdk.Textarea;
+const SDK_SKELETON = sdk.Skeleton;
+const SDK_CONTEXT_MENU = sdk.ContextMenu && sdk.ContextMenuTrigger && sdk.ContextMenuContent && sdk.ContextMenuItem
+  ? { Menu: sdk.ContextMenu, Trigger: sdk.ContextMenuTrigger, Content: sdk.ContextMenuContent, Item: sdk.ContextMenuItem, Separator: sdk.ContextMenuSeparator }
+  : null;
+const STATUSBAR_RIGHT = (sdk.STATUSBAR_AREAS && sdk.STATUSBAR_AREAS.right) || "statusBar.right";
+const KEYBINDS = sdk.KEYBINDS_AREA || "keybinds";
+
+// Scopes whose new side is the working tree or the index: the ones writes act on.
+const LIVE_SCOPES = new Set(["uncommitted", "unstaged", "staged"]);
+// The prompt Hermes Desktop hands the agent for "open a PR" (statusStack.coding.agentShipPrompt).
+const AGENT_SHIP_PROMPT = "Review the current changes, commit them with a clear conventional-commit message, push the branch, and open a pull request.";
+const SHIP_KEY = "ship.v1";
+
+// `${status}: ${body}` is how the desktop transport reports an HTTP failure; FastAPI
+// puts the reason in body.detail.
+function errorText(err) {
+  const raw = String(err?.message || err || "");
+  const m = /^\d{3}:\s*([\s\S]*)$/.exec(raw);
+  if (m) {
+    try { const body = JSON.parse(m[1]); if (typeof body?.detail === "string") return body.detail; } catch { /* plain text */ }
+    return m[1].trim() || raw;
+  }
+  return raw || "unknown error";
+}
+
+// ── file-type icons ──────────────────────────────────────────────────────────
+// Same table Hermes Desktop uses for file icons (lib/markdown-code.ts:
+// CODICON_BY_LANGUAGE + LANGUAGE_BY_EXTENSION); the SDK does not export FileTypeIcon.
+const CODICON_BY_LANGUAGE = {
+  bash: "terminal", cmd: "terminal", console: "terminal", fish: "terminal", powershell: "terminal", ps1: "terminal",
+  sh: "terminal", shell: "terminal", zsh: "terminal", md: "markdown", markdown: "markdown", json: "json", json5: "json",
+  ini: "settings-gear", toml: "settings-gear", yaml: "settings-gear", yml: "settings-gear", dotenv: "settings-gear", env: "settings-gear",
+  graphql: "database", gql: "database", mysql: "database", postgres: "database", postgresql: "database", sql: "database", sqlite: "database",
+  diff: "diff", patch: "diff", css: "symbol-color", less: "symbol-color", sass: "symbol-color", scss: "symbol-color", svg: "symbol-color",
+  regex: "regex", regexp: "regex", curl: "globe", http: "globe", docker: "package", dockerfile: "package", mermaid: "graph",
+};
+const LANGUAGE_BY_EXTENSION = {
+  bash: "bash", cfg: "ini", conf: "ini", css: "css", dockerfile: "dockerfile", env: "env", gql: "graphql", graphql: "graphql",
+  ini: "ini", json: "json", json5: "json", less: "less", markdown: "markdown", md: "markdown", mdx: "markdown", mmd: "mermaid",
+  ps1: "powershell", psql: "sql", sass: "sass", scss: "scss", sh: "bash", sql: "sql", svg: "svg", toml: "toml", yaml: "yaml",
+  yml: "yml", zsh: "zsh",
+};
+const fileExtension = (path) => {
+  const name = basename(path || "").toLowerCase();
+  if (name === "dockerfile" || name.startsWith("dockerfile.")) return "dockerfile";
+  if (name === ".env" || name.startsWith(".env.")) return "env";
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1) : "";
+};
+// Desktop's codiconForFilename: extension (or bare name such as `Dockerfile`) →
+// language → glyph, generic `code` otherwise.
+const codiconForPath = (path) => {
+  const name = basename(path || "").toLowerCase();
+  const dot = name.lastIndexOf(".");
+  const token = dot > 0 ? name.slice(dot + 1) : name;
+  return CODICON_BY_LANGUAGE[LANGUAGE_BY_EXTENSION[token] || token] || "code";
+};
+
+// ── syntax colours ────────────────────────────────────────────────────────────
+// A small line tokenizer: comments, strings, numbers, keywords, calls and types,
+// painted with the theme's own hues. One line at a time, so a block comment or a
+// multi-line string is only recognised where its line shows it.
+const SYNTAX_FAMILY = {
+  js: "c", jsx: "c", mjs: "c", cjs: "c", ts: "c", tsx: "c", mts: "c", cts: "c", java: "c", kt: "c", kts: "c", scala: "c",
+  c: "c", h: "c", cc: "c", cpp: "c", cxx: "c", hpp: "c", cs: "c", go: "c", rs: "c", swift: "c", dart: "c", php: "c", groovy: "c",
+  py: "py", pyi: "py", rb: "rb", sh: "sh", bash: "sh", zsh: "sh", fish: "sh", yaml: "yaml", yml: "yaml", toml: "ini", ini: "ini",
+  cfg: "ini", conf: "ini", env: "ini", json: "json", json5: "json", jsonc: "json", css: "css", scss: "css", less: "css", sass: "css",
+  sql: "sql", html: "xml", htm: "xml", xml: "xml", svg: "xml", vue: "xml", svelte: "xml", md: "md", mdx: "md", markdown: "md",
+  dockerfile: "sh", makefile: "sh", mk: "sh",
+};
+const KEYWORDS = {
+  c: "abstract as async await break case catch char class const continue declare default defer delete do else enum export extends false final finally fn for from func function go goto if impl implements import in instanceof interface is let loop match mod module mut namespace new nil null of override package private protected pub public readonly return self Self static struct super switch this throw throws trait true try type typeof undefined unsafe use val var void when where while yield",
+  py: "and as assert async await break case class continue def del elif else except False finally for from global if import in is lambda match None nonlocal not or pass raise return self True try while with yield",
+  rb: "alias and begin break case class def do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield require",
+  sh: "case do done elif else esac export fi for function if in local return select then until while echo exit set unset source readonly shift trap FROM RUN CMD COPY ADD ENV ARG WORKDIR ENTRYPOINT EXPOSE USER VOLUME LABEL",
+  sql: "add all alter and as asc between by case check column constraint create database default delete desc distinct drop else end exists foreign from full group having in index inner insert into is join key left like limit not null on or order outer primary references right select set table then union unique update values view when where with",
+  yaml: "true false null yes no on off", ini: "true false", json: "true false null", css: "important", xml: "", md: "",
+};
+// Built-in type names, coloured like types.
+const TYPE_WORDS = new Set("number string boolean bigint symbol object any unknown never int long short byte char float double bool void usize isize u8 u16 u32 u64 u128 i8 i16 i32 i64 i128 f32 f64 str rune error uint uint8 uint16 uint32 uint64 int8 int16 int32 int64 float32 float64 list dict tuple set bytes None".split(" "));
+const KEYWORD_SETS = Object.fromEntries(Object.entries(KEYWORDS).map(([k, v]) => [k, new Set(v.split(" ").filter(Boolean))]));
+const STRING = String.raw`"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|\x60(?:[^\x60\\]|\\.)*\x60?`;
+const NUMBER = String.raw`\b(?:0x[0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)\b`;
+const TOKEN_RE = {
+  c: new RegExp(String.raw`(\/\/.*$|\/\*.*?(?:\*\/|$))|(${STRING})|(${NUMBER})|([A-Za-z_$][\w$]*)`, "g"),
+  py: new RegExp(String.raw`(#.*$)|([rbuRBUfF]{0,2}(?:"""|'''|"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?))|(${NUMBER})|([A-Za-z_][\w]*)`, "g"),
+  rb: new RegExp(String.raw`(#.*$)|(${STRING})|(${NUMBER})|([A-Za-z_@$][\w?!]*)`, "g"),
+  sh: new RegExp(String.raw`(#.*$)|("(?:[^"\\]|\\.)*"?|'[^']*'?)|(${NUMBER})|(\$\{?[\w@#?*!-]+\}?|[A-Za-z_][\w-]*)`, "g"),
+  sql: new RegExp(String.raw`(--.*$)|('(?:[^']|'')*'?)|(${NUMBER})|([A-Za-z_][\w]*)`, "g"),
+  yaml: new RegExp(String.raw`(#.*$)|(${STRING})|(${NUMBER})|(^\s*-?\s*[\w.\-"']+(?=\s*:))|([A-Za-z_][\w-]*)`, "g"),
+  ini: new RegExp(String.raw`([#;].*$)|(${STRING})|(${NUMBER})|(^\s*\[[^\]]*\]|^\s*[\w.\-]+(?=\s*=))|([A-Za-z_][\w-]*)`, "g"),
+  json: new RegExp(String.raw`(\/\/.*$)|("(?:[^"\\]|\\.)*"(?=\s*:))|("(?:[^"\\]|\\.)*"?)|(-?${NUMBER})|([a-z]+)`, "g"),
+  css: new RegExp(String.raw`(\/\*.*?(?:\*\/|$))|(${STRING})|(#[0-9a-fA-F]{3,8}\b|-?\d+(?:\.\d+)?(?:px|em|rem|%|vh|vw|s|ms|deg|fr)?)|([\w-]+(?=\s*:))|(@[\w-]+|[A-Za-z_][\w-]*)`, "g"),
+  xml: new RegExp(String.raw`(<!--.*?(?:-->|$))|("[^"]*"?|'[^']*'?)|(<\/?[\w:.-]+|\/?>)|([\w:-]+(?==))`, "g"),
+  md: new RegExp(String.raw`(^\s*#{1,6}\s.*$)|(\x60[^\x60]*\x60)|(\[[^\]]*\]\([^)]*\))|(\*\*[^*]+\*\*)`, "g"),
+};
+// Group → class, per family (the regexes above list their groups in this order).
+const TOKEN_CLASSES = {
+  c: ["tk-c", "tk-s", "tk-n", "word"], py: ["tk-c", "tk-s", "tk-n", "word"], rb: ["tk-c", "tk-s", "tk-n", "word"],
+  sh: ["tk-c", "tk-s", "tk-n", "word"], sql: ["tk-c", "tk-s", "tk-n", "word"], yaml: ["tk-c", "tk-s", "tk-n", "tk-p", "word"],
+  ini: ["tk-c", "tk-s", "tk-n", "tk-p", "word"], json: ["tk-c", "tk-p", "tk-s", "tk-n", "word"],
+  css: ["tk-c", "tk-s", "tk-n", "tk-p", "word"], xml: ["tk-c", "tk-s", "tk-k", "tk-p"], md: ["tk-k", "tk-s", "tk-f", "tk-k"],
+};
+const syntaxFamily = (path) => {
+  const name = basename(path || "").toLowerCase();
+  if (name === "dockerfile" || name.startsWith("dockerfile.")) return "sh";
+  if (name === "makefile") return "sh";
+  return SYNTAX_FAMILY[fileExtension(path)] || "";
+};
+// Lines past this length, and files past this many rows, stay plain (Desktop's own
+// highlight budget stops at 3,000 lines).
+const MAX_HIGHLIGHT_LINE = 1000;
+const MAX_HIGHLIGHT_ROWS = 3000;
+const highlightCache = new Map();
+function tokenizeLine(text, family) {
+  const re = TOKEN_RE[family];
+  if (!re || !text || text.length > MAX_HIGHLIGHT_LINE) return null;
+  const classes = TOKEN_CLASSES[family];
+  const words = KEYWORD_SETS[family] || new Set();
+  // A line that is the middle of a C-style block comment.
+  if ((family === "c" || family === "css") && /^\s*(\*|\/\*)/.test(text) && !/^\s*\*\s*[\w$]+\s*[=(]/.test(text)) return [["tk-c", text]];
+  const out = [];
+  let at = 0;
+  re.lastIndex = 0;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    if (!m[0]) { re.lastIndex++; continue; }
+    const group = m.findIndex((g, i) => i > 0 && g !== undefined) - 1;
+    let cls = classes[group];
+    if (cls === "word") {
+      const word = m[0];
+      const after = text.slice(m.index + word.length);
+      if ((family === "c" || family === "py") && TYPE_WORDS.has(word) && !/^\s*\(/.test(after)) cls = "tk-t";
+      else if (words.has(family === "sql" ? word.toLowerCase() : word)) cls = "tk-k";
+      else if (/^\s*\(/.test(after) && family !== "sql") cls = "tk-f";
+      else if (/^[A-Z][a-z0-9]\w*$/.test(word) && family !== "sh") cls = "tk-t";
+      else if (family === "sh" && word.startsWith("$")) cls = "tk-p";
+      else cls = "";
+    }
+    if (!cls) continue;
+    if (m.index > at) out.push(["", text.slice(at, m.index)]);
+    out.push([cls, m[0]]);
+    at = m.index + m[0].length;
+  }
+  if (!out.length) return null;
+  if (at < text.length) out.push(["", text.slice(at)]);
+  return out;
+}
+function highlightText(text, family) {
+  if (!family || !text) return text || " ";
+  const key = family + "\u0000" + text;
+  let parts = highlightCache.get(key);
+  if (parts === undefined) {
+    parts = tokenizeLine(text, family);
+    if (highlightCache.size > 20000) highlightCache.clear();
+    highlightCache.set(key, parts);
+  }
+  if (!parts) return text;
+  return parts.map(([cls, value], i) => cls ? jsx("span", { className: cls, children: value }, i) : value);
+}
+
+// Every path a discard of this file must restore: a rename's old name comes back too.
+const discardPathsFor = (path, state) => (state?.orig && state.orig !== path ? [path, state.orig] : [path]);
+
+// ── commit bar ────────────────────────────────────────────────────────────────
+function CommitBar({ ship, files, busy, generating, message, onMessage, onCommit, onGenerate, onPush, onPr, pr, onStageAll, onUnstageAll, onDiscardAll, onAskAgent, defaultAction, onDefaultAction }) {
+  const canCommit = !busy && message.trim().length > 0 && files > 0;
+  const label = defaultAction === "commitPush" ? "Commit & push" : "Commit";
+  const field = {
+    className: "commit-msg", value: message, rows: Math.min(6, Math.max(1, message.split("\n").length)),
+    placeholder: `Message (${/Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "") ? "⌘" : "Ctrl"}+Enter to commit)`,
+    "aria-label": "Commit message", disabled: generating,
+    onChange: (event) => onMessage(event.target.value),
+    onKeyDown: (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); if (canCommit) onCommit(defaultAction); }
+    },
+  };
+  const hasRemote = ship?.upstream || ship?.has_origin;
+  const prLabel = pr?.url ? (pr.iid != null ? `Open ${pr.url.includes("gitlab") ? `MR !${pr.iid}` : `PR #${pr.iid}`}` : "Open pull request")
+    : ship?.host === "gitlab" ? "Create merge request" : "Create pull request";
+  return jsxs("div", { className: "commit-bar", role: "group", "aria-label": "Commit changes", children: [
+    jsxs("div", { className: "commit-field", children: [
+      SDK_TEXTAREA ? jsx(SDK_TEXTAREA, { ...field, size: "sm" }) : jsx("textarea", field),
+      onGenerate && jsx(Tip, { label: generating ? "Stop generating" : "Generate commit message", children: jsx(Button, { variant: "ghost", size: "icon-sm", className: "commit-gen",
+        "aria-label": generating ? "Stop generating" : "Generate commit message", disabled: !generating && (busy || !files), onClick: onGenerate,
+        children: jsx(Codicon, { name: generating ? "debug-stop" : "sparkle", size: "0.85rem" }) }) }),
+    ] }),
+    jsxs("div", { className: "commit-actions", children: [
+      jsxs("div", { className: "commit-split", children: [
+        jsx(Button, { size: "sm", className: "commit-main", disabled: !canCommit, onClick: () => onCommit(defaultAction), "aria-label": label,
+          children: jsxs("span", { className: "commit-label", children: [jsx(Codicon, { name: busy === "commit" ? "loading" : "check", size: "0.85rem" }), label] }) }),
+        jsxs(DropdownMenu, { children: [
+          jsx(DropdownMenuTrigger, { asChild: true, children: jsx(Button, { size: "sm", className: "commit-more", disabled: !!busy, "aria-label": "More commit actions",
+            children: jsx(Codicon, { name: "chevron-down", size: "0.8rem" }) }) }),
+          jsxs(DropdownMenuContent, { className: "gr-menu", align: "start", children: [
+            jsx(DropdownMenuItem, { disabled: !canCommit, onSelect: () => onCommit("commit"), children: "Commit" }),
+            jsx(DropdownMenuItem, { disabled: !canCommit || !hasRemote, onSelect: () => onCommit("commitPush"), children: "Commit & push" }),
+            jsx(DropdownMenuSeparator, {}),
+            jsx(DropdownMenuItem, { onSelect: () => onDefaultAction(defaultAction === "commit" ? "commitPush" : "commit"),
+              children: defaultAction === "commit" ? "Make Commit & push the default" : "Make Commit the default" }),
+          ] }),
+        ] }),
+      ] }),
+      ship?.ahead > 0 || (ship?.branch && !ship?.upstream && ship?.has_origin)
+        ? jsx(Tip, { label: ship.upstream ? `Push ${ship.ahead} commit${ship.ahead === 1 ? "" : "s"} to ${ship.upstream}` : `Publish ${ship.branch} to origin`, children:
+            jsx(Button, { variant: "ghost", size: "sm", className: "commit-push", disabled: !!busy, onClick: onPush, "aria-label": "Push",
+              children: jsxs("span", { className: "commit-label", children: [jsx(Codicon, { name: busy === "push" ? "loading" : "cloud-upload", size: "0.85rem" }), ship.upstream ? `${ship.ahead}` : "Publish"] }) }) })
+        : null,
+      ship?.host ? jsx(Tip, { label: prLabel, children: jsx(Button, { variant: "ghost", size: "icon-sm", disabled: !!busy, onClick: onPr, "aria-label": prLabel,
+        children: jsx(Codicon, { name: busy === "pr" ? "loading" : "git-pull-request", size: "0.9rem" }) }) }) : null,
+      jsxs(DropdownMenu, { children: [
+        jsx(DropdownMenuTrigger, { asChild: true, children: jsx(Button, { variant: "ghost", size: "icon-sm", disabled: !!busy, "aria-label": "Change actions",
+          children: jsx(Codicon, { name: "ellipsis", size: "0.9rem" }) }) }),
+        jsxs(DropdownMenuContent, { className: "gr-menu", align: "end", children: [
+          jsx(DropdownMenuItem, { onSelect: onStageAll, children: "Stage all changes" }),
+          jsx(DropdownMenuItem, { onSelect: onUnstageAll, children: "Unstage all changes" }),
+          jsx(DropdownMenuItem, { onSelect: onDiscardAll, children: "Discard all changes…" }),
+          jsx(DropdownMenuSeparator, {}),
+          jsx(DropdownMenuItem, { onSelect: onAskAgent, children: "Ask Hermes to commit and open a PR" }),
+        ] }),
+      ] }),
+    ] }),
+    ship && !ship.repo_programs ? jsx("div", { className: "commit-note", title: "Hooks, filter drivers and signing or SSH programs named by this repository's own config do not run. Turn on run_repo_programs in the git-review settings to allow them.", children: "Repository hooks are skipped" }) : null,
+  ] });
+}
+
+// Live "N changed" count for the focused workspace, in the status bar; opens the pane.
+function ChangesChip({ ctx }) {
+  const cwd = useValue(host.state.cwd || EMPTY_ATOM);
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!cwd) { setCount(0); return; }
+    let gone = false;
+    let timer;
+    const load = async () => {
+      if (!isHidden()) {
+        try {
+          const r = await ctx.rest(`/status?repo=${encodeURIComponent(cwd)}`, { timeoutMs: 10000 });
+          if (!gone) setCount((r?.files || []).length);
+        } catch { if (!gone) setCount(0); }
+      }
+      if (!gone) timer = setTimeout(load, 15000);
+    };
+    load();
+    return () => { gone = true; clearTimeout(timer); };
+  }, [ctx, cwd]);
+  if (!count) return null;
+  const label = `${count} changed file${count === 1 ? "" : "s"} — open git review`;
+  return jsx(Tip, { label, children: jsxs("button", { type: "button", "aria-label": label, className: "gr-chip",
+    onClick: () => host.revealPane("git-review:pane"),
+    style: { display: "inline-flex", alignItems: "center", gap: 4, height: "100%", padding: "0 6px", border: 0, background: "transparent",
+      color: "var(--ui-text-tertiary)", font: "inherit", fontSize: "0.6875rem", fontVariantNumeric: "tabular-nums", cursor: "pointer" },
+    children: [jsx(Codicon, { name: "git-compare", size: "0.7rem" }), jsx("span", { children: count })] }) });
+}
+
 const TURN_BASE_KEY = "turnBase.v1";
 const TURN_BASE_CAP = 8;
 
@@ -587,6 +915,38 @@ function recordTurnBase(storage, cwd, snapshot) {
   while (rest.length >= TURN_BASE_CAP) rest.shift();
   rest.push([cwd, { ...snapshot, at: Date.now() }]);
   storage.set(TURN_BASE_KEY, Object.fromEntries(rest));
+}
+
+// Turn baselines are captured by the plugin itself, not by the pane: a turn that
+// starts while the pane is closed is still recorded, so "Last agent turn" works
+// the first time the pane opens. The pane listens for fresh snapshots.
+const turnBaseListeners = new Set();
+let pluginCapturesTurns = false;
+function captureTurnBase(ctx, cwd) {
+  if (!cwd) return;
+  ctx.rest("/turn-base", { method: "POST", body: { repo: cwd }, timeoutMs: 15000 })
+    .then((r) => {
+      if (!r) return;
+      recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [] });
+      for (const listener of turnBaseListeners) listener();
+    })
+    .catch(() => {});
+}
+function watchTurns(ctx) {
+  const busy = host.state && host.state.busy;
+  const cwd = host.state && host.state.cwd;
+  if (!busy || typeof busy.subscribe !== "function" || !cwd || typeof cwd.get !== "function") return;
+  let prev = !!busy.get();
+  // Read the atom rather than the callback's argument: nanostores passes the value,
+  // but a listener contract that only signals a change stays correct this way.
+  const off = busy.subscribe(() => {
+    const now = !!busy.get();
+    if (now && !prev) captureTurnBase(ctx, cwd.get());
+    prev = now;
+  });
+  pluginCapturesTurns = true;
+  const stop = () => { pluginCapturesTurns = false; if (typeof off === "function") off(); };
+  if (typeof ctx.onDispose === "function") ctx.onDispose(stop);
 }
 
 function GitReview({ ctx }) {
@@ -686,10 +1046,25 @@ function GitReview({ ctx }) {
   const [layout, setLayout] = useState(() => readSettings().layout || "unified"); // unified | split
   const [showDeleted, setShowDeleted] = useState(() => readSettings().showDeleted !== false);
   const [showTests, setShowTests] = useState(() => readSettings().showTests !== false);
+  const [syntax, setSyntax] = useState(() => readSettings().syntax !== false);
+  const [showUntracked, setShowUntracked] = useState(() => readSettings().untracked !== false);
+  const [flatList, setFlatList] = useState(() => !!readSettings().flatList);
   const [visible, setVisible] = useState(() => ({ files: readSettings().files !== false }));
   // Collapse state is part of the review: it is restored with the other settings
   // and a file that changes while collapsed opens itself.
   const [collapsedFiles, setCollapsedFiles] = useState(() => readSettings().collapsedFiles || {});
+  // Writes: per-file index state, the branch's push state, and the commit box.
+  const [refresh, setRefresh] = useState(0); // re-reads the diff without resetting the view
+  const [fileStates, setFileStates] = useState({});
+  const [ship, setShip] = useState(null);
+  const [writeBusy, setWriteBusy] = useState("");
+  const [commitMessage, setCommitMessage] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const generateSeq = useRef(0);
+  const [confirm, setConfirm] = useState(null);
+  const [commitDefault, setCommitDefault] = useState(() => {
+    try { return (ctx.storage.get(SHIP_KEY, {}) || {}).commitDefault === "commitPush" ? "commitPush" : "commit"; } catch { return "commit"; }
+  });
   // The file list keeps its default share of the pane until it is dragged; the
   // diff column stays minmax(0,1fr) so it reflows rather than overflowing.
   const [filesWidth, setFilesWidth] = useState(() => {
@@ -790,6 +1165,9 @@ function GitReview({ ctx }) {
     setIgnoreWs(!!s.ignoreWs);
     setShowDeleted(s.showDeleted !== false);
     setShowTests(s.showTests !== false);
+    setSyntax(s.syntax !== false);
+    setShowUntracked(s.untracked !== false);
+    setFlatList(!!s.flatList);
     setVisible({ files: s.files !== false });
     setCollapsedFiles(s.collapsedFiles || {});
     const w = s.filesWidth;
@@ -885,6 +1263,137 @@ function GitReview({ ctx }) {
     return () => { gone = true; };
   }, [ctx, chosen, meta, identity, repositoryReady]);
 
+  // Branch push state and whether writes are allowed. An older backend without the
+  // route answers 404: the pane then stays a read-only review, as before.
+  useEffect(() => {
+    if (!repositoryReady || !chosen) { setShip(null); return; }
+    let gone = false;
+    let timer;
+    const load = async () => {
+      if (!isHidden()) {
+        try {
+          const r = await ctx.rest(`/ship?repo=${encodeURIComponent(chosen)}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 10000 });
+          if (!gone) setShip((prev) => (sameData(prev, r) ? prev : r));
+        } catch { if (!gone) setShip(null); }
+      }
+      if (!gone) timer = setTimeout(load, 15000);
+    };
+    load();
+    return () => { gone = true; clearTimeout(timer); };
+  }, [ctx, chosen, tick, refresh, identity, repositoryReady]);
+
+  // Coming back to the window re-reads the changes at once instead of waiting for
+  // the next poll: edits made in an editor or a terminal show up on focus.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+    const onFocus = () => setRefresh((n) => n + 1);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  const writable = !!ship?.writable;
+  const canWrite = writable && LIVE_SCOPES.has(scope);
+  // One write at a time; every write ends with a re-read of the diff and branch.
+  const runWrite = async (route, body, key) => {
+    if (!chosen || writeBusy) return null;
+    setWriteBusy(key || route);
+    try {
+      const long = route === "push" || route === "create-pr" || body?.push;
+      return await ctx.rest(`/${route}`, { method: "POST", timeoutMs: long ? 180000 : 60000, body: { repo: chosen, cwd: cwd || "", ...body } });
+    } catch (err) {
+      host.notify({ kind: "error", message: `git-review: ${errorText(err)}` });
+      return null;
+    } finally {
+      setWriteBusy("");
+      setRefresh((n) => n + 1);
+    }
+  };
+  const stagePaths = (paths) => runWrite("stage", { paths }, "stage");
+  // Desktop's own confirmation dialog; a host without it gets the browser's.
+  const openConfirm = (request) => {
+    if (SDK_CONFIRM) { setConfirm(request); return; }
+    const ask = typeof window !== "undefined" && typeof window.confirm === "function" ? window.confirm : null;
+    if (ask && ask(`${request.title}\n\n${request.description}`)) request.run().catch(() => {});
+  };
+  const unstagePaths = (paths) => runWrite("unstage", { paths }, "unstage");
+  const askDiscard = (paths, label, isNew) => openConfirm({
+    title: paths ? (isNew ? `Delete ${label}?` : `Discard changes to ${label}?`) : "Discard all changes?",
+    description: paths
+      ? (isNew ? "This new file is not in any commit. Deleting it cannot be undone." : "The file goes back to its committed state, staged and unstaged changes included. This cannot be undone.")
+      : "Every file goes back to its committed state and new files are deleted. Ignored files are kept. This cannot be undone.",
+    confirmLabel: paths && isNew ? "Delete" : "Discard",
+    run: async () => {
+      const r = await runWrite("discard", paths ? { paths } : {}, "discard");
+      if (!r) throw new Error("Discard failed");
+    },
+  });
+  const commitNow = async (action) => {
+    const message = commitMessage.trim();
+    if (!message) return;
+    const r = await runWrite("commit", { message, push: action === "commitPush" }, "commit");
+    if (r?.ok) {
+      setCommitMessage("");
+      host.notify({ kind: "success", message: `Committed ${r.short}${r.push ? ` and pushed to ${r.push.upstream || r.push.branch}` : ""}` });
+    }
+  };
+  const pushNow = async () => {
+    const r = await runWrite("push", {}, "push");
+    if (r?.ok) host.notify({ kind: "success", message: `Pushed ${r.branch}${r.upstream ? ` to ${r.upstream}` : ""}` });
+  };
+  const openOrCreatePr = async () => {
+    if (pr?.url) { openPR(); return; }
+    const r = await runWrite("create-pr", {}, "pr");
+    if (r?.url && /^https:\/\//i.test(r.url)) {
+      setPr({ url: r.url });
+      const ok = await Promise.resolve(ctx.os.openExternal(r.url)).catch(() => false);
+      if (!ok) host.notify({ kind: "info", message: r.url });
+    }
+  };
+  const setDefaultAction = (action) => {
+    setCommitDefault(action);
+    try { ctx.storage.set(SHIP_KEY, { ...(ctx.storage.get(SHIP_KEY, {}) || {}), commitDefault: action }); } catch { /* best-effort */ }
+  };
+  // Draft the message with Hermes's own commit_message template (agent/oneshot.py),
+  // on the focused chat's model, from what the commit would contain. Pressing again
+  // while it runs stops waiting; pressing after hands back the draft to avoid.
+  const canGenerate = typeof host.request === "function";
+  const generateMessage = async () => {
+    if (generating) { generateSeq.current += 1; setGenerating(false); return; }
+    if (!canGenerate) return;
+    const seq = (generateSeq.current += 1);
+    const live = () => seq === generateSeq.current;
+    setGenerating(true);
+    try {
+      const context = await ctx.rest("/commit-context", { method: "POST", timeoutMs: 30000, body: { repo: chosen, cwd: cwd || "" } });
+      if (!live() || !context?.diff?.trim()) return;
+      const params = { template: "commit_message", temperature: 0.8,
+        variables: { avoid: commitMessage, diff: context.diff, recent_commits: context.recent || "" } };
+      const session = host.state?.activeSessionId?.get?.() || null;
+      let result;
+      try {
+        result = await host.request("llm.oneshot", session ? { ...params, session_id: session } : params, 90000);
+      } catch (err) {
+        // A session served by another profile is not answered by the ambient
+        // gateway; the configured auxiliary model still is.
+        if (!session) throw err;
+        result = await host.request("llm.oneshot", params, 90000);
+      }
+      const text = String(result?.text || "").trim();
+      if (live() && text) setCommitMessage(text);
+    } catch (err) {
+      if (live()) host.notify({ kind: "error", message: `Commit message: ${errorText(err)}` });
+    } finally {
+      if (live()) setGenerating(false);
+    }
+  };
+  const askAgentToShip = () => {
+    const submit = host.composer && host.composer.submit;
+    const ok = typeof submit === "function" ? submit(null, AGENT_SHIP_PROMPT) : false;
+    Promise.resolve(ok).then((done) => {
+      if (done === false) host.notify({ kind: "info", message: "Open the chat that owns these changes, then try again." });
+    });
+  };
+
   // Commit list for commit/commits scopes
   useEffect(() => {
     if (!repositoryReady || !chosen || (scope !== "commit" && scope !== "commits")) return;
@@ -936,6 +1445,12 @@ function GitReview({ ctx }) {
   const turnBase = chosen ? turnBases[chosen] : null;
   const prevBusy = useRef(busyNow);
   useEffect(() => {
+    const listener = () => setTurnBases(ctx.storage.get(TURN_BASE_KEY, {}));
+    turnBaseListeners.add(listener);
+    return () => { turnBaseListeners.delete(listener); };
+  }, [ctx]);
+  useEffect(() => {
+    if (pluginCapturesTurns) return; // the plugin-level watcher records it
     if (repositoryReady && busyNow && !prevBusy.current && cwd) {
       let gone = false;
       ctx.rest("/turn-base", { method: "POST", body: { repo: cwd }, timeoutMs: 15000 })
@@ -974,7 +1489,7 @@ function GitReview({ ctx }) {
     }
     load();
     return () => { gone = true; clearTimeout(timer); };
-  }, [ctx, chosen, scope, turnBase, ignoreWs, repositoryReady]);
+  }, [ctx, chosen, scope, turnBase, ignoreWs, refresh, repositoryReady]);
 
   useEffect(() => {
     const owner = `${chosen}:${base}:${scope}`;
@@ -989,7 +1504,7 @@ function GitReview({ ctx }) {
   useEffect(() => {
     if (!repositoryReady || !chosen) return;
     if (scope === "agent_turn") return; // served by the /turn-diff effect above
-    const live = scope === "uncommitted" || scope === "unstaged" || scope === "staged";
+    const live = LIVE_SCOPES.has(scope) || scope === "branch";
     const current = ++generation.current;
     let timer;
     let gone = false;
@@ -998,12 +1513,27 @@ function GitReview({ ctx }) {
       if (loaded && isHidden()) { if (!gone && live) timer = setTimeout(load, 5000); return; } // no polling while hidden
       if (scope === "commits" && !commitsRef) { setDiff(null); return; }
       let url = `/diff?repo=${encodeURIComponent(chosen)}&scope=${encodeURIComponent(scope)}&ignore_ws=${ignoreWs}&cwd=${encodeURIComponent(cwd || "")}`;
-      if (base && scope === "commits") url += `&base=${encodeURIComponent(base)}`;
+      if (base && (scope === "commits" || scope === "branch")) url += `&base=${encodeURIComponent(base)}`;
+      if (showUntracked && (scope === "uncommitted" || scope === "unstaged")) url += "&untracked=true";
+      // Which side of the index each file's changes are on decides its stage/unstage
+      // action; read with the diff so the two never disagree for long.
+      if (LIVE_SCOPES.has(scope)) {
+        ctx.rest(`/status?repo=${encodeURIComponent(chosen)}&cwd=${encodeURIComponent(cwd || "")}`, { timeoutMs: 15000 })
+          .then((st) => {
+            if (gone || current !== generation.current) return;
+            const next = {};
+            for (const f of st?.files || []) next[f.path] = f;
+            setFileStates((prev) => (sameData(prev, next) ? prev : next));
+          }).catch(() => {});
+      }
       if (pathFilter) url += `&path=${encodeURIComponent(pathFilter)}`;
       if (scope === "commits" && commitsRef) url += `&ref=${encodeURIComponent(commitsRef)}`;
       try {
         const r = await ctx.rest(url, { timeoutMs: 20000 });
-        if (!gone && current === generation.current) { setDiff((prev) => (sameData(prev, r) ? prev : r)); setError(""); loaded = true; }
+        if (!gone && current === generation.current) {
+          setDiff((prev) => (sameData(prev, r) ? prev : r)); setError(""); loaded = true;
+          if (scope === "branch" && !base && r?.base_label) setAutoBase(r.base_label);
+        }
       } catch (err) {
         if (!gone && current === generation.current) {
           if (!loaded) setDiff(null); // keep the last good diff during a live refresh failure
@@ -1017,7 +1547,7 @@ function GitReview({ ctx }) {
     }
     load();
     return () => { gone = true; clearTimeout(timer); };
-  }, [ctx, chosen, scope, base, ref, commitsRef, pathFilter, ignoreWs, tick, identity, repositoryReady]);
+  }, [ctx, chosen, scope, base, ref, commitsRef, pathFilter, ignoreWs, showUntracked, tick, refresh, identity, repositoryReady]);
 
   const sections = useMemo(() => {
     const patches = scope === "commits"
@@ -1241,12 +1771,13 @@ const EMPTY_SCOPE = {
   uncommitted: ["No uncommitted changes", "The worktree matches HEAD and nothing is staged."],
   staged: ["No staged changes", "Stage files in your VCS, or review the worktree instead."],
   unstaged: ["No unstaged changes", "The worktree matches the index."],
+  branch: ["No changes on this branch", "Nothing has been committed here since it left the branch it is compared against."],
   commits: ["No changes in the selected commits", "Pick different commits or a different comparison base."],
 };
 // Every scope can be cited. Restricting this to the working-tree scopes left the
 // gutter inert on "Commits" and "Staged" - clicks, drags and the cite bar all
 // disappeared with no explanation, because the row handlers were never attached.
-const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn", "commits"]);
+const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn", "branch", "commits"]);
   const LINE_DRAG_MIME = "application/x-hermes-paths";
   const gutterHandlers = (s, file) => (row) => {
     if (!CITABLE_SCOPES.has(scope) || !row || row.after == null || row.kind === "remove") return null;
@@ -1355,6 +1886,59 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     for (const s of visibleFiles) { added += stats.get(s.path)?.added || 0; removed += stats.get(s.path)?.removed || 0; }
     return { added, removed };
   }, [visibleFiles, stats]);
+
+  // Per-file writes, offered where they apply: the worktree scopes, a writable
+  // repository, and a file that is not a commit's.
+  const fileActions = (s, file) => {
+    if (!canWrite || s.sha) return [];
+    const state = fileStates[file];
+    const hasUnstaged = !state || state.untracked || state.unstaged;
+    const hasStaged = !!state?.staged;
+    const isNew = !!state?.untracked || stats.get(s.path)?.status === "added";
+    const busyNow = !!writeBusy;
+    const out = [];
+    if (scope !== "staged" && hasUnstaged) out.push(jsx(Tip, { label: "Stage", children: jsx(Button, { variant: "ghost", size: "icon-sm", className: "af-act",
+      "aria-label": `Stage ${file}`, disabled: busyNow, onClick: (event) => { event.stopPropagation(); stagePaths([file]); },
+      children: jsx(Codicon, { name: "add", size: "0.8rem" }) }) }, "stage"));
+    if (scope !== "unstaged" && hasStaged) out.push(jsx(Tip, { label: "Unstage", children: jsx(Button, { variant: "ghost", size: "icon-sm", className: "af-act",
+      "aria-label": `Unstage ${file}`, disabled: busyNow, onClick: (event) => { event.stopPropagation(); unstagePaths([file]); },
+      children: jsx(Codicon, { name: "remove", size: "0.8rem" }) }) }, "unstage"));
+    out.push(jsx(Tip, { label: isNew ? "Delete new file" : "Discard changes", children: jsx(Button, { variant: "ghost", size: "icon-sm", className: "af-act",
+      "aria-label": `${isNew ? "Delete" : "Discard changes to"} ${file}`, disabled: busyNow,
+      onClick: (event) => { event.stopPropagation(); askDiscard(discardPathsFor(file, state), basename(file), isNew && !state?.orig); },
+      children: jsx(Codicon, { name: "discard", size: "0.8rem" }) }) }, "discard"));
+    return out;
+  };
+  // Where a file's changes sit in the index, in the Uncommitted scope (the scope that
+  // mixes both): "staged", or "partly staged" when the worktree has more on top.
+  const indexBadge = (file) => {
+    if (scope !== "uncommitted" || !writable) return null;
+    const state = fileStates[file];
+    if (!state?.staged) return null;
+    return jsx("span", { className: "af-staged", title: state.unstaged ? "Part of this file's changes are staged" : "All of this file's changes are staged",
+      children: state.unstaged ? "partly staged" : "staged" });
+  };
+  // Right-click menu on a tree row: the same writes, plus path and file-manager actions.
+  const menuItems = (file) => {
+    const state = fileStates[file];
+    const items = [];
+    if (canWrite) {
+      if (scope !== "staged" && (!state || state.untracked || state.unstaged)) items.push({ label: "Stage", run: () => stagePaths([file]) });
+      if (scope !== "unstaged" && state?.staged) items.push({ label: "Unstage", run: () => unstagePaths([file]) });
+      const isNew = !!state?.untracked || stats.get(file)?.status === "added";
+      items.push({ label: isNew ? "Delete new file…" : "Discard changes…", destructive: true,
+        run: () => askDiscard(discardPathsFor(file, state), basename(file), isNew && !state?.orig) });
+      items.push(null);
+    }
+    items.push({ label: "Copy path", run: () => copyPath(file) });
+    if (ctx.os && typeof ctx.os.revealPath === "function" && chosen) {
+      items.push({ label: "Reveal in file manager", run: () => {
+        const abs = `${chosen.replace(/\/$/, "")}/${file}`;
+        Promise.resolve(ctx.os.revealPath(abs)).then((ok) => { if (!ok) host.notify({ kind: "info", message: abs }); });
+      } });
+    }
+    return items;
+  };
 
   const copyPath = async (path) => {
     const ok = await Promise.resolve(ctx.os.writeClipboard ? ctx.os.writeClipboard(path) : false).catch(() => false);
@@ -1484,6 +2068,14 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
             jsx(Switch, { size: "xs", checked: wordWrap || layout === "split", disabled: layout === "split", onCheckedChange: (v) => { if (layout !== "split") { setWordWrap(v); persist({ wordWrap: v }); } }, "aria-label": "Word wrap" }),
             "Word wrap"
           ] }),
+          jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", fontSize: 12 }, children: [
+            jsx(Switch, { size: "xs", checked: syntax, onCheckedChange: (v) => { setSyntax(v); persist({ syntax: v }); }, "aria-label": "Syntax colours" }),
+            "Syntax colours"
+          ] }),
+          jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", fontSize: 12 }, title: "New files that are not staged yet, in Uncommitted and Unstaged", children: [
+            jsx(Switch, { size: "xs", checked: showUntracked, onCheckedChange: (v) => { setShowUntracked(v); persist({ untracked: v }); }, "aria-label": "Show new files" }),
+            "Show new files"
+          ] }),
           jsx(DropdownMenuSeparator, {}),
           jsx(DropdownMenuItem, { onSelect: () => { setLayout("unified"); persist({ layout: "unified" }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
             jsx(CheckSlot, { on: layout === "unified", size: "0.8rem" }),
@@ -1492,6 +2084,15 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
           jsx(DropdownMenuItem, { onSelect: () => { setLayout("split"); persist({ layout: "split" }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
             jsx(CheckSlot, { on: layout === "split", size: "0.8rem" }),
             "Layout: Split"
+          ] }) }),
+          jsx(DropdownMenuSeparator, {}),
+          jsx(DropdownMenuItem, { onSelect: () => { setFlatList(false); persist({ flatList: false }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
+            jsx(CheckSlot, { on: !flatList, size: "0.8rem" }),
+            "Files: Tree"
+          ] }) }),
+          jsx(DropdownMenuItem, { onSelect: () => { setFlatList(true); persist({ flatList: true }); }, children: jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" }, children: [
+            jsx(CheckSlot, { on: flatList, size: "0.8rem" }),
+            "Files: List"
           ] }) })
         ] })
       ] }),
@@ -1531,6 +2132,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     ] }),
     !worktrees.length && !error
       ? jsx(EmptyState, { title: "No worktrees found", description: "Focus a chat in a Git repository or configure explicit repos/roots in plugin settings." })
+      : !diff && !error && SDK_SKELETON && repositoryReady && chosen && (scope !== "agent_turn" || turnBase) && (scope !== "commits" || commitsRef)
+        ? jsx("div", { className: "gr-skeleton", "aria-busy": "true", "aria-label": "Loading changes", children:
+            [92, 64, 80, 48, 72, 56].map((w, i) => jsx(SDK_SKELETON, { className: "gr-skel-row", style: { width: `${w}%` } }, i)) })
       : !diff
         ? jsx(EmptyState, { title: error ? "Nothing to show" : (scope === "commits" && !commitsRef ? (commitsLoading ? "Loading commit list…" : commits.length ? "No commits selected — open the scope menu and check the commits to review" : "No commits to show") : scope === "agent_turn" ? (turnBase ? "Loading…" : "No agent turn observed for this repository yet — the next agent turn will be captured.") : "Loading…"), description: error ? "See the message above, then retry or switch scope." : undefined })
         : !sections.length && !diff.note
@@ -1553,7 +2157,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
               // Gaps are computed on the NEW side (the side /file-lines reads);
               // delta = newStart - oldStart converts new numbers back to old.
               const isDeletedFile = s.lines.some((l) => l === "+++ /dev/null");
-              const rev = scope === "commits" ? s.sha : scope === "staged" ? "index" : "worktree";
+              const rev = scope === "commits" ? s.sha : scope === "branch" ? diff?.head : scope === "staged" ? "index" : "worktree";
+              // Syntax colours by file type, within the same row budget Desktop uses.
+              const family = syntax && rawRows.length <= MAX_HIGHLIGHT_ROWS ? syntaxFamily(s.filePath || s.path) : "";
               const gaps = [];
               if (hunks.length && !isDeletedFile && rev) {
                 const first = hunks[0];
@@ -1578,7 +2184,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
               const realPath = s.filePath || s.path;
               const fetchLines = (r, start, end) => ctx.rest("/file-lines", { method: "POST", timeoutMs: 15000, body: { repo: chosen, path: realPath, rev: r, start, end } });
               const fold = (row, gap) => jsx(FoldBar, {
-                row, path: s.path, rev, gap, compact: layout === "split",
+                row, path: s.path, rev, gap, compact: layout === "split", family,
                 autoAll: !!fullFiles[s.path],
                 onExpandAll: () => {
                   setFullFiles((m) => ({ ...m, [s.path]: true }));
@@ -1653,9 +2259,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
                   }
                   if (hunk != null) lastHunk = hunk;
                   out.push(pair.shared
-                    ? renderUnifiedRow(pair.shared, `shared:${i}`, gutterFor, selectedLines, dragFor)
+                    ? renderUnifiedRow(pair.shared, `shared:${i}`, gutterFor, selectedLines, dragFor, family)
                     : jsxs("div", { className: "split-row", "data-diff-row": i, children: [
-                        renderSplitRow(pair.left, i, "left", gutterFor, selectedLines, dragFor), renderSplitRow(pair.right, i, "right", gutterFor, selectedLines, dragFor),
+                        renderSplitRow(pair.left, i, "left", gutterFor, selectedLines, dragFor, family), renderSplitRow(pair.right, i, "right", gutterFor, selectedLines, dragFor, family),
                       ] }, i));
                 });
                 const bottom = gaps.find((g) => g.key === "bottom");
@@ -1680,7 +2286,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
                     if (g) { run.gap(g); run.row(); }
                   }
                   if (row.hunk != null) lastHunk = row.hunk;
-                  out.push(split ? row : renderUnifiedRow(row, `${row.kind}:${row.before}:${row.after}:${row.hunk}`, gutterFor, selectedLines, dragFor));
+                  out.push(split ? row : renderUnifiedRow(row, `${row.kind}:${row.before}:${row.after}:${row.hunk}`, gutterFor, selectedLines, dragFor, family));
                 }
                 if (!split) {
                   const bottom = gaps.find((g) => g.key === "bottom");
@@ -1707,10 +2313,13 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
                     "aria-label": `${collapsed ? "Expand" : "Collapse"} diff for ${s.path}`,
                     onClick: () => setCollapsedFiles((c) => ({ ...c, [s.path]: !c[s.path] })), children: [
                       jsx(Codicon, { name: collapsed ? "chevron-right" : "chevron-down", size: "0.8rem" }),
+                      jsx(Codicon, { className: "ftype", name: codiconForPath(file), size: "0.8rem" }),
                       jsx("span", { className: "fname", children: basename(s.path) }),
                       jsx("span", { className: "fdir", children: s.path }),
                     ] }),
+                  indexBadge(file),
                   jsx(DeltaCounts, { added: stats.get(s.path)?.added, removed: stats.get(s.path)?.removed }),
+                  ...fileActions(s, file),
                   jsx(Button, { variant: "ghost", size: "icon-sm", className: "af-copy", title: "Copy path", "aria-label": `Copy path for ${s.path}`,
                     onClick: () => copyPath(s.path), children: jsx(Codicon, { name: copied === s.path ? "check" : "copy", size: "0.8rem" }) }),
                 ] }),
@@ -1750,9 +2359,20 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
         ] })
       })
               ] }),
-              jsx(Tree, { tree, filter, selected: active?.path, onSelect: scrollToSelection, stats, repoRoot: chosen })
+              jsx(Tree, { tree, filter, selected: active?.path, onSelect: scrollToSelection, stats, repoRoot: chosen,
+                flat: flatList, files: visibleFiles.map((s) => s.path), menuItems: scope === "commits" ? null : menuItems })
             ] }) : null
-          ] })
+          ] }),
+    // Commit box under the review, in the scopes a commit is made from. It also stays
+    // for a clean tree with commits still to push.
+    canWrite && (sections.length > 0 || ship?.ahead > 0) ? jsx(CommitBar, {
+      ship, files: sections.length, busy: writeBusy, generating, message: commitMessage, onMessage: setCommitMessage,
+      onCommit: commitNow, onGenerate: canGenerate ? generateMessage : null, onPush: pushNow, onPr: openOrCreatePr, pr,
+      onStageAll: () => stagePaths(null), onUnstageAll: () => unstagePaths(null), onDiscardAll: () => askDiscard(null),
+      onAskAgent: askAgentToShip, defaultAction: commitDefault, onDefaultAction: setDefaultAction,
+    }) : null,
+    confirm && SDK_CONFIRM ? jsx(SDK_CONFIRM, { open: true, onClose: () => setConfirm(null), onConfirm: confirm.run, title: confirm.title,
+      description: confirm.description, confirmLabel: confirm.confirmLabel, destructive: true, dismissOnConfirm: true }) : null,
   ] });
 }
 
@@ -1787,7 +2407,7 @@ const nextGapWindow = (state, gap, step = EXPAND_STEP) => {
 const PATCH_CONTEXT = 3;
 const gapOldNumber = (n, delta) => n - (delta || 0);
 
-const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }) => {
+const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch, family }) => {
   const [revealed, setRevealed] = useState({ up: 0, down: 0 });
   const [gapState, setGapState] = useState(null); // {ls, le, numbered, total, done, failed, loading}
   const hidden = row.rows || [];
@@ -1867,10 +2487,10 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
   const btn = (label, mode, aria, disabled, icon) => jsx("button", { type: "button",
     className: icon ? "fold-inline fold-icon" : "fold-inline",
     "aria-label": aria, disabled, onClick: (e) => { e.stopPropagation(); expand(mode); }, children: label });
-  const renderLine = (l, key) => renderContextRow({ before: gapOldNumber(l.n, gap.delta), after: l.n, text: l.text }, key);
+  const renderLine = (l, key) => renderContextRow({ before: gapOldNumber(l.n, gap.delta), after: l.n, text: l.text }, key, family);
   const loadedRows = isGap && gapState ? gapState.numbered.map((l) => renderLine(l, `${path}:${row.key}:gap${l.n}`)) : [];
   return jsxs(Fragment, { children: [
-    upRows.map((r, i) => renderContextRow(r, `${path}:${row.key}:up${i}`)),
+    upRows.map((r, i) => renderContextRow(r, `${path}:${row.key}:up${i}`, family)),
     ...(!isTop ? loadedRows : []),
     jsxs("span", { className: "fold", "data-fold-key": `${path}:${row.key}`, "data-gap": isGap ? "1" : undefined, children: [
       jsx("span", { className: "fold-strip", "aria-hidden": "true" }),
@@ -1894,15 +2514,15 @@ const FoldBar = ({ row, path, rev, gap, compact, autoAll, onExpandAll, onFetch }
       ] }) : null,
     ] }, `${path}:${row.key}`),
     ...(isTop ? loadedRows : []),
-    downRows.map((r, i) => renderContextRow(r, `${path}:${row.key}:down${i}`)),
+    downRows.map((r, i) => renderContextRow(r, `${path}:${row.key}:down${i}`, family)),
   ] }, `${path}:${row.key}:bar`);
 };
 
 // Context row used by fold bars (no click handlers needed on expanded filler).
-const renderContextRow = (row, key) => jsxs("span", { className: "line context", "data-line": row.after ?? "", children: [
+const renderContextRow = (row, key, family) => jsxs("span", { className: "line context", "data-line": row.after ?? "", children: [
   jsx("span", { className: "lineno", "aria-hidden": "true", children: row.before ?? "" }),
   jsx("span", { className: "lineno", "aria-hidden": "true", children: row.after ?? "" }),
-  jsx("span", { className: "linecode", children: row.text || " " }),
+  jsx("span", { className: "linecode", children: highlightText(row.text, family) }),
 ] }, key);
 
 // ── split (side-by-side) rendering ───────────────────────────────────────────
@@ -1948,7 +2568,7 @@ const FullBar = ({ path, label, onToggle }) =>
 // Cite/drag only rows that exist in the CURRENT file (a new-side number).
 // Removed lines have only an old-side number: citing them would point the
 // agent at the wrong line of today's file, so they are not clickable.
-function renderUnifiedRow(row, key, gutterFor, selectedLines, lineDragProps) {
+function renderUnifiedRow(row, key, gutterFor, selectedLines, lineDragProps, family) {
   const line = row.after; // current-file number
   // Removed lines don't exist in the current file: citing or dragging them
   // would point the agent at the wrong line — no selection, no drag.
@@ -1974,12 +2594,12 @@ function renderUnifiedRow(row, key, gutterFor, selectedLines, lineDragProps) {
           jsx("span", { className: "lineno", "aria-hidden": "true", children: row.after ?? "" }),
         ] }),
       }),
-      jsx("span", { className: "linecode", children: row.text || " " }),
+      jsx("span", { className: "linecode", children: row.kind === "empty" ? " " : highlightText(row.text, family) }),
     ],
   }, key);
 }
 
-function renderSplitRow(row, i, side, gutterFor, selectedLines, lineDragProps) {
+function renderSplitRow(row, i, side, gutterFor, selectedLines, lineDragProps, family) {
   const line = side === "left" ? row.before : row.after;
   // Left (old-side) numbers don't exist in the current file: not selectable and not
   // draggable (lineDragProps rejects them via row.after).
@@ -1997,7 +2617,7 @@ function renderSplitRow(row, i, side, gutterFor, selectedLines, lineDragProps) {
         ...(selectable ? drag : {}),
         children: jsx("span", { className: "lineno", "aria-hidden": "true", children: line ?? "" }),
       }),
-      jsx("span", { className: "linecode", children: row.text || " " }),
+      jsx("span", { className: "linecode", children: row.kind === "empty" ? " " : highlightText(row.text, family) }),
     ],
   }, `${side}:${i}`);
 }
@@ -2007,8 +2627,14 @@ const plugin_default = {
   name: "git-review",
   defaultEnabled: true,
   register(ctx) {
+    const reveal = () => host.revealPane("git-review:pane");
     ctx.register({ id: "pane", area: "panes", title: "Git review", data: { placement: "right", dock: { pane: "workspace", pos: "right" }, width: "720px" }, render: () => jsx(GitReview, { ctx }) });
-    ctx.register({ id: "open", area: "palette", data: { id: "git-review.open", label: "Open git review", keywords: ["git", "diff", "worktree", "review"], run: () => host.revealPane("git-review:pane") } });
+    // One action id wired to a rebindable shortcut and the palette row that shows it.
+    // ⌘⌥G / Ctrl+Alt+G: ⌘G and ⌘⇧G are Desktop's own; ⌘⌥<letter> is the plugin space.
+    ctx.register({ id: "toggle", area: KEYBINDS, data: { id: "git-review.open", category: "view", defaults: ["mod+alt+g"], label: "Open git review", run: reveal } });
+    ctx.register({ id: "open", area: "palette", data: { id: "git-review.open", action: "git-review.open", label: "Open git review", keywords: ["git", "diff", "worktree", "review", "commit", "stage"], run: reveal } });
+    ctx.register({ id: "changes", area: STATUSBAR_RIGHT, order: 79, render: () => jsx(ChangesChip, { ctx }) });
+    watchTurns(ctx);
   }
 };
 
@@ -2019,4 +2645,5 @@ const plugin_default = {
 const scrollTopFor = ({ elementTop, scrollerTop, scrollTop, sticky = 0 }) =>
   Math.max(0, elementTop - scrollerTop + scrollTop - sticky);
 
+export { tokenizeLine, syntaxFamily, codiconForPath, discardPathsFor, errorText };
 export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, resolveIdentity, shouldFollowWorkspace, filesToOpen, scrollTopFor, plugin_default as default };

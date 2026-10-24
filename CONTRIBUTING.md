@@ -15,11 +15,11 @@ A pane bug is much cheaper to fix when it reproduces in a test, so please say wh
 
 ## Scope: what this plugin will and will not do
 
-**In scope:** the review pane itself — the five scopes, commit navigation (base branch, whole history, paging, commit by commit), diff rendering, folding and gap expanders, the file tree and filters, line citations into the composer, repository discovery, and the read-only backend routes behind all of it.
+**In scope:** the review pane itself — the six scopes, commit navigation (base branch, whole history, paging, commit by commit), diff rendering and syntax colours, folding and gap expanders, the file tree and filters, line citations into the composer, repository discovery, the file-level write actions (stage, unstage, discard, commit, push, open a pull request), and the backend routes behind all of it.
 
 **Out of scope.** Requests for these are closed with a pointer rather than a debate:
 
-- **Writing to a repository.** No staging, committing, checking out, fetching or applying a patch. The pane is a read-only view, and that is what makes it safe to point at any repository.
+- **Repository operations beyond reviewing and shipping a change.** No checkout, branch switching, fetch, pull, merge, rebase, stash or patch application. Writes stay file-level and start only from a button the reviewer presses.
 - **Reviewing anything that is not a Git worktree.** No archive browsing, no remote review, no per-session file journaling.
 - **Holding credentials.** No tokens, no provider sign-ins, no reading another tool's login. The PR/MR badge runs your own `gh`/`glab`, under its own rules.
 - **Replacing Hermes's built-in surfaces.** The plugin adds a pane; it does not restyle or patch the app.
@@ -27,7 +27,7 @@ A pane bug is much cheaper to fix when it reproduces in a test, so please say wh
 
 ## Ground rules
 
-Keep it read-only and generic: no vendor-specific workspace paths, no credentials, no remote fetches, no writes to a repository, and no import specifiers beyond Hermes' Desktop SDK/React allowlist. Use an isolated `HERMES_HOME` for tests and never inspect or log credentials. Keep every Git subprocess bounded by time and output, resolve user refs to SHAs, and place `--` before pathspecs. Update the README's **Privacy and disclosure** section whenever a change adds a command, a network call, a file read or write, or background activity.
+Keep it generic: no vendor-specific workspace paths, no credentials, no remote fetches, no repository writes outside `git_review/gitwrite.py`, and no import specifiers beyond Hermes' Desktop SDK/React allowlist. Every write goes through the same authorization as the reads, honours `read_only`, and keeps repository-defined programs off unless `run_repo_programs` is set; a destructive one is confirmed in the pane first. Use an isolated `HERMES_HOME` for tests and never inspect or log credentials. Keep every Git subprocess bounded by time and output, resolve user refs to SHAs, and place `--` before pathspecs. Update the README's **Privacy and disclosure** section whenever a change adds a command, a network call, a file read or write, or background activity.
 
 ## Development workflow
 
