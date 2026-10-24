@@ -2,6 +2,14 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.26 — 2026-10-24
+
+Documentation correction. No change to the plugin's behaviour.
+
+- The README's commit-list controls now use the labels the pane shows: **Select all**, **Load older commits** (up to 250 commits per request), and **All commits** to leave browse mode. The earlier text named a control that does not exist.
+- Dragging a file from the tree inserts its absolute path into the composer; the README said "attach".
+- The split layout's word-wrap sentence was removed: the source does not show wrap being forced in split.
+
 ## 0.1.25 — 2026-10-24
 
 Documentation release. No change to the plugin's behaviour.

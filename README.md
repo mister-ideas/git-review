@@ -73,8 +73,8 @@ Uncommitted edits made before a turn still appear in that turn's scope. Git cann
 
 ### Commits
 
-- The list starts with every commit your branch added, all selected. **Whole history of this branch** widens it, and **Load older commits** pages further back, 250 at a time.
-- **Browse commit by commit** steps through one commit at a time with ◀ ▶. The navigator shows the commit, its subject, author, date and position, for example `4f16d57 · Document tax handling — mister-ideas, 10/23/2026 (1/5)`.
+- The list starts with every commit your branch added, all selected. **Select all** selects the whole list again after you have narrowed it, and **Load older commits** fetches more history, up to 250 commits per load.
+- **Browse commit by commit** steps through one commit at a time with the Newer and Older buttons. The navigator shows the commit, its subject, author, date and position, for example `4f16d57 · Document tax handling — mister-ideas, 10/23/2026 (1/5)`. **All commits** returns to the full selection.
 - The branch menu lists your local and remote branches. Pick one to show only the commits since it.
 - A shallow clone has only the history it fetched, and the pane says so. Plugin installs from Hermes are shallow. To see the full history, run `git -C <plugin directory> fetch --unshallow`.
 
@@ -85,7 +85,7 @@ Uncommitted edits made before a turn still appear in that turn's scope. Git cann
 ### Layouts
 
 - **Unified** stacks every changed file, with old and new line numbers in one column.
-- **Split** puts old and new side by side, with filler rows that keep the two sides aligned. Word wrap is always on in split.
+- **Split** puts old and new side by side, with filler rows that keep the two sides aligned.
 - **Narrow docks** keep the toolbar on one line and give the width to the diff.
 
 ![Split layout](docs/screenshots/split-layout.png)
@@ -106,7 +106,7 @@ Unchanged runs are folded. Every change keeps three lines of context on each sid
 - Click a file to jump to its diff. Collapse one file, or use **Collapse all** and **Expand all**.
 - **Review next file** steps through the changed files in order.
 - **Copy path** copies the repository-relative path.
-- Drag a file from the tree into the composer to attach it.
+- Drag a file from the tree into the composer to insert its absolute path.
 
 ![File search and filtering in the tree](docs/screenshots/file-search.png)
 
@@ -178,7 +178,7 @@ Where they overlap, git-review is the read-only, citation-first option. Native R
 ## Limits
 
 - Diffs above 8 MiB are refused with a note rather than silently truncated.
-- The commit list loads 250 commits at a time. **Load older commits** pages further back, so no history is unreachable.
+- The commit list fetches up to 250 commits per request. **Load older commits** fetches more, so no history is unreachable.
 - Each unchanged-line expansion reads at most 5,000 lines.
 - Untracked files in a turn diff are capped at 200.
 - Display state is per workspace and profile, not per chat (see [What the pane remembers](#what-the-pane-remembers)).
