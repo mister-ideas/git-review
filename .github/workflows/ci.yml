@@ -48,13 +48,10 @@ jobs:
       - name: Desktop VM smoke harness
         run: node tests/desktop_plugin_smoke.mjs desktop/plugin.js
 
-      - name: Pane render tests (real React, stubbed SDK)
+      - name: Pane, interaction, action and theme tests (real React, stubbed SDK)
         run: |
           npm ci || npm install --no-audit --no-fund
-          node --test tests/pane.test.mjs
-
-      - name: Node unit tests
-        run: node --test tests/diff.test.mjs
+          node --test tests/*.test.mjs
 
       - name: Import allowlist (loader contract)
         run: node tests/import_allowlist.mjs desktop/plugin.js
