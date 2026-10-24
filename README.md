@@ -1,12 +1,12 @@
 # git-review for Hermes Desktop
 
-![git-review: a marble Hermes holds up a diff tablet. A read-only Git review pane for Hermes Desktop.](docs/banner.jpg)
+![git-review: a marble Hermes holds up a diff tablet. A Git review pane for Hermes Desktop.](docs/banner.jpg)
 
 [![CI](https://github.com/mister-ideas/git-review/actions/workflows/ci.yml/badge.svg)](https://github.com/mister-ideas/git-review/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mister-ideas/git-review)](https://github.com/mister-ideas/git-review/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**See what your agent changed, where it changed it.** git-review is a read-only review pane for Hermes Desktop. It shows the agent's last turn, your uncommitted or staged work, or any range of commits, in unified or split layout. Then it turns the lines you care about into `@line:` citations for your next message. It never stages, commits, reverts or fetches anything.
+**Review the whole change in one scroll, next to the chat.** git-review is a review pane for Hermes Desktop. Every changed file is stacked in one continuous diff, so you read the agent's last turn, your uncommitted or staged work, or any range of commits the way you read a pull request, in unified or split layout. Then it turns the lines you care about into `@line:` citations for your next message.
 
 ![The agent's last turn in the unified layout](docs/screenshots/unified-agent-turn.png)
 
@@ -21,8 +21,6 @@ git-review keeps the review next to the chat and makes its result usable. Click 
 The agent's turn lands in the pane as the files change. Then fold the unchanged runs, expand the context you need, and cite the lines that matter.
 
 ![The agent's turn, folding, and a citation, end to end](docs/gifs/agent-turn.gif)
-
-Full-quality video: [docs/videos/agent-turn.mp4](docs/videos/agent-turn.mp4). Walkthrough of every scope and layout: [docs/videos/scopes-layouts.mp4](docs/videos/scopes-layouts.mp4) ([GIF](docs/gifs/scopes-layouts.gif)).
 
 ## Install
 
@@ -132,7 +130,7 @@ If `gh` (GitHub) or `glab` (GitLab) is installed and authenticated, and the chec
 
 ### Dark theme
 
-The pane follows Desktop's theme.
+The pane is painted only with Desktop's theme tokens, the same ones native panes use, so it follows light, dark and every skin (Catppuccin, Solarized, your own) with no colours of its own.
 
 ![Dark theme](docs/screenshots/dark-theme.png)
 
@@ -142,23 +140,27 @@ Display state (layout, word wrap, ignore whitespace, the file filters, the file 
 
 It deliberately does not store the scope or the repository. Those follow the focused workspace and whatever the agent asked to review, so a stale scope cannot outlive the work it described. Several chats on one workspace share one set of display settings, because a plugin cannot read the focused session id.
 
-## How it compares
+## git-review and the native Review pane
 
-Hermes Desktop has its own **Review** pane, and several catalog plugins touch the same ground. The table is based on the installed Desktop source (Hermes core `bf0203a7`) and the catalog entries as of this release. Native behaviour can change between Hermes versions, so check the feature you depend on.
+Hermes Desktop ships its own **Review** pane. The two answer different reading styles, and this table shows where each one is ahead. It is based on the Desktop source of Hermes core `bf0203a7`; native behaviour can change between Hermes versions.
 
-| | **git-review** | **Native Review pane** (Hermes Desktop) | **hermes-session-diff** | **diff-review** | **githermes** |
-|---|---|---|---|---|---|
-| Purpose | Read a repository's changes next to the chat | Review and commit the working tree | Edit history of what the agent did in a session | Scan diffs for code-quality issues | GitHub PRs and issues |
-| Writes to the repository | No, never | Yes: stage, unstage, revert, commit, push, open PR | No | No | Through `gh`, on your behalf |
-| Scopes | Last agent turn, Uncommitted, Staged, Unstaged, Commits | Uncommitted, Branch (against the trunk), Last agent turn | Session file history and run comparisons | Diff text | Pull requests and issues |
-| Per-commit browsing and picking | Yes | No | Edit history instead | No | No |
-| Unified / split layout | Both | Unified (no side-by-side found in the review path) | Not stated | No pane | No pane |
-| Syntax highlighting | No | Yes | Not stated | No | No |
-| Folding unchanged lines | Yes, with exact counts and expansion | Full-file view; no per-gap expander found | Not stated | No | No |
-| Cite lines into the composer | Yes, as `@line:` | No | Not stated | No | No |
-| Agent tool to drive the view | `git_review_select` | None found in this build | Not stated | `diff_review` (analysis) | None |
+| | **git-review** | **Native Review pane** |
+|---|---|---|
+| How you read a change | Every changed file stacked in one continuous scroll, like a pull request | A file tree; clicking a file opens that one file's diff below it, in a panel capped at 55% of the sidebar |
+| Moving between files | Scroll, click a file to jump, or **Review next file** | Click each file in turn |
+| Scopes | Last agent turn, Uncommitted, Staged, Unstaged, Commits | Uncommitted, Branch (since the trunk), Last agent turn |
+| History | Pick any subset of the branch's commits, or step through them one at a time | Branch diff as a whole |
+| Layout | Unified or split side by side | Unified |
+| Hidden context | Gaps say how many lines they hide and expand 20 at a time or all at once | Three context lines per change, no expansion |
+| Search | File paths and the changed lines themselves | — |
+| Cite lines into your message | Yes, as `@line:path:start-end` | — |
+| Agent can open the view | `git_review_select` tool | — |
+| Syntax highlighting | Not yet | Yes (Shiki) |
+| Stage, unstage, revert | Not yet | Per file or all, revert with confirmation |
+| Commit, push, pull request | Not yet (opens an existing PR or MR) | Commit, commit and push, AI-drafted commit message, create or open a PR |
+| Change list in the chat | — | "N files changed" card under the agent's turn |
 
-Where they overlap, git-review is the read-only, citation-first option. Native Review is the right place to stage, revert and commit. hermes-session-diff answers a different question: what each edit did over the course of a session, which git-review cannot reconstruct. diff-review and githermes are complementary. You can run diff-review's checks on the same change, and githermes covers the pull-request discussion that this pane only links to.
+The write actions, syntax highlighting and the in-chat card are on the roadmap: git-review is meant to cover what the native pane does, and keep its all-files-at-once reading.
 
 ## Privacy and disclosure
 
