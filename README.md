@@ -6,88 +6,45 @@
 [![Release](https://img.shields.io/github/v/release/mister-ideas/git-review)](https://github.com/mister-ideas/git-review/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Author: **mister-ideas**. MIT-licensed Hermes native plugin.
+**See what your agent changed, where it changed it.** git-review is a read-only review pane for Hermes Desktop. It shows the agent's last turn, your uncommitted or staged work, or any range of commits, in unified or split layout. Then it turns the lines you care about into `@line:` citations for your next message. It never stages, commits, reverts or fetches anything.
 
-A read-only Git review pane for Hermes Desktop. It shows what changed in the repository you are working in — the agent's last turn, uncommitted, staged or unstaged work, or any selection of commits — in unified or split layout, and lets you cite changed lines into the chat composer. It depends on nothing beyond Hermes itself and `git`.
+![The agent's last turn in the unified layout](docs/screenshots/unified-agent-turn.png)
 
-![The pane in unified layout](docs/pane-unified.png)
+## Why it exists
 
-## Why this exists
+An agent that edits code leaves you reviewing its work somewhere else. You switch to a terminal, rebuild what the turn touched, and lose the conversation around it. The last turn is the hardest case: part of it is committed and part is not, and no Git client groups it that way.
 
-An agent that edits code leaves you reviewing the diff somewhere else: you switch
-to a terminal, reconstruct what the turn touched, and lose the conversation's
-context. The last turn is the hardest case — it is committed and uncommitted at
-once, and no Git client groups it that way.
+git-review keeps the review next to the chat and makes its result usable. Click a line, choose **Cite in message**, and the reference goes into your draft, so "this is wrong, here" costs a drag instead of a paragraph. Nothing is sent until you send it.
 
-This pane puts that review where the work happened, and makes the result usable:
-the same changed lines go back into the draft as `@line:` citations, so "this is
-wrong, here" costs a drag instead of a paragraph.
+## See it work
 
-**What it is not.** It is read-only by design — it never fetches, stages, commits
-or checks out, so it cannot fix anything for you. It also cannot attribute edits
-it did not observe: uncommitted work that predates the turn still appears in the
-turn scope, because Git cannot say who wrote it.
+The agent's turn lands in the pane as the files change. Then fold the unchanged runs, expand the context you need, and cite the lines that matter.
 
-## What it looks like
+![The agent's turn, folding, and a citation, end to end](docs/gifs/agent-turn.gif)
 
-Unified layout — every changed file stacked, unchanged runs folded away. Split
-layout — the same diff side by side, word wrap always on. Narrow docks keep the
-toolbar on one line and hand the width to the diff.
-
-| Split | Narrow |
-|---|---|
-| ![The pane in split layout](docs/pane-split.png) | ![The pane in a narrow dock](docs/pane-narrow.png) |
-
-## Watch it work
-
-The agent points the pane at a scope, and the pane follows:
-
-![The agent selects a scope and the pane follows](docs/gifs/agent-reveal.gif)
-
-Fold the unchanged runs, then expand the lines outside the patch:
-
-![Folding unchanged lines and expanding the gap around the patch](docs/gifs/fold-gap.gif)
-
-Cite the lines that matter straight into the draft:
-
-![Selecting lines and citing them into the composer](docs/gifs/cite-line.gif)
-
-## Requirements
-
-- Hermes Agent `>=0.21.6` with Desktop.
-- `git` on `PATH`.
-- Optional: an authenticated `gh` (GitHub) or `glab` (GitLab) CLI, for the pull/merge request badge.
+Full-quality video: [docs/videos/agent-turn.mp4](docs/videos/agent-turn.mp4). Walkthrough of every scope and layout: [docs/videos/scopes-layouts.mp4](docs/videos/scopes-layouts.mp4) ([GIF](docs/gifs/scopes-layouts.gif)).
 
 ## Install
 
-`hermes plugins install` takes a catalog name, a Git URL or `owner/repo`, and `--ref` pins one exact commit. To install straight from this repository:
+Requires Hermes Agent `>=0.21.6` with Desktop, and `git` on your `PATH`.
 
 ```sh
 hermes plugins install mister-ideas/git-review
 ```
 
-Once the plugin is listed in the Hermes catalog, the bare name works too:
+Once the plugin is in the Hermes catalog, the bare name works too: `hermes plugins install git-review`.
 
-```sh
-hermes plugins install git-review
-```
-
-Cloned it yourself? `hermes plugins adopt git-review` reads the directory's git
-origin and makes it a tracked install, so `check-updates` and `update` work on it.
-
-Hermes asks "declares Node dependencies (package.json)" during install. Answer **N**: the `package.json` in this repository belongs to the test tooling, and the plugin needs no Node packages at runtime.
+Hermes asks whether to install Node dependencies, because the repository declares a `package.json`. Answer **N**. That file belongs to the test tooling, and the plugin needs nothing from npm at runtime.
 
 Then:
 
-1. Enable **git-review** under **Capabilities → Plugins** (or `hermes plugins enable git-review`). The Desktop app copies the pane from the package's `desktop/` folder into `$HERMES_HOME/desktop-plugins/git-review/` and hot-loads it.
-2. Restart the backend — or quit and reopen the app — so the plugin's routes mount.
-3. Open it from the command palette (**Open git review**), or toggle the **Git review** pane, which docks right by default.
+1. Enable **git-review** under **Capabilities → Plugins**, or run `hermes plugins enable git-review`. Desktop copies the pane from the package into `$HERMES_HOME/desktop-plugins/git-review/` and loads it.
+2. Restart the backend, or quit and reopen Desktop, so the plugin's routes mount.
+3. Open the pane from the command palette (**Open git review**), or toggle **Git review** in the right dock.
 
-To remove it:
+Cloned it yourself? `hermes plugins adopt git-review` makes the directory a tracked install, so `check-updates` and `update` work on it.
 
-```sh
-hermes plugins remove git-review
-```
+To remove it: `hermes plugins remove git-review`.
 
 ## Updating
 
@@ -96,87 +53,148 @@ hermes plugins check-updates          # read-only: is a newer version available?
 hermes plugins update git-review
 ```
 
-Restart the backend afterwards (new routes mount at start) and run **Reload desktop plugins**. If Desktop runs on a different machine than the backend, run the install or update there too: the pane is copied from the installed package on the machine that runs the app.
+Restart the backend afterwards, then run **Reload desktop plugins**. If Desktop runs on a different machine from the backend, update the plugin on that machine too: the pane is copied from the package installed where the app runs.
 
-## What happens on first install
+## What it shows
 
-- The pane follows the focused chat's workspace. If that workspace is not a Git
-  repository, the pane says so instead of guessing.
-- Nothing is blocked, rewritten or staged. Only the focused repository is read,
-  plus anything you configure under `repos`/`roots`.
-- `gh`/`glab` are optional: without them the PR badge is simply absent, and the
-  rest of the pane works.
-- The agent tool `git_review_select` is registered, so a chat can point the pane
-  at a repository and scope.
-- **Confirm it loaded:** **Capabilities → Plugins** lists **git-review**, and the
-  command palette offers **Open git review**.
-- New backend routes only answer after a backend restart; the desktop half
-  hot-reloads as soon as the app copies it.
+Five scopes cover the ways you review work. The first control in the toolbar picks one.
 
-## What it does
+| Scope | What it shows | How it is computed |
+|---|---|---|
+| **Last agent turn** | Everything the agent changed in this repository during its latest turn: committed and uncommitted edits, terminal edits, new files. | When the focused session becomes busy, the pane records `HEAD` and the untracked-file list. Changes are diffed against that baseline. |
+| **Uncommitted** | All work not yet committed: staged, unstaged and new files. | `git status` plus the working-tree diff. |
+| **Staged** | Only what is in the index. | `git diff --cached`. |
+| **Unstaged** | Working-tree edits not yet staged. | `git diff` on the working tree. |
+| **Commits** | The commits your branch added since it left the base (`origin/main`, for example). | Commit range since the merge base. Pick a subset, or browse one commit at a time. |
 
-- **Scopes:** Last agent turn · Uncommitted · Staged · Unstaged · Commits.
-- **Commits** lists the commits your branch has added since it left the default branch (`origin/main`, for example), all checked by default. The Commits menu switches to **Whole history of this branch** and pages older commits in on demand; pick any subset, or **Browse commit by commit** with ◀ ▶. The branch menu lists your local and remote branches: pick one to list only the commits since it. A shallow clone has only the history it fetched, and the pane says so.
-- **Last agent turn** shows everything since the agent's current turn began in this repo, committed and uncommitted, terminal edits and new files included. When the focused session goes busy, the pane snapshots `HEAD` and the untracked file list, then diffs against that baseline. Uncommitted edits that predate the turn still appear, because Git cannot attribute them.
-- **Diffs:** unified or split layout (split always wraps), whitespace filtering, and folding of unchanged lines: every change keeps three lines of context, and the bars between changes count the lines actually hidden, revealing up to 20 at a time or all of them, including above the first change and below the last when the file continues.
-- **Files:** a right-hand tree with per-file churn, file search, and Deleted / Test filters. Click a file to jump to it; drag a file into the composer to attach it.
-- **Line citations:** click a line, then another, and choose **Cite in message** to insert an `@line:` reference into the focused composer draft, or drag lines into the composer. Only lines that exist in the current working tree can be cited (Last agent turn, Uncommitted and Unstaged scopes). Nothing is ever sent automatically.
-- **Agent tool `git_review_select`:** lets the agent point the pane at a repository and scope (`repo`, `scope`, `ref`, `base`, `path`, `ignore_ws`). It validates the diff first, then queues the selection for the pane.
+Uncommitted edits made before a turn still appear in that turn's scope. Git cannot tell who wrote a line, so the pane shows what changed since the baseline. It does not guess.
 
-## Using the pane
+![Uncommitted work: a staged change and an unstaged change in one view](docs/screenshots/uncommitted-wip.png)
 
-1. **Pick a change set** with the toolbar's first control: Last agent turn, Uncommitted, Staged, Unstaged or Commits.
-2. **Read it.** Reveal hidden lines a bar at a time, or open a whole file with **all**; switch to split, filter whitespace, or search and filter the file tree.
-3. **Cite what matters.** Click a line, then another, and choose **Cite in message** — or drag the lines straight into the composer. The pane inserts a reference into the draft and never sends it:
+### Commits
 
-   ```
-   @line:src/invoice/totals.ts:15-21
-   ```
+- The list starts with every commit your branch added, all selected. **Whole history of this branch** widens it, and **Load older commits** pages further back, 250 at a time.
+- **Browse commit by commit** steps through one commit at a time with ◀ ▶. The navigator shows the commit, its subject, author, date and position, for example `4f16d57 · Document tax handling — mister-ideas, 10/23/2026 (1/5)`.
+- The branch menu lists your local and remote branches. Pick one to show only the commits since it.
+- A shallow clone has only the history it fetched, and the pane says so. Plugin installs from Hermes are shallow. To see the full history, run `git -C <plugin directory> fetch --unshallow`.
 
-## Configuration
+![Commit-by-commit browsing with the navigator](docs/screenshots/browse-commit-by-commit.png)
 
-The pane follows the focused chat's workspace automatically. To offer other repositories, open Settings → Plugins → git-review:
+![The Commits scope: five commits from one feature branch](docs/screenshots/commits-scope.png)
 
-| Setting | Meaning |
-|---|---|
-| `repos` | Newline-separated absolute repository paths. |
-| `roots` | Newline-separated absolute directories to scan for worktrees (two levels deep, at most 256 directories). |
+### Layouts
 
-Settings are stored under `plugins.entries.git-review.settings`. None of them are secrets.
+- **Unified** stacks every changed file, with old and new line numbers in one column.
+- **Split** puts old and new side by side, with filler rows that keep the two sides aligned. Word wrap is always on in split.
+- **Narrow docks** keep the toolbar on one line and give the width to the diff.
+
+![Split layout](docs/screenshots/split-layout.png)
+
+![Narrow dock](docs/screenshots/narrow-dock.png)
+
+### Folding and gaps
+
+Unchanged runs are folded. Every change keeps three lines of context on each side, and the bar between changes says how many lines it hides, such as `29 unmodified lines`. Expand a bar to reveal up to 20 lines at a time, or all of them. Runs above the first change and below the last fold too, so the end of a file is never a dead end.
+
+![Folding unchanged lines and expanding one run](docs/screenshots/fold-and-expand.png)
+
+### Files
+
+- A file tree on the right shows each file's status and churn. Folders roll up their totals.
+- Search covers file paths and the changed lines themselves.
+- The **Deleted files** and **Test files** filters hide what you are not looking for.
+- Click a file to jump to its diff. Collapse one file, or use **Collapse all** and **Expand all**.
+- **Review next file** steps through the changed files in order.
+- **Copy path** copies the repository-relative path.
+- Drag a file from the tree into the composer to attach it.
+
+![File search and filtering in the tree](docs/screenshots/file-search.png)
+
+### Citing lines
+
+Click a line, then another, and choose **Cite in message**. You can also press and drag across the gutter, or drag the selected lines straight into the composer. The pane writes a reference into the draft and never sends it:
+
+```
+@line:src/invoice/totals.ts:10-12
+```
+
+Lines are citable in every scope, so you can cite from the last turn, from the commits you are reviewing, or from your staged work.
+
+![A citation landing in the composer](docs/screenshots/cite-into-composer.png)
+
+### The agent can drive the pane
+
+The agent tool `git_review_select` points the pane at a repository and scope. For example, when you ask "show me what changed in the parser", the agent can open the right view for you. It takes `repo`, `scope` (`uncommitted` by default, or `staged`, `unstaged` or `commits`), `ref` for specific commits, `base` for a range, `path` to filter to one file, and `ignore_ws`. The tool validates the request before the pane applies it.
+
+### Pull and merge requests
+
+If `gh` (GitHub) or `glab` (GitLab) is installed and authenticated, and the checked-out branch has an open pull or merge request, the toolbar shows a button that opens it. Without them the button is simply absent.
+
+### Dark theme
+
+The pane follows Desktop's theme.
+
+![Dark theme](docs/screenshots/dark-theme.png)
 
 ### What the pane remembers
 
-Display state — layout, word wrap, ignore whitespace, the deleted/test filters, the file list's visibility and width, and which files you collapsed — is kept in desktop plugin storage, keyed by **profile + connection + focused workspace**. Come back to a workspace and the pane is as you left it.
+Display state (layout, word wrap, ignore whitespace, the file filters, the file list's width and visibility, and which files you collapsed) is saved in Desktop plugin storage. It is keyed by profile and connection, so switching chats keeps your layout.
 
-Two things it deliberately does not store:
+It deliberately does not store the scope or the repository. Those follow the focused workspace and whatever the agent asked to review, so a stale scope cannot outlive the work it described. Several chats on one workspace share one set of display settings, because a plugin cannot read the focused session id.
 
-- **The scope and the repository.** They follow the focused workspace and what the agent asked to review, so a stale scope cannot outlive the work it described.
-- **Anything per chat session.** A desktop plugin is not given the focused session id — the loader's allowlist exposes no such atom, and the smoke harness rejects the import — so several chats on the same workspace share one set of pane settings. That is the closest a plugin can get to "per session"; separate state per chat is not something the plugin API allows today.
+## How it compares
 
-A workspace with no saved state yet starts from the settings the pre-0.1.16 versions wrote, so upgrading does not reset a pane you had already tuned.
+Hermes Desktop has its own **Review** pane, and several catalog plugins touch the same ground. The table is based on the installed Desktop source (Hermes core `bf0203a7`) and the catalog entries as of this release. Native behaviour can change between Hermes versions, so check the feature you depend on.
+
+| | **git-review** | **Native Review pane** (Hermes Desktop) | **hermes-session-diff** | **diff-review** | **githermes** |
+|---|---|---|---|---|---|
+| Purpose | Read a repository's changes next to the chat | Review and commit the working tree | Edit history of what the agent did in a session | Scan diffs for code-quality issues | GitHub PRs and issues |
+| Writes to the repository | No, never | Yes: stage, unstage, revert, commit, push, open PR | No | No | Through `gh`, on your behalf |
+| Scopes | Last agent turn, Uncommitted, Staged, Unstaged, Commits | Uncommitted, Branch (against the trunk), Last agent turn | Session file history and run comparisons | Diff text | Pull requests and issues |
+| Per-commit browsing and picking | Yes | No | Edit history instead | No | No |
+| Unified / split layout | Both | Unified (no side-by-side found in the review path) | Not stated | No pane | No pane |
+| Syntax highlighting | No | Yes | Not stated | No | No |
+| Folding unchanged lines | Yes, with exact counts and expansion | Full-file view; no per-gap expander found | Not stated | No | No |
+| Cite lines into the composer | Yes, as `@line:` | No | Not stated | No | No |
+| Agent tool to drive the view | `git_review_select` | None found in this build | Not stated | `diff_review` (analysis) | None |
+
+Where they overlap, git-review is the read-only, citation-first option. Native Review is the right place to stage, revert and commit. hermes-session-diff answers a different question: what each edit did over the course of a session, which git-review cannot reconstruct. diff-review and githermes are complementary. You can run diff-review's checks on the same change, and githermes covers the pull-request discussion that this pane only links to.
 
 ## Privacy and disclosure
 
-- **Shell commands.** The backend runs `git` as a subprocess, read-only: `rev-parse`, `status`, `diff`, `log`, `show`, `cat-file`, `ls-files`, `for-each-ref`, `branch`, `remote`, `rev-list` and `hash-object` (without `-w`, to compute the empty tree). It never fetches, checks out, stages, commits or changes repository content. External diff and textconv drivers are disabled, and every call overrides `core.fsmonitor`, `core.hooksPath` and `log.showSignature` and blanks the clean, smudge and process filter drivers that the repository itself defines, so a checkout cannot make the pane run its programs. Your own global filters, such as git-lfs, are left alone. Every call has a timeout and an output cap.
-- **Network.** Only for the PR/MR badge. The backend runs your local `gh pr list` or `glab mr list` for the checked-out branch, so those CLIs contact GitHub or GitLab with your existing login. They get only your `GH_*`, `GITHUB*`, `GLAB_*` and `GITLAB_*` environment, with prompts disabled. The plugin itself makes no network requests.
+- **Shell commands.** The backend runs `git` as a subprocess, read-only: `rev-parse`, `status`, `diff`, `log`, `show`, `cat-file`, `ls-files`, `for-each-ref`, `branch`, `remote`, `rev-list` and `hash-object` (without `-w`, to compute the empty tree). It never fetches, checks out, stages, commits or changes repository content. External diff and textconv drivers are disabled, and every call overrides `core.fsmonitor`, `core.hooksPath` and `log.showSignature`. It also blanks the clean, smudge and process filter drivers that the repository itself defines, so a checkout cannot make the pane run its programs. Your own global filters, such as git-lfs, are left alone. Every call has a timeout and an output cap.
+- **Network.** Only for the pull or merge request button. The backend runs your local `gh pr list` or `glab mr list` for the checked-out branch, so those CLIs contact GitHub or GitLab with your existing login. They get only your `GH_*`, `GITHUB*`, `GLAB_*` and `GITLAB_*` environment, with prompts disabled. The plugin itself makes no network requests.
 - **Reads outside its own data.**
   - Files and history inside authorized repositories: the focused workspace, configured `repos`/`roots`, and the latest agent selection.
   - This profile's `config.yaml`, for the plugin settings and `terminal.cwd`.
   - The `cwd` column of the `sessions` table in this profile's `state.db`, opened read-only, so that recent chat workspaces appear without configuration.
   - A caller-supplied path never grants access to a repository.
-- **Discovery scope.** Repositories are found by scanning, at most two levels deep, the focused workspace and the working directories of recent chats, plus any configured `repos`/`roots`. A scan visits at most 256 directories and returns at most 128 repositories, never follows symlinks, and skips hidden directories, so credential and config directories are never entered. A filesystem root is never scanned, and a home directory is scanned only when it is the declared workspace: a chat that merely ran in your home directory does not expose every repository beneath it.
+- **Discovery scope.** Repositories are found by scanning, at most two levels deep, the focused workspace and the working directories of recent chats, plus any configured `repos`/`roots`. A scan visits at most 256 directories and returns at most 128 repositories. It never follows symlinks and skips hidden directories, so credential and config directories are never entered. A filesystem root is never scanned, and a home directory is scanned only when it is the declared workspace: a chat that merely ran in your home directory does not expose every repository beneath it.
 - **Writes.** `$HERMES_HOME/plugin-data/git-review/select.sqlite3` holds agent selection requests. Desktop plugin storage holds display settings and turn baselines. Nothing is written to your repositories.
-- **Background activity.** While the pane is open it polls the local backend: every 3 s for agent selections, and every 5 s for the diff on live scopes. There are no background processes.
+- **Background activity.** While the pane is open it polls the local backend: every 3 seconds for agent selections, and every 5 seconds for the diff on live scopes. There are no background processes.
 - **Credentials and telemetry.** None. The plugin stores no credentials and reports no usage.
 - **Sensitive code.** Diffs stay in the pane. The only way code reaches the chat is a citation or drag that you make yourself.
 
 ## Limits
 
 - Diffs above 8 MiB are refused with a note rather than silently truncated.
-- The commit list loads 250 commits at a time; **Load older commits** pages further back, so no history is unreachable.
+- The commit list loads 250 commits at a time. **Load older commits** pages further back, so no history is unreachable.
 - Each unchanged-line expansion reads at most 5,000 lines.
-- New untracked files in a turn diff are capped at 200.
-- Pane display state is per workspace, not per chat: several chats on one workspace share it (see [What the pane remembers](#what-the-pane-remembers)).
+- Untracked files in a turn diff are capped at 200.
+- Display state is per workspace and profile, not per chat (see [What the pane remembers](#what-the-pane-remembers)).
+- Syntax highlighting is not implemented yet.
+- The screenshots and videos here were captured from the plugin's own code, running against a real backend and real repositories, in a Chromium harness that stands in for the Desktop window. They are not captures of the Desktop app itself.
+
+## Settings
+
+The pane follows the focused chat's workspace automatically. To offer other repositories, open **Settings → Plugins → git-review**:
+
+| Setting | Meaning |
+|---|---|
+| `repos` | Newline-separated absolute repository paths. |
+| `roots` | Newline-separated absolute directories to scan for worktrees (two levels deep, at most 256 directories). |
+
+Settings live under `plugins.entries.git-review.settings`. None of them are secrets.
 
 ## Troubleshooting
 
@@ -185,9 +203,9 @@ A workspace with no saved state yet starts from the settings the pre-0.1.16 vers
 | No worktrees found / HTTP 403 | Open a chat whose workspace is a Git repository, or configure `repos`/`roots`. |
 | Backend unavailable | Make sure the plugin is enabled and the backend is running. Backend updates need a backend restart. |
 | Diff exceeds display limit | Narrow the scope, the selected commits or the file filter. |
-| PR button missing | Authenticate `gh`/`glab` and check that the branch has an open PR/MR. |
-| Pane missing or stale | Enable the plugin, then run **Reload desktop plugins** from the command palette. Desktop on another machine than the backend: install the plugin on that machine too. |
-| Commits lists only a few commits | The reviewed repository is a shallow clone (a plugin directory installed by Hermes is one). The pane says so; run `git fetch --unshallow` in that repository. |
+| Pull/merge request button missing | Authenticate `gh`/`glab` and check that the branch has an open pull or merge request. |
+| Pane missing or stale | Enable the plugin, then run **Reload desktop plugins** from the command palette. If Desktop runs on another machine than the backend, install the plugin on that machine too. |
+| Commits list shows only a few commits | The reviewed repository is a shallow clone (a plugin directory installed by Hermes is one). Run `git fetch --unshallow` in that repository. |
 
 ## Development
 
@@ -199,20 +217,20 @@ hermes plugins validate . --install-deps
 python scripts/package.py
 ```
 
-Python tests use temporary real repositories and the actual FastAPI router.
+Python tests run against temporary real repositories and the actual FastAPI router. The Node tests render the real pane with test doubles for the Desktop SDK.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Changelog: [CHANGELOG.md](CHANGELOG.md).
 
 ## Support, issues and releases
 
-- Bugs and feature requests: the [issue forms](https://github.com/mister-ideas/git-review/issues/new/choose). The bug form asks for your versions, the scope you had selected and the `git-review` log lines — that evidence is what makes a report reproducible.
+- Bugs and feature requests: the [issue forms](https://github.com/mister-ideas/git-review/issues/new/choose). The bug form asks for your versions, the scope you had selected and the `git-review` log lines. That evidence is what makes a report reproducible.
 - Questions and ideas: [Discussions](https://github.com/mister-ideas/git-review/discussions).
-- Security: [SECURITY.md](SECURITY.md) — reported privately, never in a public issue.
+- Security: [SECURITY.md](SECURITY.md). Report privately, never in a public issue.
 - Community expectations: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) — what is in and out of scope, and how releases are cut.
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) explains what is in and out of scope, and how releases are cut.
 
-Releases are SemVer tags with a GitHub Release whose zip the release workflow builds only after the suite passes. There is no fixed cadence: fixes ship when they are ready. The Hermes plugin catalog pins an exact commit SHA, and moving that pin is a reviewed pull request against `NousResearch/hermes-agent`, so catalog users only ever receive reviewed code.
+Releases are SemVer tags with a GitHub Release. The release workflow builds each zip only after the test suite passes, and published releases are immutable. The Hermes plugin catalog pins an exact commit, and moving that pin is a reviewed pull request against `NousResearch/hermes-agent`, so catalog users only receive reviewed code.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

@@ -2,6 +2,16 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.25 — 2026-10-24
+
+Documentation release. No change to the plugin's behaviour.
+
+- The README is rewritten around the features: each scope, commits and browsing, layouts, folding, files, citations, the agent tool, and the dark theme, each with a screenshot.
+- Screenshots and two videos replace the earlier fixture renders. They were captured from the plugin's own code against a real backend and real repositories, in a Chromium harness that stands in for the Desktop window; they are not captures of the Desktop app.
+- A comparison with Hermes Desktop's native Review pane and the related catalog plugins (hermes-session-diff, diff-review, githermes), based on the installed Desktop source and the catalog entries.
+- The README states the limits, including that syntax highlighting is not implemented.
+- `package-lock.json` root version corrected to match the package (it had not been updated since 0.1.14).
+
 ## 0.1.24 — 2026-10-23
 
 ### Fixed
