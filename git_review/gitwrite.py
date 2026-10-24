@@ -96,10 +96,9 @@ def _check(repo: str, action: str, trusted: bool) -> None:
 
 
 def _env() -> dict:
-    # Writes keep the system config: on macOS and Windows that is where the credential
-    # helper lives, and a push without it cannot authenticate.
+    # Same configuration scopes as the reads (system config included: the credential
+    # helper on macOS and Windows, line endings on Windows), but writes take locks.
     env = gitx._git_env()
-    env.pop("GIT_CONFIG_NOSYSTEM", None)
     env.pop("GIT_OPTIONAL_LOCKS", None)
     return env
 

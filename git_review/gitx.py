@@ -170,8 +170,11 @@ def _repo_filter_drivers(repo: str | Path) -> set[str]:
 
 
 def _git_env() -> dict:
+    # The system config is the administrator's, not the repository's: it carries Git for
+    # Windows' line-ending and LFS settings, which reads must share with writes and with
+    # the user's own git. Repository-defined programs are neutralised per call instead.
     return {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_PAGER": "cat", "PAGER": "cat",
-            "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"}
+            "GIT_TERMINAL_PROMPT": "0"}
 
 
 def _run(repo: str | Path, *args: str, timeout: int = TIMEOUT, limit: int = MAX_DIFF_BYTES + 65536,

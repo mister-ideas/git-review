@@ -91,11 +91,12 @@ class WriteTests(unittest.TestCase):
         self.assertEqual(self.git('status', '--porcelain', repo=fresh), '?? x.txt')
 
     def test_paths_are_literal_and_validated(self):
-        (self.repo / '*.txt').write_text('star\n', newline='\n')
+        # `[ab].txt` is a glob that matches a.txt, and a legal file name on every OS.
+        (self.repo / '[ab].txt').write_text('glob\n', newline='\n')
         (self.repo / 'a.txt').write_text('two\n', newline='\n')
-        self.assertEqual(self.post('stage', paths=['*.txt']).status_code, 200)
+        self.assertEqual(self.post('stage', paths=['[ab].txt']).status_code, 200)
         lines = self.porcelain().splitlines()
-        self.assertIn('A  *.txt', lines)
+        self.assertIn('A  [ab].txt', lines)
         self.assertIn(' M a.txt', lines)  # the glob did not match a.txt
         for bad in ['../outside', '/etc/passwd', '--all', 'a/../../b', '']:
             with self.subTest(bad=bad):
@@ -109,6 +110,22 @@ class WriteTests(unittest.TestCase):
         self.assertEqual(self.post('discard', paths=['a.txt']).status_code, 200)
         self.assertEqual((self.repo / 'a.txt').read_text(), 'one\n')
         self.assertEqual(self.porcelain(), '')
+
+    def test_reads_and_writes_share_the_system_config(self):
+        # Git for Windows keeps core.autocrlf in the system config. A discard that
+        # honoured it while the reads did not left the restored file reading as modified.
+        system = self.root / 'system.gitconfig'
+        system.write_text('[core]\n\tautocrlf = true\n', newline='\n')
+        (self.repo / 'a.txt').write_text('two\n', newline='\n')
+        env = {k: v for k, v in os.environ.items() if k != 'GIT_CONFIG_NOSYSTEM'}
+        env['GIT_CONFIG_SYSTEM'] = str(system)
+        with patch.dict(os.environ, env, clear=True):
+            # A boolean: a failing assertIn would print the whole environment.
+            self.assertFalse('GIT_CONFIG_NOSYSTEM' in gitx._git_env(), 'reads must not drop the system config')
+            self.assertEqual(self.post('discard', paths=['a.txt']).status_code, 200)
+            self.assertEqual((self.repo / 'a.txt').read_bytes(), b'one\r\n')
+            files = self.client.get('/api/plugins/git-review/status', params={'repo': str(self.repo)}).json()['files']
+        self.assertEqual(files, [])
 
     def test_discard_new_file_deletes_only_that_file(self):
         (self.repo / 'dir').mkdir()
@@ -202,7 +219,7 @@ class WriteTests(unittest.TestCase):
 
     def test_repo_filter_driver_refuses_stage_until_allowed(self):
         marker = self.root / 'filter-ran'
-        self.git('config', 'filter.evil.clean', f'sh -c "echo ran > {marker}; cat"')
+        self.git('config', 'filter.evil.clean', f"sh -c \"echo ran > '{marker.as_posix()}'; cat\"")
         (self.repo / '.gitattributes').write_text('*.txt filter=evil\n', newline='\n')
         (self.repo / 'a.txt').write_text('two\n', newline='\n')
         response = self.post('stage', paths=['a.txt'])

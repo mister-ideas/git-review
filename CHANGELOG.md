@@ -26,6 +26,7 @@ The pane now ships the change as well as reviewing it.
 - Turn baselines for **Last agent turn** are recorded by the plugin when a turn starts, so a turn that ran while the pane was closed is still reviewable.
 - `/status` reports, per file, whether it has staged and unstaged changes.
 - The agent tool `git_review_select` accepts the `branch` scope.
+- Reads honour the system git configuration, as writes must. On Windows that is where Git for Windows keeps `core.autocrlf` and the git-lfs filter; skipping it made a restored file read as modified and showed LFS pointers instead of content. Programs named by a repository's own config stay neutralised as before.
 
 ### Documentation
 - README, SECURITY and CONTRIBUTING describe the write actions, their safeguards and the new disclosures (write commands, push and PR network use, the commit-message request). The comparison with the native Review pane is updated.
