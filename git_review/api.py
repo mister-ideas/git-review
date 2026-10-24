@@ -228,9 +228,12 @@ def diff(repo: str = Query(min_length=2, max_length=1024),
          path: str = Query(default=None, max_length=2048),
          ref: str = Query(default=None, max_length=gitx.MAX_REFS * 41 - 1),
          ignore_ws: bool = Query(default=False),
+         untracked: bool = Query(default=False),
+         base: str = Query(default=None, max_length=200),
          cwd: str = Query(default="", max_length=1024)):
     normalized = _authorized(repo, cwd)
-    return _guard(gitx.diff, normalized, scope, None, ref, path, ignore_ws)
+    return _guard(gitx.diff, normalized, scope, base if scope == "branch" else None, ref, path, ignore_ws,
+                  untracked)
 
 
 class TurnBaseRequest(BaseModel):

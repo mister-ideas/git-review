@@ -407,7 +407,8 @@ def status(repo: str | Path) -> dict:
         if not path:
             continue
         staged, unstaged = xy[0], xy[1]
-        entry = {"path": path, "orig": orig, "staged": 0, "unstaged": 0, "untracked": False}
+        entry = {"path": path, "orig": orig, "staged": int(staged not in " ?!"),
+                 "unstaged": int(unstaged not in " ?!"), "untracked": False}
         if unstaged == "?" or unstaged == "!":
             entry["untracked"] = True
             entry["status"] = "untracked"
@@ -448,7 +449,7 @@ def _commit_sha(repo: str | Path, ref: str) -> str:
         raise GitError(f"unknown commit: {ref[:40]}") from exc
 
 
-SCOPES = ("unstaged", "staged", "uncommitted", "commits")
+SCOPES = ("unstaged", "staged", "uncommitted", "branch", "commits")
 
 
 def _validate_sha(repo: str | Path, ref: str) -> str:
@@ -518,6 +519,44 @@ def turn_base(repo: str | Path) -> dict:
     return {"base": base, "untracked": untracked, "untracked_truncated": truncated}
 
 
+def _untracked_patches(repo: str | Path, rels: list[str], total: int) -> tuple[list[str], int]:
+    """All-add patches for untracked files, within what is left of the diff budget.
+
+    Returns (patches, files left out because the budget ran out).
+    """
+    parts: list[str] = []
+    too_big = 0
+    root = Path(repo)
+    for rel in rels:
+        full = root / rel
+        if full.is_dir() and not full.is_symlink():
+            continue
+        budget = MAX_DIFF_BYTES - total
+        if budget <= 0:
+            too_big += 1
+            continue
+        try:
+            # rc 1 means "differences found" for --no-index; it is the normal case.
+            patch = _run(repo, "diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-color",
+                         "--src-prefix=a/", "--dst-prefix=b/", "--", "/dev/null", rel,
+                         ok=(0, 1), limit=budget + 4096)
+        except OutputLimit:
+            too_big += 1
+            continue
+        except GitError:
+            # Vanished between listing and diff, or unreadable: skip, never fail the view.
+            continue
+        size = len(patch.encode("utf-8", "replace"))
+        if total + size > MAX_DIFF_BYTES:
+            too_big += 1
+            continue
+        if patch and not patch.endswith("\n"):
+            patch += "\n"
+        parts.append(patch)
+        total += size
+    return parts, too_big
+
+
 def turn_diff(repo: str | Path, base: str | None, preexisting_untracked: list[str] | None = None,
               ignore_ws: bool = False) -> dict:
     """Everything that changed since a turn_base() snapshot.
@@ -547,37 +586,8 @@ def turn_diff(repo: str | Path, base: str | None, preexisting_untracked: list[st
     if len(new) > MAX_TURN_UNTRACKED:
         notes.append(f"{len(new) - MAX_TURN_UNTRACKED} new untracked files omitted (showing {MAX_TURN_UNTRACKED}).")
         new = new[:MAX_TURN_UNTRACKED]
-    parts = [tracked]
-    total = len(tracked.encode("utf-8", "replace"))
-    too_big = 0
-    root = Path(repo)
-    for rel in new:
-        full = root / rel
-        if full.is_dir() and not full.is_symlink():
-            continue
-        budget = MAX_DIFF_BYTES - total
-        if budget <= 0:
-            too_big += 1
-            continue
-        try:
-            # rc 1 means "differences found" for --no-index; it is the normal case.
-            patch = _run(repo, "diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-color",
-                         "--src-prefix=a/", "--dst-prefix=b/", "--", "/dev/null", rel,
-                         ok=(0, 1), limit=budget + 4096)
-        except OutputLimit:
-            too_big += 1
-            continue
-        except GitError:
-            # Vanished between listing and diff, or unreadable: skip, never fail the view.
-            continue
-        size = len(patch.encode("utf-8", "replace"))
-        if total + size > MAX_DIFF_BYTES:
-            too_big += 1
-            continue
-        if patch and not patch.endswith("\n"):
-            patch += "\n"
-        parts.append(patch)
-        total += size
+    extra, too_big = _untracked_patches(repo, new, len(tracked.encode("utf-8", "replace")))
+    parts = [tracked, *extra]
     if too_big:
         notes.append(f"{too_big} new untracked files omitted: diff exceeds the display limit.")
     if listing_truncated:
@@ -658,14 +668,19 @@ def _patch_args(ignore_ws: bool) -> list[str]:
 
 
 def diff(repo: str | Path, scope: str, base: str | None = None, ref: str | None = None,
-         path: str | None = None, ignore_ws: bool = False) -> dict:
+         path: str | None = None, ignore_ws: bool = False, untracked: bool = False) -> dict:
     """Return a unified patch for the requested scope.
 
     Scopes:
       unstaged     working tree vs index
       staged       index vs HEAD
       uncommitted  working tree vs HEAD (staged + unstaged)
+      branch       HEAD vs its fork point from `base` (default: the default branch),
+                   the net change a pull request of this branch would show
       commits      comma-separated SHAs, each rendered as its own patch
+
+    `untracked` adds new, not-yet-added files to the unstaged and uncommitted
+    scopes as all-add patches (the way a status view lists them).
 
     The agent-turn view is not a scope: see turn_base()/turn_diff().
     """
@@ -713,8 +728,25 @@ def diff(repo: str | Path, scope: str, base: str | None = None, ref: str | None 
             patches.append({"sha": sha, **_summarize(patch)})
         return {"commits": patches, "note": history_note}
 
+    head_sha = None
+    label = None
     args = _patch_args(ignore_ws)
-    if scope == "unstaged":
+    if scope == "branch":
+        try:
+            head_sha = _commit_sha(repo, "HEAD")
+        except GitError:
+            return {"patch": "", "added": 0, "removed": 0, "note": "Repository has no commits yet."}
+        if base and base.strip():
+            label = base.strip()
+            fork = _run(repo, "merge-base", _commit_sha(repo, label), head_sha).strip()
+        else:
+            found = _default_branch_fork_point(repo)
+            if not found:
+                return {"patch": "", "added": 0, "removed": 0, "head": head_sha,
+                        "note": "This is the default branch: pick a branch to compare against."}
+            fork, label = found
+        args += [fork, head_sha]
+    elif scope == "unstaged":
         pass
     elif scope == "staged":
         args.append("--cached")
@@ -731,9 +763,25 @@ def diff(repo: str | Path, scope: str, base: str | None = None, ref: str | None 
         patch = _run(repo, *args)
     except OutputLimit:
         return {"patch": "", "note": "Diff exceeds the display limit. Narrow the scope or filter to one file.", "added": 0, "removed": 0}
-    if len(patch.encode("utf-8", "replace")) > MAX_DIFF_BYTES:
+    size = len(patch.encode("utf-8", "replace"))
+    if size > MAX_DIFF_BYTES:
         return {"patch": "", "note": f"Diff exceeds the {MAX_DIFF_BYTES // (1024 * 1024)} MB display limit. Narrow the scope or filter to one file.", "added": 0, "removed": 0}
+    notes: list[str] = []
+    if untracked and scope in ("unstaged", "uncommitted"):
+        listed, listing_truncated, _ = _untracked(repo)
+        if path:
+            listed = [p for p in listed if p == path]
+        extra, too_big = _untracked_patches(repo, listed[:MAX_TURN_UNTRACKED], size)
+        if extra:
+            patch = patch + ("" if not patch or patch.endswith("\n") else "\n") + "".join(extra)
+        omitted = too_big + max(0, len(listed) - MAX_TURN_UNTRACKED)
+        if omitted or listing_truncated:
+            notes.append(f"{omitted} new files not shown: the diff reached its display limit." if omitted
+                         else f"Untracked listing capped at {MAX_FILES} files.")
     result = _summarize(patch)
+    result["note"] = " ".join(notes)
+    if scope == "branch":
+        result.update({"head": head_sha, "base_label": label})
     # The run below the last hunk has no end in the patch, but the file does. Only
     # a worktree side can be counted without reading a blob, so the pane gets the
     # count when the new side is the working tree and falls back to "show more"

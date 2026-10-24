@@ -299,6 +299,55 @@ class WriteTests(unittest.TestCase):
         self.assertEqual(env['GIT_CONFIG_KEY_0'], 'core.fsmonitor')
         self.assertEqual(self.git('rev-parse', 'main', repo=self.root / 'origin.git'), self.git('rev-parse', 'HEAD'))
 
+    # read scopes that the write actions rely on -------------------------------------
+    def get(self, route, **params):
+        return self.client.get('/api/plugins/git-review/' + route, params={'repo': str(self.repo), **params})
+
+    def test_uncommitted_lists_new_files_only_when_asked(self):
+        (self.repo / 'a.txt').write_text('two\n', newline='\n')
+        (self.repo / 'new.txt').write_text('fresh\n', newline='\n')
+        plain = self.get('diff', scope='uncommitted').json()
+        self.assertNotIn('new.txt', plain['patch'])
+        full = self.get('diff', scope='uncommitted', untracked='true').json()
+        self.assertIn('diff --git a/new.txt b/new.txt', full['patch'])
+        self.assertIn('+fresh', full['patch'])
+        self.assertEqual((full['added'], full['removed']), (2, 1))
+        staged = self.get('diff', scope='staged', untracked='true').json()
+        self.assertNotIn('new.txt', staged['patch'])
+        only = self.get('diff', scope='unstaged', untracked='true', path='a.txt').json()
+        self.assertNotIn('new.txt', only['patch'])
+
+    def test_status_reports_staged_and_unstaged_per_file(self):
+        (self.repo / 'a.txt').write_text('two\n', newline='\n')
+        self.git('add', 'a.txt')
+        (self.repo / 'a.txt').write_text('three\n', newline='\n')
+        (self.repo / 'new.txt').write_text('n\n', newline='\n')
+        files = {f['path']: f for f in self.get('status').json()['files']}
+        self.assertEqual((files['a.txt']['staged'], files['a.txt']['unstaged']), (1, 1))
+        self.assertTrue(files['new.txt']['untracked'])
+        self.assertEqual((files['new.txt']['staged'], files['new.txt']['unstaged']), (0, 0))
+
+    def test_branch_scope_is_the_net_change_since_the_fork_point(self):
+        self.git('checkout', '-q', '-b', 'feature')
+        (self.repo / 'a.txt').write_text('two\n', newline='\n')
+        self.git('commit', '-q', '-am', 'one')
+        (self.repo / 'a.txt').write_text('three\n', newline='\n')
+        self.git('commit', '-q', '-am', 'two')
+        (self.repo / 'keep.txt').write_text('uncommitted\n', newline='\n')
+        body = self.get('diff', scope='branch').json()
+        self.assertEqual(body['base_label'], 'main')
+        self.assertEqual(body['head'], self.git('rev-parse', 'HEAD'))
+        self.assertIn('-one\n+three', body['patch'])
+        self.assertNotIn('keep.txt', body['patch'])
+        self.assertEqual((body['added'], body['removed']), (1, 1))
+        self.git('checkout', '-q', 'main')
+        on_main = self.get('diff', scope='branch').json()
+        self.assertEqual(on_main['patch'], '')
+        self.assertIn('default branch', on_main['note'])
+        against = self.get('diff', scope='branch', base='feature').json()
+        self.assertEqual(against['patch'], '')
+        self.assertEqual(self.get('diff', scope='branch', base='--evil').status_code, 400)
+
 
 if __name__ == '__main__':
     unittest.main()
