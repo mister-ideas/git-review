@@ -1,4 +1,4 @@
-"""Read-only git access. Every command runs with explicit repo context (-C) and bounded output."""
+"""Read-only git access (writes live in gitwrite.py). Every command runs with explicit repo context (-C) and bounded output."""
 
 from __future__ import annotations
 

@@ -2,6 +2,35 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.2.0 — 2026-10-24
+
+The pane now ships the change as well as reviewing it.
+
+### Added
+- **Stage, unstage and discard** per file, from the file header (on hover) or the file tree's right-click menu, and for every change at once from the commit box's ⋯ menu. Stage and unstage follow where each file's changes sit; Uncommitted marks partly staged files. Discard restores a file to `HEAD` (a rename gets both names back) or deletes a new file, after Desktop's own confirmation dialog. It deletes only the files it names, never an untracked directory or an ignored file, and refuses a path that resolves outside the repository.
+- **Commit box** under the diff in the Uncommitted, Staged and Unstaged scopes: Commit, Commit & push with a remembered default, ⌘/Ctrl+Enter. With nothing staged, a commit stages everything first.
+- **Generate commit message** with Hermes's `commit_message` one-shot template on the focused chat's model, from exactly what the commit will contain and the repository's recent subjects. Pressing again asks for a different draft.
+- **Push** (with the count of commits to push), publishing a branch without an upstream to `origin`, and **Create pull request** (`gh pr create --fill`, or `glab mr create --fill`), which pushes first and opens the result.
+- **Ask Hermes to commit and open a PR** sends Desktop's own ship request to the chat.
+- **Branch scope**: the net change of the branch since it left the default branch, or any branch picked in the branch menu.
+- **New files** appear with their content in Uncommitted and Unstaged (display menu: Show new files).
+- **Syntax colours** from the theme's hues, for about thirty languages (display menu: Syntax colours), and Desktop's file-type icon on each file header.
+- **Files: Tree / List** in the display menu.
+- A **status-bar count** of changed files in the focused workspace, which opens the pane.
+- A rebindable **⌘⌥G / Ctrl+Alt+G** shortcut, shown in the command palette.
+- **Loading skeletons** while a diff is read, and a re-read when the Desktop window regains focus.
+- Settings `read_only` (hide and refuse every write) and `run_repo_programs` (let writes run hooks, filter drivers, signing and SSH programs that the repository's own config names; off by default, in which case such writes are refused with the reason and hooks are skipped).
+- Backend routes `/ship`, `/stage`, `/unstage`, `/discard`, `/commit`, `/push`, `/create-pr` and `/commit-context`, in `git_review/gitwrite.py`, under the same repository authorization as the reads.
+
+### Changed
+- Turn baselines for **Last agent turn** are recorded by the plugin when a turn starts, so a turn that ran while the pane was closed is still reviewable.
+- `/status` reports, per file, whether it has staged and unstaged changes.
+- The agent tool `git_review_select` accepts the `branch` scope.
+
+### Documentation
+- README, SECURITY and CONTRIBUTING describe the write actions, their safeguards and the new disclosures (write commands, push and PR network use, the commit-message request). The comparison with the native Review pane is updated.
+- The README's claim that the pane does not store the scope or repository was wrong since 0.1.19; it now says what is stored.
+
 ## 0.1.27 — 2026-10-24
 
 ### Fixed
