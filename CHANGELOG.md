@@ -2,6 +2,22 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.27 — 2026-10-24
+
+### Fixed
+- Dark mode no longer uses a palette of its own. 38 `.dark` rules with fixed greys are removed, so the pane takes every colour from Desktop's theme tokens, as light mode already did, and follows any skin.
+- The file search box was white in dark themes: it painted `--ui-bg-input`, which Desktop defines only as `#fcfcfc`. It now uses the same surface and strokes as Desktop's own search field.
+- File-status icons for renamed files were uncoloured: they relied on the Tailwind class `text-(--ui-blue)`, which Desktop's stylesheet does not contain because core never uses it. Status colours are now the pane's own CSS.
+- The search placeholder no longer truncates in a narrow file list.
+
+### Added
+- `tests/theme.test.mjs` fails on any mode-specific palette, colour literal, light-only token, undefined token or Tailwind arbitrary-value class.
+
+### Documentation
+- Every screenshot and the GIF are re-captured with Desktop's real theme seeds. The earlier dark screenshot showed grey fold bars because the capture harness switched to dark without Desktop's dark seeds.
+- Only media embedded in the README ship; the two videos and the unused GIF are removed.
+- The comparison now covers only the native Review pane, including where native is ahead.
+
 ## 0.1.26 — 2026-10-24
 
 Documentation correction. No change to the plugin's behaviour.

@@ -216,14 +216,17 @@ function subtreeHas(node, q) {
   return Object.keys(node).filter((k) => k !== "__files").some((k) => subtreeHas(node[k], q));
 }
 
-// Per-status codicon + tone (mirrors core review STATUS_GLYPH).
+// Per-status codicon + tone (mirrors core review STATUS_GLYPH). Tones are the
+// pane's own classes, not Tailwind utilities: Desktop's CSS only contains the
+// utilities core itself uses, so `text-(--ui-blue)` (never used by core) left
+// renamed files with an uncoloured icon.
 const STATUS_GLYPH = {
-  added: { icon: "diff-added", tone: "text-(--ui-green)" },
-  deleted: { icon: "diff-removed", tone: "text-(--ui-red)" },
-  renamed: { icon: "diff-renamed", tone: "text-(--ui-blue)" },
-  untracked: { icon: "diff-added", tone: "text-(--ui-text-tertiary)" },
-  modified: { icon: "diff-modified", tone: "text-(--ui-orange)" },
-  changed: { icon: "diff-modified", tone: "text-(--ui-orange)" },
+  added: { icon: "diff-added", tone: "st-added" },
+  deleted: { icon: "diff-removed", tone: "st-deleted" },
+  renamed: { icon: "diff-renamed", tone: "st-renamed" },
+  untracked: { icon: "diff-added", tone: "st-untracked" },
+  modified: { icon: "diff-modified", tone: "st-modified" },
+  changed: { icon: "diff-modified", tone: "st-modified" },
 };
 
 const SCOPES = [
@@ -295,6 +298,7 @@ const css = `
    carry the menu surface class as a second scope: churn colours, group headers
    and the scroll cap all apply to the menu, not to the pane. */
 .grd .fdelta,.gr-menu .fdelta{font-family:var(--font-mono,monospace);font-size:10.5px;font-variant-numeric:tabular-nums;display:inline-flex;gap:6px}
+.grd .st-added{color:var(--ui-green)}.grd .st-deleted{color:var(--ui-red)}.grd .st-renamed{color:var(--ui-blue)}.grd .st-modified{color:var(--ui-orange)}.grd .st-untracked{color:var(--ui-text-tertiary)}
 .grd .fdelta .add,.gr-menu .fdelta .add{color:var(--ui-green)}.grd .fdelta .del,.gr-menu .fdelta .del{color:var(--ui-red)}
 .grd .body{min-height:0;min-width:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) var(--files-w,minmax(210px,28%))}
 .grd .tree-side{position:relative}
@@ -311,19 +315,13 @@ const css = `
 .grd .tree-side .tree{overflow:auto;flex:1;min-height:0}
 .grd .sidebar{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--ui-stroke-tertiary)}
 .grd .search{padding:8px 10px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0}
-.grd .search-field{flex:1 1 0;min-width:0;opacity:1;background:var(--ui-bg-input);color:var(--ui-text-primary);border:1px solid var(--ui-stroke-secondary);border-radius:6px;padding:0 6px}
+/* Desktop's own boxed search field: quinary surface, tertiary stroke, secondary on hover.
+   --ui-bg-input is a light-only constant, so it painted a white box in dark themes. */
+.grd .search-field{flex:1 1 0;min-width:0;opacity:1;background:var(--ui-bg-quinary);color:var(--ui-text-primary);border:1px solid var(--ui-stroke-tertiary);border-radius:6px;padding:0 6px}
+.grd .search-field:hover{border-color:var(--ui-stroke-secondary)}
 .grd .search-field:focus-within{border-color:var(--ui-accent)}
 .grd .search-field input{width:0;min-width:0;flex:1 1 0;field-sizing:fixed;color:var(--ui-text-primary);background:transparent;font-size:12px}
 .grd .search-field input::placeholder{color:var(--ui-text-secondary);opacity:1}
-  .dark .grd{background:#141416;color:#e8e8e8}
-  .dark .grd .toolbar{border-color:#2b2b2d}
-  .dark .grd .toolbar .repo-name{color:#9a9a9a}
-  .dark .grd .folder{color:#c9c9c9}
-  .dark .grd .folder:hover{background:#1c1c20}
-  .dark .grd .file{color:#e8e8e8}
-  .dark .grd .file:hover{background:#1c1c20}
-  .dark .grd .file[aria-pressed=true]{background:#242426}
-  .dark .grd .fname{color:#e8e8e8}
 /* Churn counts sit immediately after the name, in the file tree as in the folders'
    file counts: the numbers describe the row they follow, not a right-hand column. */
 .grd .file .fname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -332,35 +330,6 @@ const css = `
    one line-height for both boxes, and the numbers centre on the label. */
 .grd .file .fname,.grd .folder > span:first-of-type{line-height:1.2}
 .grd .file .fdelta,.grd .folder .cnt{line-height:1;align-self:center}
-  .dark .grd .detailhead{border-color:#2b2b2d}
-  .dark .grd .detailtitle .fdir{color:#6b6b6b}
-  .dark .grd .search{border-bottom-color:#2b2b2d}
-  .dark .grd .search-field{background:#1c1c1f;color:#e8e8e8;border-color:#2b2b2d;border-radius:6px;padding:0 6px}
-  .dark .grd .search-field input{background:transparent;color:#e8e8e8;font-size:12px}
-  .dark .grd .search-field:focus-within{border-color:var(--ui-accent)}
-  .dark .grd .search-field input::placeholder{color:#9b9b9b;opacity:.9}
-  .dark .grd .search-field > svg{color:#9b9b9b}
-  .dark .grd .filter-wrap.active{color:#e8e8e8}
-  .dark .grd .filter-wrap.active .filter-btn{background:#2b2b2d}
-  .dark .grd .lineno{color:#6b6b6b;user-select:none;-webkit-user-select:none}
-  .dark .grd .line.hunk{color:#9a9a9a;background:#161618}
-  .dark .grd .fold{color:#6b6b6b}
-  .dark .grd .fold-strip{background:var(--ui-surface-background)}
-  .dark .grd .menu-group,.dark .gr-menu .menu-group{color:#6b6b6b}
-  .dark .grd .af-head{background:#161618}
-  .dark .grd .af-head:hover{background:#1c1c20}
-  .dark .grd .af-head .fdir{color:#6b6b6b}
-  .dark .grd .af-copy{color:#6b6b6b}
-  .dark .grd .af-copy:hover{color:#c9c9c9}
-  .dark .grd .notice{background:#161618;color:#9a9a9a}
-  .dark .grd .fold-inline{background:var(--ui-surface-background)}
-  .dark .grd .fold-inline:hover{background:#242426}
-  .dark .grd .line.add{background:#123a24}
-  .dark .grd .line.add .lineno{color:#4ade80}
-  .dark .grd .line.remove{background:#3a1c1c}
-  .dark .grd .line.remove .lineno{color:#f87171}
-  .dark .grd .line.line-selected{background:#242426}
-  .dark .grd .split-row > .line + .line{border-color:#2b2b2d}
 
 .grd .search-field > svg{color:var(--ui-text-secondary);flex-shrink:0}
 .grd .search .filter-wrap{flex:0 0 auto;display:inline-flex}
@@ -1557,7 +1526,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     ] }),
     (scope === "commits" && historyNote) && jsx("div", { className: "notice", role: "status", children: historyNote }),
     (error || diff?.note) && jsxs("div", { className: "notice", role: "alert", children: [
-      jsx(Codicon, { className: "text-(--ui-orange) shrink-0", name: "warning", size: "0.85rem" }),
+      jsx(Codicon, { className: "st-modified shrink-0", name: "warning", size: "0.85rem" }),
       error || diff?.note
     ] }),
     !worktrees.length && !error
@@ -1761,7 +1730,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
               jsx("div", { className: "resizer", role: "separator", tabIndex: 0, title: "Drag to resize the file list; double-click to reset",
                 "aria-label": "Resize file list", onPointerDown: onResizeStart, onPointerMove: onResizeMove, onPointerUp: onResizeEnd, onPointerCancel: onResizeEnd, onDoubleClick: onResizeReset }),
               jsxs("div", { className: "search", children: [
-                jsx(SearchField, { containerClassName: "search-field", inputClassName: "search-input", value: filter, onChange: setFilter, placeholder: `Search ${sections.length} ${sections.length === 1 ? "file" : "files"} or their changes${hiddenByFilters ? ` (${hiddenByFilters} hidden)` : ""}`, "aria-label": "Search files" }),
+                jsx(SearchField, { containerClassName: "search-field", inputClassName: "search-input", value: filter, onChange: setFilter, placeholder: `Search files and changes${hiddenByFilters ? ` (${hiddenByFilters} hidden)` : ""}`, "aria-label": "Search files" }),
                 jsx("div", { className: cn("filter-wrap", (!showDeleted || !showTests) && "active"), children:
         jsxs(DropdownMenu, { children: [
           jsx(DropdownMenuTrigger, { asChild: true, children:
