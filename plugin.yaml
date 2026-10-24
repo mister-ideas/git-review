@@ -20,3 +20,11 @@ config_schema:
     type: string
     default: ""
     description: Newline-separated absolute directories to scan for worktrees (bounded two levels, at most 256 directories).
+  read_only:
+    type: boolean
+    default: false
+    description: Hide stage, discard, commit, push and PR actions and refuse them in the backend.
+  run_repo_programs:
+    type: boolean
+    default: false
+    description: Let writes run programs a repository's own config names (hooks, filter drivers, signing and SSH commands). Off by default; with it off, hooks are skipped and such writes are refused.

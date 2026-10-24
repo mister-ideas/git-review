@@ -194,12 +194,13 @@ _TOOL_ENV_NAMES = frozenset({"APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "USERPROF
                             "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "TEMP", "TMP", "HOMEDRIVE", "HOMEPATH"})
 
 
-def _run_tool(cmd: list[str], *, cwd: str | Path, timeout: int = 12) -> str:
-    """Run a read-only repo tool (glab/gh) with a clean, bounded environment."""
+def _run_tool(cmd: list[str], *, cwd: str | Path, timeout: int = 12, extra_env: dict | None = None) -> str:
+    """Run a repo tool (glab/gh) with a clean, bounded environment."""
     env = {k: v for k, v in os.environ.items()
            if k.startswith(_TOOL_ENV_PREFIXES) or k.upper() in _TOOL_ENV_NAMES}
     # Never wait for a person: unattended runs must fail fast, not hang on a prompt.
     env.update({"GH_PROMPT_DISABLED": "1", "GIT_TERMINAL_PROMPT": "0", "NO_PROMPT": "1"})
+    env.update(extra_env or {})
     return _capture(cmd, cwd=str(cwd), env=env, timeout=timeout, limit=256 * 1024)
 
 
