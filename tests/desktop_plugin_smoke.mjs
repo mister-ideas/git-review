@@ -20,6 +20,7 @@ const inject = `
 const { Fragment, jsx, jsxs } = jsxRuntime;
 const { useState, useEffect, useMemo, useRef, useCallback, forwardRef } = reactValues;
 const { Badge, Button, Codicon, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, EmptyState, SearchField, Switch, Tip, cn, host, useValue } = sdkValues;
+const sdk = sdkValues;
 const ctx = { register: (entry) => registrations.push(entry),
   storage: { get: (k, d) => storage.get(k) ?? d, set: (k, v) => storage.set(k, v) },
   rest: () => Promise.reject(new Error('no backend in smoke test')),

@@ -43,7 +43,12 @@ export const Badge = Component, Button = Component, Codicon = Component,
   DropdownMenu = Component, DropdownMenuContent = Component, DropdownMenuItem = Component,
   DropdownMenuSeparator = Component, DropdownMenuTrigger = Component,
   EmptyState = Component, ErrorState = Component, SearchField = Component,
-  ScrollArea = Component, Switch = Component, Tip = Component;
+  ScrollArea = Component, Switch = Component, Tip = Component,
+  ConfirmDialog = Component, Textarea = Component,
+  ContextMenu = Component, ContextMenuTrigger = Component, ContextMenuContent = Component,
+  ContextMenuItem = Component, ContextMenuSeparator = Component;
+export const STATUSBAR_AREAS = { left: 'statusBar.left', right: 'statusBar.right' };
+export const KEYBINDS_AREA = 'keybinds';
 export const cn = (...v) => v.filter(Boolean).join(' ');
 export { host, atom as $hostStateAtom };
 export const useValue = (a) => (a && typeof a.get === 'function' ? a.get() : '');

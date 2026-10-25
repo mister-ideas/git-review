@@ -1,8 +1,12 @@
-"""Read-only HTTP routes. Clients address worktrees by path, never arbitrary commands.
+"""HTTP routes. Clients address worktrees by path, never arbitrary commands.
 
 Repository paths are accepted only from trusted profile/session workspaces,
 explicitly configured repos/roots, or validated local agent selections. HTTP
 `cwd` is a compatibility hint, never an authorization source.
+
+Reads are GET (plus the POST snapshot/expansion reads). Writes are the POST
+routes under "Writes" below: the same authorization, refused when the
+`read_only` setting is on.
 """
 
 from __future__ import annotations
@@ -19,7 +23,7 @@ except ImportError:  # outside a Hermes checkout (CI, standalone tests)
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from . import gitx, select_store
+from . import gitwrite, gitx, select_store
 
 router = APIRouter()
 
@@ -224,9 +228,12 @@ def diff(repo: str = Query(min_length=2, max_length=1024),
          path: str = Query(default=None, max_length=2048),
          ref: str = Query(default=None, max_length=gitx.MAX_REFS * 41 - 1),
          ignore_ws: bool = Query(default=False),
+         untracked: bool = Query(default=False),
+         base: str = Query(default=None, max_length=200),
          cwd: str = Query(default="", max_length=1024)):
     normalized = _authorized(repo, cwd)
-    return _guard(gitx.diff, normalized, scope, None, ref, path, ignore_ws)
+    return _guard(gitx.diff, normalized, scope, base if scope == "branch" else None, ref, path, ignore_ws,
+                  untracked)
 
 
 class TurnBaseRequest(BaseModel):
@@ -282,3 +289,103 @@ def file_lines(request: FileLinesRequest):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except gitx.GitError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ───────────────────────── Writes ─────────────────────────
+
+def _flag(value) -> bool:
+    return value is True or str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _write_policy() -> dict:
+    config = settings()
+    return {"read_only": _flag(config.get("read_only")), "trusted": _flag(config.get("run_repo_programs"))}
+
+
+def _writable(repo: str, cwd: str = "") -> tuple[str, bool]:
+    normalized = _authorized(repo, cwd)
+    policy = _write_policy()
+    if policy["read_only"]:
+        raise HTTPException(status_code=403, detail="git-review is set to read-only")
+    return normalized, policy["trusted"]
+
+
+def _write(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except gitwrite.WriteRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except gitx.GitError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class PathsRequest(BaseModel):
+    """Files to act on; omit `paths` (null) for every change in the worktree."""
+    repo: str = Field(min_length=2, max_length=1024)
+    paths: list[str] | None = Field(default=None, max_length=gitx.MAX_FILES)
+    cwd: str = Field(default="", max_length=1024)
+
+
+@router.get("/ship")
+def ship(repo: str = Query(min_length=2, max_length=1024), cwd: str = Query(default="", max_length=1024)):
+    """Branch, upstream, ahead/behind, and whether writes are allowed (read-only)."""
+    normalized = _authorized(repo, cwd)
+    policy = _write_policy()
+    info = _guard(gitwrite.ship_info, normalized)
+    return {**info, "writable": not policy["read_only"], "repo_programs": policy["trusted"]}
+
+
+@router.post("/stage")
+def stage(request: PathsRequest):
+    normalized, trusted = _writable(request.repo, request.cwd)
+    return _write(gitwrite.stage, normalized, request.paths, trusted=trusted)
+
+
+@router.post("/unstage")
+def unstage(request: PathsRequest):
+    normalized, trusted = _writable(request.repo, request.cwd)
+    return _write(gitwrite.unstage, normalized, request.paths, trusted=trusted)
+
+
+@router.post("/discard")
+def discard(request: PathsRequest):
+    """Restore files to HEAD and delete the named new files. The pane confirms first."""
+    normalized, trusted = _writable(request.repo, request.cwd)
+    return _write(gitwrite.discard, normalized, request.paths, trusted=trusted)
+
+
+class CommitRequest(BaseModel):
+    repo: str = Field(min_length=2, max_length=1024)
+    message: str = Field(min_length=1, max_length=gitwrite.MAX_MESSAGE_CHARS)
+    push: bool = False
+    cwd: str = Field(default="", max_length=1024)
+
+
+@router.post("/commit")
+def commit(request: CommitRequest):
+    normalized, trusted = _writable(request.repo, request.cwd)
+    return _write(gitwrite.commit, normalized, request.message, push=request.push, trusted=trusted)
+
+
+class RepoRequest(BaseModel):
+    repo: str = Field(min_length=2, max_length=1024)
+    cwd: str = Field(default="", max_length=1024)
+
+
+@router.post("/push")
+def push(request: RepoRequest):
+    normalized, trusted = _writable(request.repo, request.cwd)
+    return _write(gitwrite.push_branch, normalized, trusted=trusted)
+
+
+@router.post("/create-pr")
+def create_pr(request: RepoRequest):
+    normalized, trusted = _writable(request.repo, request.cwd)
+    return _write(gitwrite.create_pr, normalized, trusted=trusted)
+
+
+@router.post("/commit-context")
+def commit_context(request: RepoRequest):
+    """The diff and recent subjects a commit-message draft is written from (read-only)."""
+    normalized = _authorized(request.repo, request.cwd)
+    return _guard(gitwrite.commit_context, normalized)

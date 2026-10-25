@@ -1,9 +1,9 @@
 {
   "name": "git-review",
-  "version": "0.1.27",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Read-only Git review pane plugin for Hermes Desktop (development repository)",
+  "description": "Git review pane plugin for Hermes Desktop (development repository)",
   "scripts": {
     "postinstall": "node scripts/install-stubs.mjs",
     "test": "npm run test:unit && node tests/desktop_plugin_smoke.mjs desktop/plugin.js && node tests/import_allowlist.mjs desktop/plugin.js",

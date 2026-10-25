@@ -39,7 +39,7 @@ class BackendTests(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_removed_scopes_are_unknown(self):
-        for scope in ['branch', 'commit', 'range']:
+        for scope in ['commit', 'range']:
             with self.subTest(scope=scope), self.assertRaises(gitx.GitError):
                 gitx.diff(self.repo, scope, base='main', ref=self.first)
 
