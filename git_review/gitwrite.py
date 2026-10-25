@@ -260,11 +260,27 @@ def commit(repo: str, message: str, *, push: bool = False, trusted: bool = False
     return result
 
 
-def _upstream(repo: str) -> str:
+def _tracking(repo: str) -> tuple[str, str]:
+    """(remote, short upstream name) when the current branch tracks a remote branch OF THE
+    SAME NAME, else ("", ""). A branch made with `git checkout -b feature origin/main`
+    tracks main: pushing "to its upstream" would land on main (push.default=upstream) or
+    be refused (simple), so for shipping it counts as not yet published."""
     try:
-        return _read(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}", timeout=5).strip()
+        branch = _read(repo, "branch", "--show-current", timeout=5).strip()
+        if not branch:
+            return "", ""
+        line = _read(repo, "for-each-ref", "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream:short)",
+                     f"refs/heads/{branch}", timeout=5).strip()
     except gitx.GitError:
-        return ""
+        return "", ""
+    parts = line.split("\0")
+    if len(parts) != 3 or not parts[0] or parts[1] != f"refs/heads/{branch}":
+        return "", ""
+    return parts[0], parts[2]
+
+
+def _upstream(repo: str) -> str:
+    return _tracking(repo)[1]
 
 
 def _current(repo: str) -> str:
@@ -278,10 +294,13 @@ def push_branch(repo: str, *, trusted: bool = False) -> dict:
     """Push the current branch; the first push sets origin as its upstream."""
     branch = _current(repo)
     _check(repo, "push", trusted)
-    upstream = _upstream(repo)
+    remote, upstream = _tracking(repo)
+    # Always an explicit refspec to the branch's own name: a bare `git push` follows
+    # push.default, which can push other branches (matching) or onto another name (upstream).
     with _lock(repo):
         if upstream:
-            _git(repo, "push", "--quiet", trusted=trusted, timeout=PUSH_TIMEOUT)
+            _git(repo, "push", "--quiet", remote, f"refs/heads/{branch}:refs/heads/{branch}",
+                 trusted=trusted, timeout=PUSH_TIMEOUT)
         else:
             remotes = _read(repo, "remote", timeout=5).split()
             if "origin" not in remotes:
@@ -338,8 +357,16 @@ def ship_info(repo: str) -> dict:
         except (gitx.GitError, ValueError, IndexError):
             pass
     remotes = _read(repo, "remote", timeout=5).split()
+    # A pull request needs commits of the branch's own, past where it left the default branch.
+    pr_ready = False
+    if branch:
+        try:
+            found = gitx._default_branch_fork_point(repo)
+            pr_ready = bool(found) and found[0] != gitx._commit_sha(repo, "HEAD")
+        except gitx.GitError:
+            pr_ready = False
     return {"branch": branch, "upstream": upstream, "ahead": ahead, "behind": behind,
-            "has_origin": "origin" in remotes, "host": _host(repo)}
+            "has_origin": "origin" in remotes, "host": _host(repo), "pr_ready": pr_ready}
 
 
 def _host(repo: str) -> str:

@@ -5,7 +5,7 @@ import { act, byLabel, click, menuItem, mount, select, text } from './render-har
 import { branch, files, repo } from './fixtures.mjs'
 import plugin, { codiconForPath, discardPathsFor, errorText, syntaxFamily, tokenizeLine } from '../desktop/plugin.js'
 
-const ship = { writable: true, branch, upstream: `origin/${branch}`, ahead: 0, behind: 0, has_origin: true, host: 'github', repo_programs: false }
+const ship = { writable: true, branch, upstream: `origin/${branch}`, ahead: 0, behind: 0, has_origin: true, host: 'github', repo_programs: false, pr_ready: true }
 const status = { files: [
   { path: files[0], orig: null, staged: 1, unstaged: 0, untracked: false, status: 'modified' },
   { path: files[1], orig: null, staged: 0, unstaged: 1, untracked: false, status: 'modified' },
@@ -27,7 +27,7 @@ test('per-file stage and unstage follow where each file\'s changes sit', async t
   assert.ok(!byLabel(root, `Stage ${files[0]}`), 'fully staged file has nothing to stage')
   assert.ok(byLabel(root, `Stage ${files[1]}`), 'unstaged file offers Stage')
   assert.ok(byLabel(root, `Stage ${files[2]}`) && byLabel(root, `Unstage ${files[2]}`), 'partly staged file offers both')
-  assert.ok(root.findAll(n => n.props.className === 'af-staged' && text(n) === 'partly staged').length, 'partly staged badge')
+  assert.ok(root.findAll(n => (n.props.className || '').split(' ').includes('af-staged') && text(n) === 'partly staged').length, 'partly staged badge')
   const diffsBefore = requests.filter(r => r.url.startsWith('/diff?')).length
   await click(byLabel(root, `Stage ${files[1]}`))
   const [post] = posts(requests, '/stage')
@@ -225,4 +225,21 @@ test('the plugin registers a rebindable shortcut, a palette row that shows it, a
   assert.deepEqual(kb.data.defaults, ['mod+alt+g'])
   assert.equal(regs.find(r => r.area === 'palette').data.action, kb.data.id)
   assert.equal(typeof regs.find(r => r.area === 'statusBar.right').render, 'function')
+})
+
+test('files are reviewed in the file tree\'s order: folders first, new files in place', async t => {
+  const { treeOrder } = await import('../desktop/plugin.js')
+  const git = ['README.md', 'src/z.ts', 'src/a/b.ts', 'src/new.ts', 'a.md']
+  assert.deepEqual([...git].sort(treeOrder), ['src/a/b.ts', 'src/new.ts', 'src/z.ts', 'README.md', 'a.md'])
+})
+
+test('no pull request button for a branch with nothing of its own to propose', async t => {
+  const { root } = await mount(t, { ship: { ...ship, pr_ready: false }, status })
+  assert.ok(!byLabel(root, 'Create pull request'))
+})
+
+test('a clean tree with commits to push keeps push, without the message box', async t => {
+  const { root } = await mount(t, { ship: { ...ship, ahead: 2 }, status: { files: [] }, diffOverride: { repo_root: '/repo', patch: '', files: [] } })
+  assert.ok(byLabel(root, 'Push'))
+  assert.ok(!field(root))
 })

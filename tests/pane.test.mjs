@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mount, gutterDown, byClass, byLabel, click, text, select, paths, latestDiff, hasClass, file } from './render-harness.mjs'
-import { files, repo, makeContext, commits } from './fixtures.mjs'
+import { files, treeFiles, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
 import { host } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
@@ -267,7 +267,7 @@ test('worktree/meta effects populate repository and current branch', async t => 
   assert.ok(requests.some(r => r.url.startsWith('/meta?')))
   assert.ok(byClass(root, 'toolbar')[0].findAll(n => text(n).includes('a-very-long-repository-name')).length)
   assert.ok(byClass(root, 'toolbar')[0].findAll(n => text(n).includes('feature/a-very-long-branch-name')).length)
-  assert.deepEqual(paths(root), files)
+  assert.deepEqual(paths(root), treeFiles)
 })
 
 for (const [url, label] of [['https://gitlab.com/g/r/-/merge_requests/7', 'Open MR !7'], ['https://github.com/g/r/pull/9', 'Open PR #9']]) {
@@ -580,7 +580,7 @@ test('search input callback filters real diff files case-insensitively', async t
   await act(async () => search.props.onChange('MAIN.TEST'))
   assert.deepEqual(paths(root), [files[2]])
   await act(async () => search.props.onChange(''))
-  assert.deepEqual(paths(root), files)
+  assert.deepEqual(paths(root), treeFiles)
 })
 
 test('the focused workspace is only followed before the reviewer chooses', () => {

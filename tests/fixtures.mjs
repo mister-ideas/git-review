@@ -7,6 +7,8 @@ function patch(path, body, deleted = false) {
   return [`diff --git a/${path} b/${path}`, `--- a/${path}`, deleted ? '+++ /dev/null' : `+++ b/${path}`, '@@ -10001,28 +10001,29 @@', ...body].join('\n')
 }
 export const files = ['src/architecture/deep/main.ts', 'src/architecture/deep/other.ts', 'tests/main.test.ts', 'src/deleted.ts']
+// The order the pane shows them in: the file tree's (folders first, then files).
+export const treeFiles = [files[0], files[1], files[3], files[2]]
 export const mainPatch = patch(files[0], [...contexts.slice(0, 12), '-old-short', '-old-second', `+${longLine}`, '+new-second', '+new-third', ...contexts.slice(12)])
 export const diff = { patch: [mainPatch, patch(files[1], [' shared', '+other']), patch(files[2], ['+test']), patch(files[3], ['-deleted'], true)].join('\n'), added: 5, removed: 3, note: '' }
 export const commits = Array.from({ length: 27 }, (_, i) => ({ sha: (i + 1).toString(16).padStart(8, '0') + 'a'.repeat(32), short: (i + 1).toString(16).padStart(8, '0'), subject: `Commit ${i + 1}`, added: 1, removed: 0 }))

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { act, mount, byClass, byLabel, switchFor, click, select, paths, file, latestDiff, text } from './render-harness.mjs'
 import TestRenderer from 'react-test-renderer'
 import { jsx } from 'react/jsx-runtime'
-import { files, repo, makeContext, commits, contexts } from './fixtures.mjs'
+import { files, treeFiles, repo, makeContext, commits, contexts } from './fixtures.mjs'
 import { host, $hostStateAtom } from '@hermes/plugin-sdk'
 
 import { GitReview } from '../desktop/plugin.js'
@@ -69,7 +69,7 @@ test('copy path spies clipboard, preserves expanded diff, and resets copied feed
 
 test('deleted/test filters remove exact paths from both main view and tree', async t => {
   const { root, storage } = await mount(t)
-  assert.deepEqual(paths(root), files)
+  assert.deepEqual(paths(root), treeFiles)
   await select(root, 'Deleted files')
   assert.deepEqual(paths(root), files.slice(0, 3))
   assert.equal(paneSettings(storage).showDeleted, false)
@@ -79,7 +79,7 @@ test('deleted/test filters remove exact paths from both main view and tree', asy
   assert.deepEqual(byClass(root, 'file').map(text).map(s => s.replace(/[+−]\d+/g, '')), ['main.ts', 'other.ts'])
   await select(root, 'Deleted files')
   await select(root, 'Test files')
-  assert.deepEqual(paths(root), files)
+  assert.deepEqual(paths(root), treeFiles)
 })
 
 test('files hide/show persists through a real unmount/remount', async t => {
@@ -158,7 +158,7 @@ test('architecture folders default expanded; compact chain toggles descendants o
   const folder = folders.find(n => text(n).includes('architecture/deep'))
   await click(folder)
   assert.equal(byClass(root, 'file').length, files.length - 2)
-  assert.deepEqual(paths(root), files, 'folder navigation must not hide stacked diffs')
+  assert.deepEqual(paths(root), treeFiles, 'folder navigation must not hide stacked diffs')
   await click(folder)
   assert.equal(byClass(root, 'file').length, files.length)
 })

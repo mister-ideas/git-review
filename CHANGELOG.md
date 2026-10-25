@@ -2,7 +2,7 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
-## 0.2.0 — 2026-10-24
+## 0.2.0 — 2026-10-25
 
 The pane now ships the change as well as reviewing it.
 
@@ -26,6 +26,14 @@ The pane now ships the change as well as reviewing it.
 - Turn baselines for **Last agent turn** are recorded by the plugin when a turn starts, so a turn that ran while the pane was closed is still reviewable.
 - `/status` reports, per file, whether it has staged and unstaged changes.
 - The agent tool `git_review_select` accepts the `branch` scope.
+- Files are listed in the diff in the file tree's order (folders first, then files, by name), so new files sit with their folder instead of after everything else.
+- A deleted file's action reads **Restore**, not Discard, in its tooltip, menu and confirmation.
+- The file tree's right-click menu puts Discard last, in its own group, and outlines the row it was opened on.
+- Partly staged files are marked in the file tree too. In docks narrower than 480px the header's staged badge becomes a dot and the file actions float in on hover, so file names keep their room.
+- A file whose lines run past the pane fades at its right edge until scrolled to the end.
+- The Create pull request button shows only when the branch has commits of its own; with a clean tree, the commit box keeps only push and the pull-request link.
+- `/ship` reports `pr_ready`.
+- Push always names the branch explicitly and pushes it under its own name. A branch that tracks a differently named one (for example one made with `git checkout -b feature origin/main`) is published as `origin/feature` rather than pushed onto its upstream, whatever `push.default` says.
 - Reads honour the system git configuration, as writes must. On Windows that is where Git for Windows keeps `core.autocrlf` and the git-lfs filter; skipping it made a restored file read as modified and showed LFS pointers instead of content. Programs named by a repository's own config stay neutralised as before.
 
 ### Documentation

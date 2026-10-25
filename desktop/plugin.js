@@ -175,6 +175,17 @@ const shortLabel = (ref) => {
 
 // Group file paths into a folder tree with aggregated churn (mirrors core
 // review tree-data.ts: dirs aggregate descendants' +/-).
+// Folders before files at every level, each by name: the order Tree renders in.
+function treeOrder(a, b) {
+  const x = a.split(/[\\/]/), y = b.split(/[\\/]/);
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    const xDir = i < x.length - 1, yDir = i < y.length - 1;
+    if (xDir !== yDir) return xDir ? -1 : 1;
+    if (x[i] !== y[i]) return xDir ? (`:${x[i]}` < `:${y[i]}` ? -1 : 1) : (x[i] < y[i] ? -1 : 1);
+  }
+  return x.length - y.length;
+}
+
 function buildTree(paths) {
   const root = Object.create(null);
   for (const p of paths) {
@@ -364,6 +375,12 @@ const css = `
    Wrapped, the column is the view: nothing overflows. */
 .grd .diff{display:grid;grid-template-columns:minmax(max-content,1fr);align-content:start}
 .grd .diff.wordw{grid-template-columns:minmax(0,1fr)}
+/* The cue fades the text only: a sticky edge on each row repaints the pane's surface,
+   then the row's own tint over it, so added and removed rows keep their colour. */
+.grd .line.add{--gr-row:var(--ui-diff-add-background)}
+.grd .line.remove{--gr-row:var(--ui-diff-remove-background)}
+.grd .diff[data-more] .line::after{content:"";position:sticky;right:0;flex:0 0 28px;margin-left:-28px;align-self:stretch;pointer-events:none;
+  background:linear-gradient(to right,transparent,var(--gr-row,transparent)),linear-gradient(to right,transparent,var(--ui-surface-background))}
 .grd .line{display:flex;width:auto;min-width:0;white-space:pre;padding:0 6px;align-items:baseline;cursor:text;user-select:text;-webkit-user-select:text}
 .grd .line:hover{background:var(--ui-row-hover-background)}
 .grd .line.line-selected{background:var(--ui-row-active-background, var(--ui-row-hover-background));box-shadow:inset 2px 0 0 var(--ui-accent)}
@@ -442,19 +459,30 @@ const css = `
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-head:hover{background:var(--ui-surface-background)}
 .grd .af-head{min-width:0}
-.grd .af-head .fname{flex:0 1 auto}
+.grd .af-head .fname{flex:0 1 auto;min-width:min(9ch,100%)}
 .grd .af-head > button{flex-shrink:0}
 .grd .af-head .file-toggle{min-width:0;flex:1;display:flex;align-items:center;gap:8px;border:0;padding:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
 .grd .af-head .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .af-copy{display:inline-flex;color:var(--ui-text-tertiary);cursor:pointer}
 .grd .af-copy:hover{color:var(--ui-text-secondary)}
 /* Stage / unstage / discard: quiet until the header is hovered or focused. */
-.grd .af-act{display:inline-flex;color:var(--ui-text-tertiary);opacity:0;transition:opacity .12s}
+.grd .af-acts{display:inline-flex;justify-content:flex-end;flex:0 0 auto;width:calc(3 * var(--gr-act, 28px))}
+.grd .af-act{display:inline-flex;color:var(--ui-text-secondary);opacity:0;transition:opacity .12s;width:var(--gr-act, 28px);height:var(--gr-act, 28px)}
 .grd .af-head:hover .af-act,.grd .af-head:focus-within .af-act{opacity:1}
 .grd .af-act:hover{color:var(--ui-text-primary)}
 @media (hover:none){.grd .af-act{opacity:1}}
+/* Narrow docks: no reserved slot. The actions float over the counts while the header is
+   hovered, so the name keeps the room the rest of the time. */
+@media (hover:hover){@container(max-width:480px){.grd .af-acts{position:absolute;right:44px;top:50%;transform:translateY(-50%);width:auto;padding-left:6px;background:var(--ui-surface-background);visibility:hidden}.grd .af-head:hover .af-acts,.grd .af-head:focus-within .af-acts{visibility:visible}}}
 .grd .af-head .ftype{color:var(--ui-text-tertiary);flex-shrink:0}
-.grd .af-staged{flex-shrink:0;font-size:10.5px;line-height:1;padding:2px 5px;border-radius:4px;color:var(--ui-text-secondary);border:1px solid var(--ui-stroke-tertiary)}
+.grd .af-staged{flex-shrink:0;font-size:10.5px;line-height:1;padding:2px 5px;border-radius:4px;color:var(--ui-text-secondary);border:1px solid var(--ui-stroke-tertiary);white-space:nowrap}
+/* Narrow docks: the badge becomes a dot (full text in its tooltip), the name keeps the room. */
+@container(max-width:480px){.grd .af-staged{font-size:0;padding:0;width:7px;height:7px;border-radius:50%;border:0;background:var(--ui-text-secondary)}.grd .af-staged.partly{background:linear-gradient(90deg,var(--ui-text-secondary) 50%,transparent 50%);box-shadow:inset 0 0 0 1px var(--ui-text-secondary)}}
+/* The same state in the file tree. */
+/* The row a context menu is open for (Radix marks its trigger). */
+.grd .file[data-state=open]{box-shadow:inset 0 0 0 1px var(--ui-accent)}
+.grd .file .tstaged{flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--ui-text-secondary)}
+.grd .file .tstaged.partly{background:linear-gradient(90deg,var(--ui-text-secondary) 50%,transparent 50%);box-shadow:inset 0 0 0 1px var(--ui-text-secondary)}
 .grd .file .fhint{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ui-text-tertiary);font-size:10.5px}
 /* Syntax colours: the theme's hues pulled toward the text colour, so they keep
    contrast on light and dark skins alike. */
@@ -467,8 +495,8 @@ const css = `
    light text would wash the hues out, so they keep more of their own colour. */
 .grd .tk-k{color:light-dark(color-mix(in srgb,var(--ui-purple) 50%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-purple) 92%,var(--ui-text-primary)))}
 .grd .tk-s{color:light-dark(color-mix(in srgb,var(--ui-cyan) 72%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-cyan) 92%,var(--ui-text-primary)))}
-.grd .tk-n{color:light-dark(color-mix(in srgb,var(--ui-orange) 64%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-orange) 90%,var(--ui-text-primary)))}
-.grd .tk-t{color:light-dark(color-mix(in srgb,var(--ui-yellow) 60%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-yellow) 90%,var(--ui-text-primary)))}
+.grd .tk-n{color:light-dark(color-mix(in srgb,var(--ui-orange) 58%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-orange) 90%,var(--ui-text-primary)))}
+.grd .tk-t{color:light-dark(color-mix(in srgb,var(--ui-yellow) 54%,var(--ui-text-primary)),color-mix(in srgb,var(--ui-yellow) 90%,var(--ui-text-primary)))}
 .grd .tk-p{color:color-mix(in srgb,var(--ui-blue) 50%,var(--ui-text-primary))}
 .grd .tk-c{color:var(--ui-text-secondary);font-style:italic}
 /* Commit box under the diff. */
@@ -514,6 +542,10 @@ const css = `
 .grd .fold::before,.grd .fold::after{display:none}
 .grd .fold-inner{position:sticky;left:0;flex:none;width:100cqw;justify-content:center}
 .check-slot{display:inline-flex;align-items:center;justify-content:center;width:1rem;flex:0 0 1rem}
+/* Display menu: switch rows on Desktop's menu-item metrics (px-2 py-1, gap-2, text-xs), and the
+   check column as wide as an xs switch (w-7), so every label starts at the same x. */
+.gr-switch-row{display:flex;align-items:center;gap:8px;padding:4px 8px;font-size:12px;line-height:16px;min-height:24px}
+.gr-display .check-slot{width:28px;flex-basis:28px}
 @container(max-width:480px){.grd .body:not(.tree-hidden){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(96px,34%)}.grd .resizer{display:none}.grd .tree-side{border-top:1px solid var(--ui-stroke-tertiary)}.grd .toolbar{flex-wrap:wrap;row-gap:2px}.grd .toolbar > .scope-btn{max-width:none;flex:1 1 auto;order:1}.grd .toolbar > .toolbar-end{order:2}.grd .toolbar > .repo-name{order:3;flex:1 1 40%;min-width:96px}}
 `;
 
@@ -557,7 +589,7 @@ function withRowMenu(items, row, key) {
   ] }, key);
 }
 
-function Tree({ tree, filter, selected, onSelect, stats, repoRoot, flat = false, files = [], menuItems }) {
+function Tree({ tree, filter, selected, onSelect, stats, repoRoot, flat = false, files = [], menuItems, staged }) {
   const [open, setOpen] = useState({});
   const q = filter.trim().toLowerCase();
   const fileRow = (file, depth, hint) => {
@@ -578,7 +610,10 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot, flat = false,
       "aria-pressed": file === selected, onClick: () => onSelect(file), children: [
       jsx(Codicon, { className: cn("shrink-0", glyph.tone), name: glyph.icon, size: "0.8rem" }),
       jsx("span", { className: "fname", children: basename(file) }),
-      hint ? jsx("span", { className: "fhint", children: hint }) : null,
+      // In the list the hint is also the spacer, so root files keep the counts aligned.
+      hint != null ? jsx("span", { className: "fhint", children: hint }) : null,
+      staged && staged[file] ? jsx("span", { className: cn("tstaged", staged[file] === "partly" && "partly"),
+        title: staged[file] === "partly" ? "Partly staged" : "Staged", "aria-label": staged[file] === "partly" ? "Partly staged" : "Staged" }) : null,
       st.isNew ? jsx(Badge, { size: "xs", children: "new" }) : null,
       jsx(DeltaCounts, { added: st.added, removed: st.removed })
     ] }, file);
@@ -811,6 +846,13 @@ function highlightText(text, family) {
   return parts.map(([cls, value], i) => cls ? jsx("span", { className: cls, children: value }, i) : value);
 }
 
+// How a file's discard reads, by what it does to the file.
+const DISCARD_VERBS = {
+  new: { tip: "Delete new file", aria: "Delete", menu: "Delete new file…" },
+  deleted: { tip: "Restore deleted file", aria: "Restore", menu: "Restore deleted file…" },
+  edit: { tip: "Discard changes", aria: "Discard changes to", menu: "Discard changes…" },
+};
+
 // Every path a discard of this file must restore: a rename's old name comes back too.
 const discardPathsFor = (path, state) => (state?.orig && state.orig !== path ? [path, state.orig] : [path]);
 
@@ -831,18 +873,19 @@ function CommitBar({ ship, files, busy, generating, message, onMessage, onCommit
   const prLabel = pr?.url ? (pr.iid != null ? `Open ${pr.url.includes("gitlab") ? `MR !${pr.iid}` : `PR #${pr.iid}`}` : "Open pull request")
     : ship?.host === "gitlab" ? "Create merge request" : "Create pull request";
   return jsxs("div", { className: "commit-bar", role: "group", "aria-label": "Commit changes", children: [
-    jsxs("div", { className: "commit-field", children: [
+    files > 0 ? jsxs("div", { className: "commit-field", children: [
       SDK_TEXTAREA ? jsx(SDK_TEXTAREA, { ...field, size: "sm" }) : jsx("textarea", field),
       onGenerate && jsx(Tip, { label: generating ? "Stop generating" : "Generate commit message", children: jsx(Button, { variant: "ghost", size: "icon-sm", className: "commit-gen",
         "aria-label": generating ? "Stop generating" : "Generate commit message", disabled: !generating && (busy || !files), onClick: onGenerate,
         children: jsx(Codicon, { name: generating ? "debug-stop" : "sparkle", size: "0.85rem" }) }) }),
-    ] }),
+    ] }) : null,
     jsxs("div", { className: "commit-actions", children: [
-      jsxs("div", { className: "commit-split", children: [
+      // Nothing to commit (a clean tree with work still to ship): only push and PR.
+      files > 0 ? jsxs("div", { className: "commit-split", children: [
         jsx(Button, { size: "sm", className: "commit-main", disabled: !canCommit, onClick: () => onCommit(defaultAction), "aria-label": label,
           children: jsxs("span", { className: "commit-label", children: [jsx(Codicon, { name: busy === "commit" ? "loading" : "check", size: "0.85rem" }), label] }) }),
         jsxs(DropdownMenu, { children: [
-          jsx(DropdownMenuTrigger, { asChild: true, children: jsx(Button, { size: "sm", className: "commit-more", disabled: !!busy, "aria-label": "More commit actions",
+          jsx(DropdownMenuTrigger, { asChild: true, children: jsx(Button, { size: "sm", className: "commit-more", disabled: !canCommit, "aria-label": "More commit actions",
             children: jsx(Codicon, { name: "chevron-down", size: "0.8rem" }) }) }),
           jsxs(DropdownMenuContent, { className: "gr-menu", align: "start", children: [
             jsx(DropdownMenuItem, { disabled: !canCommit, onSelect: () => onCommit("commit"), children: "Commit" }),
@@ -852,15 +895,15 @@ function CommitBar({ ship, files, busy, generating, message, onMessage, onCommit
               children: defaultAction === "commit" ? "Make Commit & push the default" : "Make Commit the default" }),
           ] }),
         ] }),
-      ] }),
+      ] }) : null,
       ship?.ahead > 0 || (ship?.branch && !ship?.upstream && ship?.has_origin)
         ? jsx(Tip, { label: ship.upstream ? `Push ${ship.ahead} commit${ship.ahead === 1 ? "" : "s"} to ${ship.upstream}` : `Publish ${ship.branch} to origin`, children:
             jsx(Button, { variant: "ghost", size: "sm", className: "commit-push", disabled: !!busy, onClick: onPush, "aria-label": "Push",
               children: jsxs("span", { className: "commit-label", children: [jsx(Codicon, { name: busy === "push" ? "loading" : "cloud-upload", size: "0.85rem" }), ship.upstream ? `${ship.ahead}` : "Publish"] }) }) })
         : null,
-      ship?.host ? jsx(Tip, { label: prLabel, children: jsx(Button, { variant: "ghost", size: "icon-sm", disabled: !!busy, onClick: onPr, "aria-label": prLabel,
+      ship?.host && (ship.pr_ready || pr?.url) ? jsx(Tip, { label: prLabel, children: jsx(Button, { variant: "ghost", size: "icon-sm", disabled: !!busy, onClick: onPr, "aria-label": prLabel,
         children: jsx(Codicon, { name: busy === "pr" ? "loading" : "git-pull-request", size: "0.9rem" }) }) }) : null,
-      jsxs(DropdownMenu, { children: [
+      files > 0 ? jsxs(DropdownMenu, { children: [
         jsx(DropdownMenuTrigger, { asChild: true, children: jsx(Button, { variant: "ghost", size: "icon-sm", disabled: !!busy, "aria-label": "Change actions",
           children: jsx(Codicon, { name: "ellipsis", size: "0.9rem" }) }) }),
         jsxs(DropdownMenuContent, { className: "gr-menu", align: "end", children: [
@@ -870,9 +913,9 @@ function CommitBar({ ship, files, busy, generating, message, onMessage, onCommit
           jsx(DropdownMenuSeparator, {}),
           jsx(DropdownMenuItem, { onSelect: onAskAgent, children: "Ask Hermes to commit and open a PR" }),
         ] }),
-      ] }),
+      ] }) : null,
     ] }),
-    ship && !ship.repo_programs ? jsx("div", { className: "commit-note", title: "Hooks, filter drivers and signing or SSH programs named by this repository's own config do not run. Turn on run_repo_programs in the git-review settings to allow them.", children: "Repository hooks are skipped" }) : null,
+    files > 0 && ship && !ship.repo_programs ? jsx("div", { className: "commit-note", title: "Hooks, filter drivers and signing or SSH programs named by this repository's own config do not run. Turn on run_repo_programs in the git-review settings to allow them.", children: "Repository hooks are skipped" }) : null,
   ] });
 }
 
@@ -1316,12 +1359,16 @@ function GitReview({ ctx }) {
     if (ask && ask(`${request.title}\n\n${request.description}`)) request.run().catch(() => {});
   };
   const unstagePaths = (paths) => runWrite("unstage", { paths }, "unstage");
-  const askDiscard = (paths, label, isNew) => openConfirm({
-    title: paths ? (isNew ? `Delete ${label}?` : `Discard changes to ${label}?`) : "Discard all changes?",
-    description: paths
-      ? (isNew ? "This new file is not in any commit. Deleting it cannot be undone." : "The file goes back to its committed state, staged and unstaged changes included. This cannot be undone.")
-      : "Every file goes back to its committed state and new files are deleted. Ignored files are kept. This cannot be undone.",
-    confirmLabel: paths && isNew ? "Delete" : "Discard",
+  // `kind`: "new" (delete the file), "deleted" (bring it back), otherwise edits to drop.
+  const askDiscard = (paths, label, kind) => openConfirm({
+    title: !paths ? "Discard all changes?" : kind === "new" ? `Delete ${label}?` : kind === "deleted" ? `Restore ${label}?` : `Discard changes to ${label}?`,
+    description: !paths
+      ? "Every file goes back to its last commit, staged and unstaged edits alike, and new files are deleted. Ignored files are kept. This cannot be undone."
+      : kind === "new" ? "This new file is in no commit. Deleting it cannot be undone."
+      : kind === "deleted" ? "The file comes back as it was in the last commit."
+      : "Staged and unstaged edits to this file are both dropped, and it goes back to its last commit. This cannot be undone.",
+    confirmLabel: !paths ? "Discard all" : kind === "new" ? "Delete file" : kind === "deleted" ? "Restore file" : "Discard changes",
+    destructive: kind !== "deleted",
     run: async () => {
       const r = await runWrite("discard", paths ? { paths } : {}, "discard");
       if (!r) throw new Error("Discard failed");
@@ -1560,7 +1607,9 @@ function GitReview({ ctx }) {
         ...s, filePath: s.path, path: sha ? `${sha.slice(0, 8)}/${s.path}` : s.path, sha,
       }));
     });
-    return diff?.patch ? fileSections(diff.patch) : [];
+    // Same order as the file tree (folders first, then files, by name), so scrolling
+    // the diff walks the tree top to bottom; git lists new files after the rest.
+    return diff?.patch ? fileSections(diff.patch).sort((a, b) => treeOrder(a.path, b.path)) : [];
   }, [diff, scope]);
 
   // One row per branch: a local branch and its remote counterpart are the same
@@ -1592,6 +1641,21 @@ function GitReview({ ctx }) {
   // re-render the diff tree, which is the expensive part of this pane.
   const barRef = useRef(null);
   const barTimer = useRef(null);
+  // A file whose lines run past the pane fades at its right edge until scrolled to the
+  // end: the native scrollbar is hidden (it would reserve a band under every file).
+  const allFilesRef = useRef(null);
+  useEffect(() => {
+    const root = allFilesRef.current;
+    if (!root) return undefined;
+    const mark = (el) => el.toggleAttribute("data-more", el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
+    const all = () => root.querySelectorAll(".diff").forEach(mark);
+    const onScroll = (event) => { if (event.target?.classList?.contains("diff")) mark(event.target); };
+    root.addEventListener("scroll", onScroll, true);
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(all) : null;
+    observer?.observe(root);
+    all();
+    return () => { root.removeEventListener("scroll", onScroll, true); observer?.disconnect(); };
+  });
   const onDiffScroll = (event) => {
     const el = event.currentTarget;
     const bar = barRef.current;
@@ -1887,6 +1951,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     return { added, removed };
   }, [visibleFiles, stats]);
 
+  const discardKind = (file, state, isNew) => (isNew && !state?.orig ? "new" : stats.get(file)?.status === "deleted" ? "deleted" : "edit");
   // Per-file writes, offered where they apply: the worktree scopes, a writable
   // repository, and a file that is not a commit's.
   const fileActions = (s, file) => {
@@ -1903,9 +1968,11 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     if (scope !== "unstaged" && hasStaged) out.push(jsx(Tip, { label: "Unstage", children: jsx(Button, { variant: "ghost", size: "icon-sm", className: "af-act",
       "aria-label": `Unstage ${file}`, disabled: busyNow, onClick: (event) => { event.stopPropagation(); unstagePaths([file]); },
       children: jsx(Codicon, { name: "remove", size: "0.8rem" }) }) }, "unstage"));
-    out.push(jsx(Tip, { label: isNew ? "Delete new file" : "Discard changes", children: jsx(Button, { variant: "ghost", size: "icon-sm", className: "af-act",
-      "aria-label": `${isNew ? "Delete" : "Discard changes to"} ${file}`, disabled: busyNow,
-      onClick: (event) => { event.stopPropagation(); askDiscard(discardPathsFor(file, state), basename(file), isNew && !state?.orig); },
+    const kind = discardKind(file, state, isNew);
+    const verb = DISCARD_VERBS[kind];
+    out.push(jsx(Tip, { label: verb.tip, children: jsx(Button, { variant: "ghost", size: "icon-sm", className: "af-act",
+      "aria-label": `${verb.aria} ${file}`, disabled: busyNow,
+      onClick: (event) => { event.stopPropagation(); askDiscard(discardPathsFor(file, state), basename(file), kind); },
       children: jsx(Codicon, { name: "discard", size: "0.8rem" }) }) }, "discard"));
     return out;
   };
@@ -1915,9 +1982,16 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     if (scope !== "uncommitted" || !writable) return null;
     const state = fileStates[file];
     if (!state?.staged) return null;
-    return jsx("span", { className: "af-staged", title: state.unstaged ? "Part of this file's changes are staged" : "All of this file's changes are staged",
+    return jsx("span", { className: cn("af-staged", state.unstaged && "partly"), title: state.unstaged ? "Part of this file's changes are staged" : "All of this file's changes are staged",
       children: state.unstaged ? "partly staged" : "staged" });
   };
+  // Index state for the tree, in Uncommitted (the scope that mixes both sides).
+  const stagedMarks = useMemo(() => {
+    if (scope !== "uncommitted" || !writable) return null;
+    const out = {};
+    for (const [path, st] of Object.entries(fileStates)) if (st?.staged) out[path] = st.unstaged ? "partly" : "staged";
+    return out;
+  }, [scope, writable, fileStates]);
   // Right-click menu on a tree row: the same writes, plus path and file-manager actions.
   const menuItems = (file) => {
     const state = fileStates[file];
@@ -1925,9 +1999,6 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     if (canWrite) {
       if (scope !== "staged" && (!state || state.untracked || state.unstaged)) items.push({ label: "Stage", run: () => stagePaths([file]) });
       if (scope !== "unstaged" && state?.staged) items.push({ label: "Unstage", run: () => unstagePaths([file]) });
-      const isNew = !!state?.untracked || stats.get(file)?.status === "added";
-      items.push({ label: isNew ? "Delete new file…" : "Discard changes…", destructive: true,
-        run: () => askDiscard(discardPathsFor(file, state), basename(file), isNew && !state?.orig) });
       items.push(null);
     }
     items.push({ label: "Copy path", run: () => copyPath(file) });
@@ -1936,6 +2007,14 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
         const abs = `${chosen.replace(/\/$/, "")}/${file}`;
         Promise.resolve(ctx.os.revealPath(abs)).then((ok) => { if (!ok) host.notify({ kind: "info", message: abs }); });
       } });
+    }
+    // The destructive action last, in its own group, away from the common Stage.
+    if (canWrite) {
+      const isNew = !!state?.untracked || stats.get(file)?.status === "added";
+      const kind = discardKind(file, state, isNew);
+      items.push(null);
+      items.push({ label: DISCARD_VERBS[kind].menu, destructive: kind !== "deleted",
+        run: () => askDiscard(discardPathsFor(file, state), basename(file), kind) });
     }
     return items;
   };
@@ -2059,20 +2138,20 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
         jsx(DropdownMenuTrigger, { asChild: true, children:
           jsx(Button, { variant: "ghost", size: "icon-sm", "aria-label": "Display options", children: jsx(Codicon, { name: "ellipsis", size: "0.9rem" }) })
         }),
-        jsxs(DropdownMenuContent, { className: "gr-menu", children: [
-          jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", fontSize: 12 }, children: [
+        jsxs(DropdownMenuContent, { className: "gr-menu gr-display", children: [
+          jsxs("div", { className: "gr-switch-row", children: [
             jsx(Switch, { size: "xs", checked: ignoreWs, onCheckedChange: (v) => { setIgnoreWs(v); persist({ ignoreWs: v }); }, "aria-label": "Ignore whitespace" }),
             "Ignore whitespace"
           ] }),
-          jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", fontSize: 12 }, title: layout === "split" ? "Always on in split layout" : undefined, children: [
+          jsxs("div", { className: "gr-switch-row", title: layout === "split" ? "Always on in split layout" : undefined, children: [
             jsx(Switch, { size: "xs", checked: wordWrap || layout === "split", disabled: layout === "split", onCheckedChange: (v) => { if (layout !== "split") { setWordWrap(v); persist({ wordWrap: v }); } }, "aria-label": "Word wrap" }),
             "Word wrap"
           ] }),
-          jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", fontSize: 12 }, children: [
+          jsxs("div", { className: "gr-switch-row", children: [
             jsx(Switch, { size: "xs", checked: syntax, onCheckedChange: (v) => { setSyntax(v); persist({ syntax: v }); }, "aria-label": "Syntax colours" }),
             "Syntax colours"
           ] }),
-          jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", fontSize: 12 }, title: "New files that are not staged yet, in Uncommitted and Unstaged", children: [
+          jsxs("div", { className: "gr-switch-row", title: "New files that are not staged yet, in Uncommitted and Unstaged", children: [
             jsx(Switch, { size: "xs", checked: showUntracked, onCheckedChange: (v) => { setShowUntracked(v); persist({ untracked: v }); }, "aria-label": "Show new files" }),
             "Show new files"
           ] }),
@@ -2141,7 +2220,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
           ? jsx(EmptyState, { title: (EMPTY_SCOPE[scope] || ["No changes in this scope"])[0], description: (EMPTY_SCOPE[scope] || [null, "Try a different scope or worktree."])[1] })
           : jsxs("div", { className: cn("body", !visible.files && "tree-hidden"), style: visible.files && filesWidth ? { "--files-w": `${filesWidth}px` } : undefined, children: [
             // MAIN: every changed file's diff stacked (Cursor Changes), scroll to the last one.
-            jsxs("div", { className: "allfiles", onScroll: onDiffScroll, children: [
+            jsxs("div", { ref: allFilesRef, className: "allfiles", onScroll: onDiffScroll, children: [
               jsx("div", { ref: barRef, className: "ov-bar", "aria-hidden": true }),
               !visibleFiles.length && jsx(EmptyState, { title: q ? `No files match “${filter.trim()}”` : "All files are hidden by filters", description: sections.length ? "Clear the search or adjust the filters." : "" }),
               visibleFiles.map((s) => {
@@ -2315,11 +2394,14 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
                       jsx(Codicon, { name: collapsed ? "chevron-right" : "chevron-down", size: "0.8rem" }),
                       jsx(Codicon, { className: "ftype", name: codiconForPath(file), size: "0.8rem" }),
                       jsx("span", { className: "fname", children: basename(s.path) }),
-                      jsx("span", { className: "fdir", children: s.path }),
+                      // The folder only: the name is already shown, and a root file has none.
+                      jsx("span", { className: "fdir", children: s.path.includes("/") ? s.path.slice(0, s.path.lastIndexOf("/")) : "" }),
                     ] }),
                   indexBadge(file),
                   jsx(DeltaCounts, { added: stats.get(s.path)?.added, removed: stats.get(s.path)?.removed }),
-                  ...fileActions(s, file),
+                  // A fixed-width slot, right-aligned: counts stay in one column whether a
+                  // file offers one, two or three actions.
+                  canWrite && !s.sha ? jsx("span", { className: "af-acts", children: fileActions(s, file) }) : null,
                   jsx(Button, { variant: "ghost", size: "icon-sm", className: "af-copy", title: "Copy path", "aria-label": `Copy path for ${s.path}`,
                     onClick: () => copyPath(s.path), children: jsx(Codicon, { name: copied === s.path ? "check" : "copy", size: "0.8rem" }) }),
                 ] }),
@@ -2360,19 +2442,21 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
       })
               ] }),
               jsx(Tree, { tree, filter, selected: active?.path, onSelect: scrollToSelection, stats, repoRoot: chosen,
-                flat: flatList, files: visibleFiles.map((s) => s.path), menuItems: scope === "commits" ? null : menuItems })
+                flat: flatList, files: visibleFiles.map((s) => s.path), menuItems: scope === "commits" ? null : menuItems, staged: stagedMarks })
             ] }) : null
           ] }),
     // Commit box under the review, in the scopes a commit is made from. It also stays
     // for a clean tree with commits still to push.
-    canWrite && (sections.length > 0 || ship?.ahead > 0) ? jsx(CommitBar, {
+    // Shown with changes to commit, and also on a clean tree while there is still
+    // something to ship: commits to push, an unpublished branch, a pull request to open.
+    canWrite && (sections.length > 0 || ship?.ahead > 0 || (ship?.pr_ready && ship?.host) || pr?.url) ? jsx(CommitBar, {
       ship, files: sections.length, busy: writeBusy, generating, message: commitMessage, onMessage: setCommitMessage,
       onCommit: commitNow, onGenerate: canGenerate ? generateMessage : null, onPush: pushNow, onPr: openOrCreatePr, pr,
       onStageAll: () => stagePaths(null), onUnstageAll: () => unstagePaths(null), onDiscardAll: () => askDiscard(null),
       onAskAgent: askAgentToShip, defaultAction: commitDefault, onDefaultAction: setDefaultAction,
     }) : null,
     confirm && SDK_CONFIRM ? jsx(SDK_CONFIRM, { open: true, onClose: () => setConfirm(null), onConfirm: confirm.run, title: confirm.title,
-      description: confirm.description, confirmLabel: confirm.confirmLabel, destructive: true, dismissOnConfirm: true }) : null,
+      description: confirm.description, confirmLabel: confirm.confirmLabel, destructive: confirm.destructive !== false, dismissOnConfirm: true }) : null,
   ] });
 }
 
@@ -2645,5 +2729,5 @@ const plugin_default = {
 const scrollTopFor = ({ elementTop, scrollerTop, scrollTop, sticky = 0 }) =>
   Math.max(0, elementTop - scrollerTop + scrollTop - sticky);
 
-export { tokenizeLine, syntaxFamily, codiconForPath, discardPathsFor, errorText };
+export { tokenizeLine, syntaxFamily, codiconForPath, discardPathsFor, errorText, treeOrder };
 export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, resolveIdentity, shouldFollowWorkspace, filesToOpen, scrollTopFor, plugin_default as default };

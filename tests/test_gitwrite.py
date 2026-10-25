@@ -250,6 +250,33 @@ class WriteTests(unittest.TestCase):
         self.assertEqual(self.post('push').status_code, 200)
         self.assertEqual(self.git('rev-parse', 'main', repo=remote), self.git('rev-parse', 'HEAD'))
 
+    def test_ship_says_when_a_pull_request_can_be_opened(self):
+        ship = lambda: self.client.get('/api/plugins/git-review/ship', params={'repo': str(self.repo)}).json()
+        self.assertFalse(ship()['pr_ready'], 'on main itself')
+        self.git('checkout', '-q', '-b', 'feature')
+        self.assertFalse(ship()['pr_ready'], 'a new branch with no commits of its own')
+        (self.repo / 'a.txt').write_text('two\n', newline='\n')
+        self.git('commit', '-qam', 'feat: two')
+        self.assertTrue(ship()['pr_ready'])
+
+    def test_branch_tracking_another_name_publishes_under_its_own(self):
+        # `git checkout -b feature origin/main`: the upstream is main. A push must never
+        # land on main, whatever push.default says.
+        origin = self.bare_remote()
+        self.git('push', '-q', '-u', 'origin', 'main')
+        self.git('checkout', '-q', '-b', 'feature', '--track', 'origin/main')
+        self.git('config', 'push.default', 'upstream')
+        (self.repo / 'a.txt').write_text('feature\n', newline='\n')
+        self.git('commit', '-qam', 'feat: x')
+        main_before = self.git('rev-parse', 'origin/main').strip()
+        ship = self.client.get('/api/plugins/git-review/ship', params={'repo': str(self.repo)}).json()
+        self.assertEqual(ship['upstream'], '', 'tracking another name is not published')
+        r = self.client.post('/api/plugins/git-review/push', json={'repo': str(self.repo)})
+        self.assertEqual(r.status_code, 200, r.text)
+        remote = subprocess.run(['git', 'ls-remote', str(origin)], capture_output=True, text=True).stdout
+        self.assertIn('refs/heads/feature', remote)
+        self.assertIn(f'{main_before}\trefs/heads/main', remote, 'main untouched')
+
     def test_push_refuses_detached_head(self):
         self.bare_remote()
         self.git('checkout', '-q', '--detach')
