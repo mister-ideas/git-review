@@ -68,3 +68,4 @@ Add a failing regression test first, then implement. Cover the boundary you touc
 The maintainer decides what lands and aims to answer every issue at least once, even when the answer is no. Sustained contributors may be invited to review. Security reports are handled privately first, and disclosed in the release notes once a fix ships.
 
 License for contributions: MIT (see [LICENSE](LICENSE)).
+
