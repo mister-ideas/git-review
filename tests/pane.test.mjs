@@ -21,7 +21,7 @@ const stubComposer = (original, inserted) => ({
   },
   insertText: (sessionId, value) => { if (sessionId !== null) throw new Error('cite must target the focused composer (null)'); inserted.push(value) },
 })
-import { GitReview, filesToOpen, collapseRows, scrollTopFor, settingsKeyFor, resolveIdentity, shouldFollowWorkspace } from '../desktop/plugin.js'
+import { GitReview, filesToOpen, collapseRows, scrollTopFor, settingsKeyFor, resolveIdentity, shouldFollowWorkspace, nextFilePath } from '../desktop/plugin.js'
 
 // Mutable real host-atom values; explicit rerenders mirror SDK subscriptions.
 async function withHost(t, values = {}) {
@@ -588,6 +588,16 @@ test('the focused workspace is only followed before the reviewer chooses', () =>
   assert.equal(shouldFollowWorkspace({ cwd: '/w', saved: '/repo', picked: false }), false, 'a saved repository wins')
   assert.equal(shouldFollowWorkspace({ cwd: '/w', saved: '', picked: true }), false, 'a deliberate pick wins')
   assert.equal(shouldFollowWorkspace({ cwd: '', saved: '', picked: false }), false, 'no focused workspace')
+})
+
+test('review next picks the nearest collapsed file, wrapping, then any other file', () => {
+  const files = ['a.js', 'b.js', 'c.js', 'd.js'].map((p) => ({ path: p }))
+  assert.equal(nextFilePath(files, { 'c.js': true }, 'a.js'), 'c.js', 'nearest collapsed after the current file')
+  assert.equal(nextFilePath(files, { 'c.js': true }, 'c.js'), 'd.js', 'never itself: wraps past it')
+  assert.equal(nextFilePath(files, { 'b.js': true }, 'd.js'), 'b.js', 'wraps to the start')
+  assert.equal(nextFilePath(files, {}, 'a.js'), 'b.js', 'nothing collapsed: the next file')
+  assert.equal(nextFilePath(files, {}, 'd.js'), 'a.js', 'nothing collapsed: wraps')
+  assert.equal(nextFilePath([], {}, 'a.js'), null, 'no files')
 })
 
 test('a partial identity is not a different backend', () => {

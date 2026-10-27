@@ -305,7 +305,7 @@ const css = `
 .grd .resizer::after{content:"";position:absolute;left:1px;top:0;bottom:0;width:2px;background:transparent}
 .grd .resizer:hover::after,.grd .resizer:focus-visible::after,.grd .resizer:active::after{background:var(--ui-sash-hover-border,var(--ui-accent))}
 .grd .body.tree-hidden{grid-template-columns:minmax(0,1fr)}
-.grd .allfiles{overflow:auto;position:relative;scrollbar-width:none;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0}
+.grd .allfiles{overflow:auto;position:relative;scrollbar-width:none;min-width:0;min-height:0;padding:0;border-right:1px solid var(--ui-stroke-tertiary);margin:0;overflow-anchor:none}
 .grd .tree-side{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0;border-left:0;background:transparent}
 .grd .body{column-gap:0}
 .grd .tree-side .tree{overflow:auto;flex:1;min-height:0}
@@ -1344,20 +1344,40 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     // The destination is the next file the reviewer COLLAPSED - a collapsed file is
     // the one still waiting for review - not simply the next row. With nothing
     // collapsed the button still advances, so it never goes dead.
-    const at = visibleFiles.findIndex((s) => s.path === active.path);
-    const after = [...visibleFiles.slice(at + 1), ...visibleFiles.slice(0, Math.max(0, at + 1))];
-    const next = after.find((s) => collapsedFiles[s.path]) || after.find((s) => s.path !== active.path);
+    const from = fileAtScrollTop() || active.path;
+    const next = nextFilePath(visibleFiles, collapsedFiles, from);
     // Stepping through files is navigation, not a layout edit: the target keeps its
     // collapsed state and its header is the destination.
-    if (next) scrollToSelection(next.path, { reveal: false });
+    if (next) scrollToSelection(next, { reveal: false });
   };
 
   // Clicking a file in the tree scrolls the stacked diff to that file's section.
   // `reveal` is for the tree, where clicking a file means "show me this one". The
   // toolbar's step-through does not pass it, so collapse state survives.
-  const scrollToSelection = (path, { reveal = true } = {}) => {
-    setSelected(path);
-    if (reveal) setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
+  // Collapsing a file pulls everything below it up. If the reviewer is looking at that
+  // file, land on the first line of the NEXT file instead of somewhere in its middle.
+  const toggleFileCollapsed = (file) => {
+    const closing = !collapsedFiles[file.path];
+    setCollapsedFiles((c) => ({ ...c, [file.path]: !c[file.path] }));
+    if (!closing || typeof document === "undefined") return;
+    const scroller = document.querySelector(".grd .allfiles");
+    const section = scroller?.querySelector(`.af-file[data-path="${CSS.escape(file.path)}"]`);
+    if (!scroller || !section) return;
+    const box = scroller.getBoundingClientRect();
+    const rect = section.getBoundingClientRect();
+    if (rect.top > box.bottom || rect.bottom < box.top) return; // collapsing off-screen
+    const at = visibleFiles.findIndex((s) => s.path === file.path);
+    const next = visibleFiles[at + 1];
+    const destination = next ? next.path : file.path;
+    // The section heights change with the collapse; the first pass runs before React
+    // has committed, so repeat it once the layout has settled.
+    scrollToPath(destination);
+    window.setTimeout(() => scrollToPath(destination), 140);
+  };
+
+  // Scroll the diff column so a file's section starts at the top. Used by the tree,
+  // by "Review next file" and by collapsing a file.
+  const scrollToPath = (path) => {
     requestAnimationFrame(() => {
       const scroller = document.querySelector(".grd .allfiles");
       const section = scroller?.querySelector(`.af-file[data-path="${CSS.escape(path)}"]`);
@@ -1376,6 +1396,27 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
       scroller.style.paddingBottom = `${Math.max(0, Math.ceil(top - max))}px`;
       scroller.scrollTo({ top, behavior: "smooth" });
     });
+  };
+
+  // The file occupying the top of the diff column. "Review next file" starts here, so
+  // it works after a scroll as well as after a click in the tree.
+  const fileAtScrollTop = () => {
+    if (typeof document === "undefined") return "";
+    const scroller = document.querySelector(".grd .allfiles");
+    if (!scroller) return "";
+    const y = scroller.scrollTop + 1;
+    let at = "";
+    for (const el of scroller.querySelectorAll(".af-file[data-path]")) {
+      if (el.offsetTop <= y) at = el.getAttribute("data-path") || at;
+      else break;
+    }
+    return at;
+  };
+
+  const scrollToSelection = (path, { reveal = true } = {}) => {
+    setSelected(path);
+    if (reveal) setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
+    scrollToPath(path);
   };
   const scopeLabel = scope === "commits" ? (picked.size ? `Commits (${picked.size})` : "Commits")
     : scope === "agent_turn" ? "Last agent turn"
@@ -1736,7 +1777,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
                 jsxs("div", { className: "af-head", children: [
                   jsxs("button", { type: "button", className: "file-toggle", "aria-expanded": !collapsed,
                     "aria-label": `${collapsed ? "Expand" : "Collapse"} diff for ${s.path}`,
-                    onClick: () => setCollapsedFiles((c) => ({ ...c, [s.path]: !c[s.path] })), children: [
+                    onClick: () => toggleFileCollapsed(s), children: [
                       jsx(Codicon, { name: collapsed ? "chevron-right" : "chevron-down", size: "0.8rem" }),
                       jsx("span", { className: "fname", children: basename(s.path) }),
                       jsx("span", { className: "fdir", children: s.path }),
@@ -2050,4 +2091,16 @@ const plugin_default = {
 const scrollTopFor = ({ elementTop, scrollerTop, scrollTop, sticky = 0 }) =>
   Math.max(0, elementTop - scrollerTop + scrollTop - sticky);
 
-export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, resolveIdentity, shouldFollowWorkspace, filesToOpen, scrollTopFor, plugin_default as default };
+// The file "Review next file" should open: the nearest COLLAPSED file after `from`
+// (wrapping to the start), or the next file when nothing is collapsed. Pure so the
+// rule is testable without layout.
+const nextFilePath = (files, collapsed, from) => {
+  if (!files || !files.length) return null;
+  const at = files.findIndex((f) => f.path === from);
+  const order = at < 0 ? files.slice() : [...files.slice(at + 1), ...files.slice(0, at + 1)];
+  const waiting = order.find((f) => f.path !== from && collapsed && collapsed[f.path]);
+  const anyOther = order.find((f) => f.path !== from);
+  return (waiting || anyOther || files[0]).path;
+};
+
+export { CommitsSubmenu, GitReview, recordTurnBase, diffRows, collapseRows, settingsKeyFor, resolveIdentity, shouldFollowWorkspace, nextFilePath, filesToOpen, scrollTopFor, plugin_default as default };

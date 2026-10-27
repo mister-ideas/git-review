@@ -2,6 +2,25 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.1.25 — 2026-10-23
+
+### Fixed
+- **Review next file starts from what is on screen.** It used the selected file, which a
+  manual scroll never changes, so on an expanded file it could jump backwards or not
+  move at all. It now takes the file at the top of the diff column and goes to the
+  nearest *collapsed* file after it (wrapping), or the next file when nothing is
+  collapsed. Rule pinned by `nextFilePath` tests.
+- **Collapsing the file you are reading lands on the first line of the next one.** The
+  scroll offset was left untouched, so the viewport stayed at its old position - now
+  part-way into the next file. Collapsing a file that is on screen scrolls its
+  successor's header to the top (and repeats once the layout has settled), with
+  `overflow-anchor: none` so the browser does not fight it.
+
+### Verified
+Real Chromium, 300 px viewport so the column can scroll: reading `main.ts` and
+collapsing it lands on `other.ts` at scrollTop 45 (its exact offset) for start
+positions 0, 60 and 140; the previous build kept the stale offset (60).
+
 ## 0.1.24 — 2026-10-23
 
 ### Fixed
