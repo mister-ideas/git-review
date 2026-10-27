@@ -1919,7 +1919,7 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
   // `reveal` is for the tree, where clicking a file means "show me this one". The
   // toolbar's step-through does not pass it, so collapse state survives.
   // Scroll the diff column so a file's section starts at the top.
-  const scrollToPath = (path) => {
+  const scrollToPath = (path, { smooth = true } = {}) => {
     requestAnimationFrame(() => {
       const scroller = document.querySelector(".grd .allfiles");
       const section = scroller?.querySelector(`.af-file[data-path="${CSS.escape(path)}"]`);
@@ -1936,7 +1936,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
       const tail = parseFloat(scroller.style.paddingBottom) || 0;
       const max = scroller.scrollHeight - tail - scroller.clientHeight;
       scroller.style.paddingBottom = `${Math.max(0, Math.ceil(top - max))}px`;
-      scroller.scrollTo({ top, behavior: "smooth" });
+      // Collapsing re-lays out the column; jumping there instantly is the point -
+      // an animated scroll on top of a layout change reads as a glitch.
+      scroller.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
     });
   };
 
@@ -1972,8 +1974,8 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     const destination = next ? next.path : file.path;
     // Heights change with the collapse and the first pass runs before React commits;
     // repeat once the layout has settled.
-    scrollToPath(destination);
-    window.setTimeout(() => scrollToPath(destination), 140);
+    scrollToPath(destination, { smooth: false });
+    window.setTimeout(() => scrollToPath(destination, { smooth: false }), 140);
   };
 
   const scrollToSelection = (path, { reveal = true } = {}) => {

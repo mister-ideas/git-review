@@ -2,6 +2,20 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.2.2 — 2026-10-27
+
+### Fixed
+- **Collapsing does not animate a scroll.** 0.2.1 repositioned the column with the
+  smooth behaviour, so collapsing the file you were reading looked like the pane
+  scrolling itself to the top of the next file. The reposition now happens instantly;
+  only explicit navigation (tree click, Review next file) is animated.
+- Collapsing a file that is not on screen moves nothing, unchanged and now covered.
+
+### Verified
+Real Chromium, 300 px viewport: collapsing `main.ts` while reading it puts scrollTop at
+45 - `other.ts`'s exact offset - and it is already 45 60 ms later, so nothing animates.
+Collapsing `deleted.ts` from a viewport showing the first file leaves scrollTop at 0.
+
 ## 0.2.1 — 2026-10-23
 
 ### Fixed
