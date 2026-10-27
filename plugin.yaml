@@ -1,5 +1,5 @@
 name: git-review
-version: 0.2.0
+version: 0.2.1
 description: Git review pane for Hermes Desktop - every changed file in one scroll, with stage, discard, commit, push and pull requests.
 author: mister-ideas
 license: MIT
