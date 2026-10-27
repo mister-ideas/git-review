@@ -1,6 +1,6 @@
 {
   "name": "git-review",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Git review pane plugin for Hermes Desktop (development repository)",
