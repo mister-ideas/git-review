@@ -590,6 +590,18 @@ test('the focused workspace is only followed before the reviewer chooses', () =>
   assert.equal(shouldFollowWorkspace({ cwd: '', saved: '', picked: false }), false, 'no focused workspace')
 })
 
+test('the pane styles itself only with host theme tokens', () => {
+  // Every colour must come from the app's theme, so a user's light or dark theme (and a
+  // custom installed theme) paints the pane without overrides. A literal would freeze
+  // one theme's value into the other.
+  const src = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8')
+  const cssStart = src.indexOf('const CSS = `')
+  const css = cssStart === -1 ? src : src.slice(cssStart, src.indexOf('`;', cssStart))
+  const literals = css.match(/#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/g) || []
+  assert.deepEqual(literals, [], 'colour literals in the stylesheet: ' + literals.join(', '))
+  assert.ok(css.includes('var(--ui-'), 'the stylesheet reads host tokens')
+})
+
 test('review next picks the nearest collapsed file, wrapping, then any other file', () => {
   const files = ['a.js', 'b.js', 'c.js', 'd.js'].map((p) => ({ path: p }))
   assert.equal(nextFilePath(files, { 'c.js': true }, 'a.js'), 'c.js', 'nearest collapsed after the current file')
