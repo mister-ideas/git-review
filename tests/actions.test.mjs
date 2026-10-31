@@ -227,6 +227,48 @@ test('the plugin registers a rebindable shortcut, a palette row that shows it, a
   assert.equal(typeof regs.find(r => r.area === 'statusBar.right').render, 'function')
 })
 
+// #41: on a Desktop whose SDK can fold a plugin pane, the shortcut is a toggle (pressed
+// while the pane is on screen it puts the pane away, pressed again it comes back), and
+// the palette row is the same action. An older Desktop keeps the reveal-only shortcut.
+function registrations(sdk) {
+  const { host } = sdk
+  const regs = []
+  plugin.register({ register: (r) => regs.push(r), storage: { get: (k, f) => f, set() {} }, rest: async () => ({}) })
+  return { keybind: regs.find(r => r.area === 'keybinds').data, palette: regs.find(r => r.area === 'palette').data, host }
+}
+
+test('the shortcut and the palette row toggle the pane where the Desktop can fold it', async t => {
+  const sdk = await import('@hermes/plugin-sdk')
+  const calls = []
+  sdk.host.togglePane = (id) => calls.push(['toggle', id])
+  const reveal = sdk.host.revealPane
+  sdk.host.revealPane = (id) => calls.push(['reveal', id])
+  t.after(() => { delete sdk.host.togglePane; sdk.host.revealPane = reveal })
+  const { keybind, palette } = registrations(sdk)
+  keybind.run()
+  palette.run()
+  assert.deepEqual(calls, [['toggle', 'git-review:pane'], ['toggle', 'git-review:pane']])
+  assert.equal(keybind.label, 'Toggle git review')
+  assert.equal(palette.label, keybind.label)
+  // Same action id as before, so a shortcut the user rebound keeps working.
+  assert.equal(keybind.id, 'git-review.open')
+  assert.deepEqual(keybind.defaults, ['mod+alt+g'])
+})
+
+test('an older Desktop without a fold keeps the reveal-only shortcut', async t => {
+  const sdk = await import('@hermes/plugin-sdk')
+  const calls = []
+  const reveal = sdk.host.revealPane
+  sdk.host.revealPane = (id) => calls.push(['reveal', id])
+  t.after(() => { sdk.host.revealPane = reveal })
+  assert.equal(typeof sdk.host.togglePane, 'undefined')
+  const { keybind, palette } = registrations(sdk)
+  keybind.run()
+  palette.run()
+  assert.deepEqual(calls, [['reveal', 'git-review:pane'], ['reveal', 'git-review:pane']])
+  assert.equal(keybind.label, 'Open git review')
+})
+
 test('files are reviewed in the file tree\'s order: folders first, new files in place', async t => {
   const { treeOrder } = await import('../desktop/plugin.js')
   const git = ['README.md', 'src/z.ts', 'src/a/b.ts', 'src/new.ts', 'a.md']

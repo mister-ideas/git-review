@@ -38,7 +38,7 @@ Then:
 
 1. Enable **git-review** under **Capabilities → Plugins**, or run `hermes plugins enable git-review`. Desktop copies the pane from the package into `$HERMES_HOME/desktop-plugins/git-review/` and loads it.
 2. Restart the backend, or quit and reopen Desktop, so the plugin's routes mount.
-3. Open the pane from the command palette (**Open git review**), with <kbd>⌘⌥G</kbd> / <kbd>Ctrl+Alt+G</kbd> (rebindable under keyboard shortcuts), from the changed-files count in the status bar, or by toggling **Git review** in the right dock.
+3. Open the pane from the command palette (**Toggle git review**), with <kbd>⌘⌥G</kbd> / <kbd>Ctrl+Alt+G</kbd> (rebindable under keyboard shortcuts), from the changed-files count in the status bar, or by toggling **Git review** in the right dock. Pressed again while the pane is on screen, the shortcut minimizes it and keeps its place and settings. This needs a Hermes Desktop with `host.togglePane` ([NousResearch/hermes-agent#147157](https://github.com/NousResearch/hermes-agent/pull/147157)). On an older Desktop the shortcut only opens the pane, and the palette row reads **Open git review**.
 
 Cloned it yourself? `hermes plugins adopt git-review` makes the directory a tracked install, so `check-updates` and `update` work on it.
 
@@ -197,7 +197,7 @@ Hermes Desktop ships its own **Review** pane. The two answer different reading s
 | Syntax colours | Built-in tokenizer with theme hues | Shiki |
 | Read-only switch | `read_only` setting | — |
 | Changed-files count | Status bar, any workspace | — |
-| Shortcut | <kbd>⌘⌥G</kbd>, rebindable | <kbd>⌘G</kbd> |
+| Shortcut | <kbd>⌘⌥G</kbd> toggles, rebindable | <kbd>⌘G</kbd> toggles |
 | Change list in the chat | — | "N files changed" card under the agent's turn |
 
 Native still has two things git-review does not: Shiki's grammar-exact highlighting, and the card under an agent's turn. Neither is reachable from a plugin today: Desktop's plugin SDK does not export its highlighter, and has no slot under a turn.

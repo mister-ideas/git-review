@@ -2,6 +2,17 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## Unreleased
+
+### Changed
+- **⌘⌥G / Ctrl+Alt+G toggles the pane** ([#41](https://github.com/mister-ideas/git-review/issues/41)).
+  Pressed while the pane is on screen, it minimizes the pane, which keeps its place and
+  settings. Pressed again, the pane comes back. The palette row is the same action and
+  reads **Toggle git review**. The action id stays `git-review.open`, so a shortcut
+  you rebound keeps working. This needs `host.togglePane` in Hermes Desktop
+  ([NousResearch/hermes-agent#147157](https://github.com/NousResearch/hermes-agent/pull/147157)).
+  An older Desktop keeps the open-only shortcut and the **Open git review** label.
+
 ## 0.2.2 — 2026-10-27
 
 ### Fixed

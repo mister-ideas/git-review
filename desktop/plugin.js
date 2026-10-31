@@ -2753,12 +2753,18 @@ const plugin_default = {
   name: "git-review",
   defaultEnabled: true,
   register(ctx) {
-    const reveal = () => host.revealPane("git-review:pane");
+    // A Desktop that can fold a plugin pane gets a toggle, like ⌘G for Review: on
+    // screen it puts the pane away (its place and settings kept), otherwise it brings
+    // it back. An older Desktop keeps the reveal-only shortcut.
+    const canToggle = typeof host.togglePane === "function";
+    const run = canToggle ? () => host.togglePane("git-review:pane") : () => host.revealPane("git-review:pane");
+    const label = canToggle ? "Toggle git review" : "Open git review";
     ctx.register({ id: "pane", area: "panes", title: "Git review", data: { placement: "right", dock: { pane: "workspace", pos: "right" }, width: "720px" }, render: () => jsx(GitReview, { ctx }) });
     // One action id wired to a rebindable shortcut and the palette row that shows it.
     // ⌘⌥G / Ctrl+Alt+G: ⌘G and ⌘⇧G are Desktop's own; ⌘⌥<letter> is the plugin space.
-    ctx.register({ id: "toggle", area: KEYBINDS, data: { id: "git-review.open", category: "view", defaults: ["mod+alt+g"], label: "Open git review", run: reveal } });
-    ctx.register({ id: "open", area: "palette", data: { id: "git-review.open", action: "git-review.open", label: "Open git review", keywords: ["git", "diff", "worktree", "review", "commit", "stage"], run: reveal } });
+    // The id stays `git-review.open` so a shortcut the user rebound keeps working.
+    ctx.register({ id: "toggle", area: KEYBINDS, data: { id: "git-review.open", category: "view", defaults: ["mod+alt+g"], label, run } });
+    ctx.register({ id: "open", area: "palette", data: { id: "git-review.open", action: "git-review.open", label, keywords: ["git", "diff", "worktree", "review", "commit", "stage", "toggle", "hide"], run } });
     ctx.register({ id: "changes", area: STATUSBAR_RIGHT, order: 79, render: () => jsx(ChangesChip, { ctx }) });
     watchTurns(ctx);
   }
