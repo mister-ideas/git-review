@@ -636,3 +636,11 @@ test('pane settings are scoped to profile and connection, never to the workspace
   assert.equal(A, `display.v1:${JSON.stringify(['conn', 'default'])}`, 'the key carries profile and connection only')
   assert.ok(A.startsWith('display.v1:'), 'the key stays versioned so a future shape can migrate')
 })
+
+
+test('the base control reads as a comparison, not as the checked-out branch', async (t) => {
+  const { root } = await mount(t)
+  const base = root.findAll(n => typeof n.props.title === 'string' && n.props.title.startsWith('Compare against '))
+  assert.ok(base.length >= 1, 'base control carries a "Compare against …" title')
+  assert.ok(base.some(n => n.findAll(c => c.props && c.props.name === 'git-compare').length), 'base control uses the compare icon')
+})

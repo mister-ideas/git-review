@@ -557,8 +557,8 @@ function CheckSlot({ on, size }) {
 // Repo/branch triggers share all available toolbar space via pure flex
 // (flex:1 1 0): equal widths when both labels are long, spare flows to the
 // short one, no JS measurement.
-const RepoButton = forwardRef(function RepoButton({ icon, label, ...props }, ref) {
-  return jsx(Button, { ...props, ref, variant: "ghost", size: "sm", className: cn("repo-name", props.className), title: label, children:
+const RepoButton = forwardRef(function RepoButton({ icon, label, title, ...props }, ref) {
+  return jsx(Button, { ...props, ref, variant: "ghost", size: "sm", className: cn("repo-name", props.className), title: title || label, "aria-label": title || label, children:
     jsxs("span", { className: "repo-label", children: [
       jsx(Codicon, { name: icon, size: "0.85rem" }),
       jsx("span", { className: "repo-text", children: label }),
@@ -2151,7 +2151,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
         jsx(DropdownMenuTrigger, { asChild: true, children:
           // The base, named plainly — Cursor says "against main" only inside a
           // sentence, never on the control.
-          jsx(RepoButton, { icon: "git-branch", label: shortLabel(shownBase || "main") })
+          // A compare icon and a tooltip: with a branch icon the base read as the
+          // checked-out branch (seen in QA next to a feature branch).
+          jsx(RepoButton, { icon: "git-compare", label: shortLabel(shownBase || "main"), title: `Compare against ${shortLabel(shownBase || "main")}` })
         }),
         jsx(DropdownMenuContent, { className: "gr-menu", children: [
           // The label sits OUTSIDE the scrolling list. Inside it, the list's own
