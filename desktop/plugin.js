@@ -955,7 +955,8 @@ const TURN_BASE_CAP = 8;
 
 function recordTurnBase(storage, cwd, snapshot) {
   const prev = storage.get(TURN_BASE_KEY, {});
-  if (prev[cwd]?.base === snapshot.base && JSON.stringify(prev[cwd]?.untracked) === JSON.stringify(snapshot.untracked)) return;
+  if (prev[cwd]?.base === snapshot.base && (prev[cwd]?.snapshot ?? null) === (snapshot.snapshot ?? null)
+    && JSON.stringify(prev[cwd]?.untracked) === JSON.stringify(snapshot.untracked)) return;
   const rest = Object.entries(prev).filter(([key]) => key !== cwd);
   while (rest.length >= TURN_BASE_CAP) rest.shift();
   rest.push([cwd, { ...snapshot, at: Date.now() }]);
@@ -972,13 +973,22 @@ function captureTurnBase(ctx, cwd) {
   ctx.rest("/turn-base", { method: "POST", body: { repo: cwd }, timeoutMs: 15000 })
     .then((r) => {
       if (!r) return;
-      recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [] });
+      recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [], snapshot: r.snapshot ?? null });
       for (const listener of turnBaseListeners) listener();
     })
     .catch(() => {});
 }
+// What starts a turn: a send. awaitingResponse rises on a send only; busy can also
+// come back on after a turn ends (Desktop's session resync), and a baseline taken
+// then would count the agent's new files as pre-existing. Hosts without the flag
+// fall back to busy.
+function turnStartAtom() {
+  const s = host.state || {};
+  const a = s.awaitingResponse;
+  return a && typeof a.get === "function" ? a : s.busy;
+}
 function watchTurns(ctx) {
-  const busy = host.state && host.state.busy;
+  const busy = turnStartAtom();
   const cwd = host.state && host.state.cwd;
   if (!busy || typeof busy.subscribe !== "function" || !cwd || typeof cwd.get !== "function") return;
   let prev = !!busy.get();
@@ -1490,7 +1500,7 @@ function GitReview({ ctx }) {
   // Last-agent-turn: capture a Hermes-native turn baseline. Watch the focused
   // session's busy flag; a false→true rising edge means a new agent turn began —
   // snapshot HEAD + untracked for that repo (read-only POST /turn-base).
-  const busyNow = useValue(host.state.busy || EMPTY_ATOM);
+  const busyNow = useValue(turnStartAtom() || EMPTY_ATOM);
   const turnBase = chosen ? turnBases[chosen] : null;
   const prevBusy = useRef(busyNow);
   useEffect(() => {
@@ -1505,7 +1515,7 @@ function GitReview({ ctx }) {
       ctx.rest("/turn-base", { method: "POST", body: { repo: cwd }, timeoutMs: 15000 })
         .then((r) => {
           if (gone || !r) return;
-          recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [] });
+          recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [], snapshot: r.snapshot ?? null });
           setTurnBases(ctx.storage.get(TURN_BASE_KEY, {})); // re-render with the fresh baseline
         })
         .catch(() => {});
@@ -1528,6 +1538,8 @@ function GitReview({ ctx }) {
       try {
         const r = await ctx.rest("/turn-diff", { method: "POST", timeoutMs: 20000, body: {
           repo: chosen, base: turnBase.base ?? null, preexisting_untracked: turnBase.untracked || [], ignore_ws: ignoreWs,
+          // The working tree at turn start: only this turn's own edits are shown.
+          ...(turnBase.snapshot ? { snapshot: turnBase.snapshot } : {}),
         } });
         if (!gone && current === generation.current) { setDiff((prev) => (sameData(prev, r) ? prev : r)); setError(""); loaded = true; }
       } catch {

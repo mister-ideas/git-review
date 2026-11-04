@@ -309,6 +309,12 @@ test('Last agent turn scope: POSTs /turn-diff with the stored baseline; empty st
   })
   assert.ok(!requests.some(r => r.url.startsWith('/diff?') && r.url.includes('scope=agent_turn')), 'agent_turn must not use GET /diff')
   assert.ok(paths(root).length > 0, 'baseline diff must render sections')
+  // A baseline with a working-tree snapshot sends its id.
+  const snapStore = new Map([['turnBase.v1', { ['/repositories/architecture/a-very-long-repository-name-for-toolbar-sizing']: { base: 'a'.repeat(40), untracked: [], snapshot: 'c'.repeat(32), at: 2 } }]])
+  const withSnap = await mount(t, { storage: snapStore })
+  await select(withSnap.root, 'Last agent turn')
+  const snapPost = withSnap.requests.find(r => r.url === '/turn-diff')
+  assert.equal(snapPost.options.body.snapshot, 'c'.repeat(32))
   // no baseline → friendly empty state, no request
   const bare = new Map()
   const fixture2 = makeContext({ storage: bare })

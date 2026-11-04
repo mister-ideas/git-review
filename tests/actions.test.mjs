@@ -218,6 +218,56 @@ for (const passValue of [true, false]) {
   })
 }
 
+test('a busy flag revived after a turn, with no new send, does not move the turn baseline', async t => {
+  // Seen live: Desktop's session resync can set busy again just after a turn ends.
+  // A baseline taken then counts the agent's new files as pre-existing.
+  const { host } = await import('@hermes/plugin-sdk')
+  const prev = host.state
+  const busy = store(false, true)
+  const awaiting = store(false, true)
+  host.state = { busy, awaitingResponse: awaiting, cwd: store(repo, true) }
+  const disposers = []
+  t.after(() => { host.state = prev; disposers.forEach(d => d()) })
+  const posts = []
+  const ctx = {
+    register() {}, onDispose: (d) => disposers.push(d),
+    storage: { get: (k, f) => f, set() {} },
+    rest: async (url, options) => { posts.push({ url, options }); return { repo, base: 'b'.repeat(40), untracked: [] } },
+  }
+  plugin.register(ctx)
+  // A real send: awaitingResponse and busy rise together.
+  awaiting.set(true); busy.set(true)
+  awaiting.set(false) // first token
+  busy.set(false)     // turn ends
+  busy.set(true)      // resync revives the row: no send
+  busy.set(false)
+  assert.equal(posts.filter(p => p.url === '/turn-base').length, 1, 'only the send starts a turn')
+  // The next real send records a new baseline.
+  awaiting.set(true); busy.set(true)
+  assert.equal(posts.filter(p => p.url === '/turn-base').length, 2)
+})
+
+test('each turn stores its own working-tree snapshot, even when nothing else changed', async t => {
+  const { host } = await import('@hermes/plugin-sdk')
+  const prev = host.state
+  const busy = store(false, true)
+  host.state = { busy, cwd: store(repo, true) }
+  const disposers = []
+  t.after(() => { host.state = prev; disposers.forEach(d => d()) })
+  const saved = {}
+  let n = 0
+  const ctx = {
+    register() {}, onDispose: (d) => disposers.push(d),
+    storage: { get: (k, f) => (k in saved ? saved[k] : f), set: (k, v) => { saved[k] = v } },
+    rest: async () => ({ repo, base: 'b'.repeat(40), untracked: [], snapshot: String(++n).repeat(32) }),
+  }
+  plugin.register(ctx)
+  busy.set(true); await new Promise(r => setImmediate(r)); busy.set(false)
+  assert.equal(saved['turnBase.v1'][repo].snapshot, '1'.repeat(32))
+  busy.set(true); await new Promise(r => setImmediate(r))
+  assert.equal(saved['turnBase.v1'][repo].snapshot, '2'.repeat(32), 'the second turn must not keep the first snapshot')
+})
+
 test('the plugin registers a rebindable shortcut, a palette row that shows it, and a status-bar count', () => {
   const regs = []
   plugin.register({ register: (r) => regs.push(r), storage: { get: (k, f) => f, set() {} }, rest: async () => ({}) })

@@ -178,15 +178,18 @@ def _git_env() -> dict:
 
 
 def _run(repo: str | Path, *args: str, timeout: int = TIMEOUT, limit: int = MAX_DIFF_BYTES + 65536,
-         ok=(0,), binary: bool = False):
+         ok=(0,), binary: bool = False, extra_env: dict | None = None, neutral_filters: bool = False):
     overrides = list(_NEUTRAL_CONFIG)
-    if args and args[0] in _FILTERING:
+    if args and (args[0] in _FILTERING or neutral_filters):
         for name in sorted(_repo_filter_drivers(repo)):
             overrides += [f"filter.{name}.clean=", f"filter.{name}.smudge=", f"filter.{name}.process=",
                           f"filter.{name}.required=false"]
     flags = [a for kv in overrides for a in ("-c", kv)]
+    env = _git_env()
+    if extra_env:
+        env.update(extra_env)
     return _capture(["git", "-C", str(repo), *flags, *args], timeout=timeout, limit=limit, ok=ok,
-                    binary=binary, env=_git_env())
+                    binary=binary, env=env)
 
 
 # Environment a repo CLI needs to find the user's own login. The POSIX names are
@@ -512,14 +515,143 @@ def _untracked(repo: str | Path) -> tuple[list[str], bool, int]:
     return paths, truncated, skipped
 
 
+# ── Turn snapshots ──
+# A turn's baseline is the working tree as it was when the turn began, not HEAD:
+# edits left uncommitted by an earlier turn are not this turn's work. The tree is
+# recorded with git itself, but into the plugin's own object store and a
+# throwaway index, so the repository's objects and index are never written.
+_SNAPSHOT_ID = re.compile(r"^[0-9a-f]{32}$")
+SNAPSHOT_KEEP = 16
+SNAPSHOT_MAX_AGE_S = 3 * 24 * 3600
+MAX_SNAPSHOT_UNTRACKED_BYTES = 64 * 1024 * 1024
+
+
+def _snapshot_root() -> Path:
+    home = Path(os.environ.get("HERMES_HOME", "") or Path.home() / ".hermes").expanduser()
+    return home / "plugin-data" / "git-review" / "turn-snapshots"
+
+
+def _object_dir(repo: str | Path) -> str:
+    common = _run(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    return str(Path(common) / "objects")
+
+
+def _snapshot_env(repo: str | Path, store: Path, index: Path) -> dict:
+    return {"GIT_INDEX_FILE": str(index), "GIT_OBJECT_DIRECTORY": str(store / "objects"),
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES": _object_dir(repo)}
+
+
+def _real_index(repo: str | Path) -> Path:
+    return Path(_run(repo, "rev-parse", "--path-format=absolute", "--git-path", "index").strip())
+
+
+_SNAPSHOT_LOCKS: dict[str, threading.Lock] = {}
+_SNAPSHOT_LOCKS_GUARD = threading.Lock()
+
+
+def _worktree_tree(repo: str | Path, store: Path) -> str:
+    """Tree id of the working tree (tracked + untracked, not ignored), written into `store` only.
+
+    The snapshot keeps its own index: its stat cache means a poll re-hashes only
+    files that changed since the last one. Seeded from the real index (read, never
+    written). One caller at a time per snapshot.
+    """
+    import shutil
+
+    with _SNAPSHOT_LOCKS_GUARD:
+        lock = _SNAPSHOT_LOCKS.setdefault(str(store), threading.Lock())
+    with lock:
+        (store / "objects").mkdir(parents=True, exist_ok=True)
+        index = store / "worktree.index"
+        if not index.is_file():
+            real = _real_index(repo)
+            if real.is_file():
+                shutil.copyfile(real, index)
+        env = _snapshot_env(repo, store, index)
+        # core.autocrlf is left alone: the tree must hash files the way the user's
+        # own `git add` would, or every line would read as changed.
+        _run(repo, "-c", "gc.auto=0", "add", "-A", "--ignore-errors", "--", ":/",
+             extra_env=env, neutral_filters=True, timeout=30, ok=(0, 1))
+        return _run(repo, "write-tree", extra_env=env).strip()
+
+
+def _untracked_bytes(repo: str | Path, rels: list[str]) -> int:
+    total, root = 0, Path(repo)
+    for rel in rels:
+        try:
+            total += (root / rel).lstat().st_size
+        except OSError:
+            pass
+        if total > MAX_SNAPSHOT_UNTRACKED_BYTES:
+            break
+    return total
+
+
+def _prune_snapshots(root: Path, keep: str = "") -> None:
+    import shutil
+
+    try:
+        dirs = sorted((d for d in root.iterdir() if d.is_dir() and _SNAPSHOT_ID.match(d.name)),
+                      key=lambda d: d.stat().st_mtime, reverse=True)
+    except OSError:
+        return
+    now = time.time()
+    for i, d in enumerate(dirs):
+        if d.name != keep and (i >= SNAPSHOT_KEEP or now - d.stat().st_mtime > SNAPSHOT_MAX_AGE_S):
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def _take_snapshot(repo: str | Path, untracked: list[str], truncated: bool) -> str | None:
+    """Record the working tree; None when it is too large to record (the caller falls back to HEAD)."""
+    import json
+    import uuid
+
+    if truncated or _untracked_bytes(repo, untracked) > MAX_SNAPSHOT_UNTRACKED_BYTES:
+        return None
+    root = _snapshot_root()
+    snap = uuid.uuid4().hex
+    store = root / snap
+    try:
+        tree = _worktree_tree(repo, store)
+        (store / "manifest.json").write_text(json.dumps({"repo": str(Path(repo).resolve()), "tree": tree}),
+                                             encoding="utf-8")
+    except (GitError, OSError):
+        import shutil
+
+        shutil.rmtree(store, ignore_errors=True)
+        return None
+    _prune_snapshots(root, keep=snap)
+    return snap
+
+
+def _load_snapshot(repo: str | Path, snapshot: str) -> tuple[Path, str] | None:
+    import json
+
+    if not isinstance(snapshot, str) or not _SNAPSHOT_ID.match(snapshot):
+        raise GitError("invalid snapshot id")
+    store = _snapshot_root() / snapshot
+    try:
+        manifest = json.loads((store / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None  # pruned or never written: the caller falls back to HEAD
+    if manifest.get("repo") != str(Path(repo).resolve()) or not _SHA.match(str(manifest.get("tree", ""))):
+        return None
+    return store, manifest["tree"]
+
+
 def turn_base(repo: str | Path) -> dict:
-    """Snapshot taken at agent-turn start: HEAD sha (None if unborn) + untracked files."""
+    """Snapshot taken at agent-turn start: HEAD sha (None if unborn), untracked files, and a
+    working-tree snapshot id (None when the tree is too large to record).
+
+    The repository is not written: the snapshot lives in the plugin's data directory.
+    """
     try:
         base = _commit_sha(repo, "HEAD")
     except GitError:
         base = None
     untracked, truncated, _ = _untracked(repo)
-    return {"base": base, "untracked": untracked, "untracked_truncated": truncated}
+    snapshot = _take_snapshot(repo, untracked, truncated)
+    return {"base": base, "untracked": untracked, "untracked_truncated": truncated, "snapshot": snapshot}
 
 
 def _untracked_patches(repo: str | Path, rels: list[str], total: int) -> tuple[list[str], int]:
@@ -560,14 +692,44 @@ def _untracked_patches(repo: str | Path, rels: list[str], total: int) -> tuple[l
     return parts, too_big
 
 
+def _snapshot_turn_diff(repo: str | Path, store: Path, tree: str, ignore_ws: bool) -> dict | None:
+    """The working tree now against the tree recorded when the turn began."""
+    try:
+        now_tree = _worktree_tree(repo, store)
+        env = {"GIT_OBJECT_DIRECTORY": str(store / "objects"), "GIT_ALTERNATE_OBJECT_DIRECTORIES": _object_dir(repo)}
+        patch = _run(repo, *_patch_args(ignore_ws), tree, now_tree, "--", extra_env=env, neutral_filters=True)
+    except OutputLimit:
+        return {"patch": "", "added": 0, "removed": 0,
+                "note": "Turn diff exceeds the display limit. Filter to one file or review uncommitted changes."}
+    except (GitError, OSError):
+        return None
+    if len(patch.encode("utf-8", "replace")) > MAX_DIFF_BYTES:
+        return {"patch": "", "added": 0, "removed": 0,
+                "note": "Turn diff exceeds the display limit. Filter to one file or review uncommitted changes."}
+    result = _summarize(patch)
+    result["note"] = ""
+    return result
+
+
 def turn_diff(repo: str | Path, base: str | None, preexisting_untracked: list[str] | None = None,
-              ignore_ws: bool = False) -> dict:
+              ignore_ws: bool = False, snapshot: str | None = None) -> dict:
     """Everything that changed since a turn_base() snapshot.
+
+    With a working-tree snapshot, exactly the turn's own changes: edits left over
+    from earlier turns, and pre-existing untracked files, show only where this
+    turn changed them. Without one (older clients, a tree too large to record or
+    a pruned snapshot) the fallback below is used.
 
     Tracked: `git diff <base>` (working tree vs the turn-start commit, so new
     commits and uncommitted edits both appear). Untracked: every file not in the
     turn-start snapshot, rendered as an all-add patch via `diff --no-index`.
     """
+    if snapshot:
+        loaded = _load_snapshot(repo, snapshot)
+        if loaded:
+            exact = _snapshot_turn_diff(repo, *loaded, ignore_ws)
+            if exact is not None:
+                return exact
     pre = preexisting_untracked or []
     if len(pre) > MAX_FILES:
         raise GitError(f"too many preexisting untracked paths (max {MAX_FILES})")

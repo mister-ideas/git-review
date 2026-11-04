@@ -244,9 +244,11 @@ class TurnBaseRequest(BaseModel):
 
 @router.post("/turn-base")
 def turn_base(request: TurnBaseRequest):
-    """HEAD sha (null when unborn) and the untracked files present right now.
+    """HEAD sha (null when unborn), the untracked files present right now, and a
+    working-tree snapshot id.
 
-    Read-only: no index writes, no objects written.
+    The repository is not written: no index writes, no objects in its store. The
+    snapshot's objects live in the plugin's data directory and are pruned.
     """
     normalized = _authorized(request.repo, request.cwd)
     return {"repo": normalized, **_guard(gitx.turn_base, normalized)}
@@ -257,6 +259,7 @@ class TurnDiffRequest(BaseModel):
     repo: str = Field(min_length=2, max_length=1024)
     base: str | None = Field(default=None, max_length=64)
     preexisting_untracked: list[str] = Field(default_factory=list, max_length=gitx.MAX_FILES)
+    snapshot: str | None = Field(default=None, max_length=64)
     ignore_ws: bool = False
     cwd: str = Field(default="", max_length=1024)
 
@@ -266,7 +269,7 @@ def turn_diff(request: TurnDiffRequest):
     """Working tree vs the turn-start commit plus files that became untracked since."""
     normalized = _authorized(request.repo, request.cwd)
     return _guard(gitx.turn_diff, normalized, request.base, request.preexisting_untracked,
-                  request.ignore_ws)
+                  request.ignore_ws, request.snapshot)
 
 
 class FileLinesRequest(BaseModel):
