@@ -644,3 +644,10 @@ test('the base control reads as a comparison, not as the checked-out branch', as
   assert.ok(base.length >= 1, 'base control carries a "Compare against …" title')
   assert.ok(base.some(n => n.findAll(c => c.props && c.props.name === 'git-compare').length), 'base control uses the compare icon')
 })
+
+
+test('file headers and the search field do not clip or pad short labels', () => {
+  const css = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(css, /\.af-head \.fname\{[^}]*min-width:min\(9ch/, 'a short file name gets no forced minimum width')
+  assert.match(css, /\.search-field input\{[^}]*text-overflow:ellipsis/, 'a narrow pane ends the placeholder with an ellipsis')
+})

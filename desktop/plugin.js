@@ -333,7 +333,7 @@ const css = `
 .grd .search-field{flex:1 1 0;min-width:0;opacity:1;background:var(--ui-bg-quinary);color:var(--ui-text-primary);border:1px solid var(--ui-stroke-tertiary);border-radius:6px;padding:0 6px}
 .grd .search-field:hover{border-color:var(--ui-stroke-secondary)}
 .grd .search-field:focus-within{border-color:var(--ui-accent)}
-.grd .search-field input{width:0;min-width:0;flex:1 1 0;field-sizing:fixed;color:var(--ui-text-primary);background:transparent;font-size:12px}
+.grd .search-field input{width:0;min-width:0;flex:1 1 0;field-sizing:fixed;text-overflow:ellipsis;color:var(--ui-text-primary);background:transparent;font-size:12px}
 .grd .search-field input::placeholder{color:var(--ui-text-secondary);opacity:1}
 /* Churn counts sit immediately after the name, in the file tree as in the folders'
    file counts: the numbers describe the row they follow, not a right-hand column. */
@@ -459,7 +459,9 @@ const css = `
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-head:hover{background:var(--ui-surface-background)}
 .grd .af-head{min-width:0}
-.grd .af-head .fname{flex:0 1 auto;min-width:min(9ch,100%)}
+/* No fixed minimum: a short name such as cli.py left a gap before its folder. The
+   folder has a zero basis, so it gives up its space before the name truncates. */
+.grd .af-head .fname{flex:0 1 auto;min-width:0}
 .grd .af-head > button{flex-shrink:0}
 .grd .af-head .file-toggle{min-width:0;flex:1;display:flex;align-items:center;gap:8px;border:0;padding:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
 .grd .af-head .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
