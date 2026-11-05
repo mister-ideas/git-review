@@ -190,6 +190,12 @@ class WriteTests(unittest.TestCase):
         self.assertEqual(self.git('log', '-1', '--format=%s'), 'feat: two files')
         self.assertEqual(self.porcelain(), '')
 
+    def test_commit_short_hash_matches_the_commit_list(self):
+        # The toast after a commit and the commit list name the same commit the same way.
+        (self.repo / 'a.txt').write_text('two\n', newline='\n')
+        body = self.post('commit', message='feat: short').json()
+        self.assertEqual(body['short'], self.git('log', '-1', '--format=%h'))
+
     def test_commit_only_what_is_staged(self):
         (self.repo / 'a.txt').write_text('two\n', newline='\n')
         (self.repo / 'keep.txt').write_text('changed\n', newline='\n')
