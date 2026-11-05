@@ -904,5 +904,23 @@ class BackendTests(unittest.TestCase):
         bad = json.loads(select_tool.handle({'repo': str(self.repo), 'scope': 'nope'}))
         self.assertFalse(bad['ok'])
 
+class ProfileHomeTest(unittest.TestCase):
+    def test_plugin_data_follows_the_served_profile_not_the_process_env(self):
+        """A multiplexed gateway serves several profiles from one process whose HERMES_HOME
+        is the launch profile; the served profile is a context-local override. The agent's
+        selection must land in the served profile's data, where its pane polls (seen live:
+        it went to the launch profile and the pane never moved)."""
+        import types
+        stub = types.ModuleType('hermes_constants')
+        stub.get_hermes_home = lambda: Path('/homes/served')
+        with patch.dict(sys.modules, {'hermes_constants': stub}), \
+             patch.dict(os.environ, {'HERMES_HOME': '/homes/launch'}):
+            self.assertEqual(select_store.data_root(), Path('/homes/served/plugin-data/git-review'))
+            self.assertEqual(gitx.hermes_home(), Path('/homes/served'))
+        with patch.dict(sys.modules, {'hermes_constants': None}), \
+             patch.dict(os.environ, {'HERMES_HOME': '/homes/launch'}):
+            self.assertEqual(gitx.hermes_home(), Path('/homes/launch'))
+
+
 if __name__ == '__main__':
     unittest.main()

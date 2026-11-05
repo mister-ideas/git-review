@@ -46,7 +46,7 @@ def _guard(fn, *args, **kwargs):
 
 def settings() -> dict:
     """Only this plugin's explicit non-secret settings; never scan home implicitly."""
-    home = Path(os.environ.get('HERMES_HOME') or Path.home() / '.hermes').expanduser()
+    home = gitx.hermes_home()
     try:
         config = _yaml_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
         entry = config.get('plugins', {}).get('entries', {}).get('git-review', {})
@@ -63,7 +63,7 @@ def profile_workspace() -> str:
     that config.yaml resolves the workspace of the profile the pane lives in —
     not a fixed path. Empty when unset.
     """
-    home = Path(os.environ.get('HERMES_HOME') or Path.home() / '.hermes').expanduser()
+    home = gitx.hermes_home()
     try:
         config = _yaml_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
         value = (config.get('terminal') or {}).get('cwd')
@@ -79,7 +79,7 @@ _allowed_lock = threading.Lock()
 
 def _allowed_key() -> tuple:
     """Everything authorization depends on: any change recomputes it."""
-    home = Path(os.environ.get('HERMES_HOME') or Path.home() / '.hermes').expanduser()
+    home = gitx.hermes_home()
     latest = select_store.latest()
     return (str(home), _stamp(home / 'config.yaml'), gitx.session_cwd_rows(), latest['id'] if latest else 0)
 

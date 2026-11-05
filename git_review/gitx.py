@@ -34,6 +34,19 @@ _SHA = re.compile(r"^[0-9a-fA-F]{7,64}$")
 _SAFE_REF = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_./-]*$")
 
 
+def hermes_home() -> Path:
+    """The Hermes home of the profile being served. A multiplexed gateway keeps the launch
+    profile in HERMES_HOME and sets the served one as a context-local override, which
+    ``hermes_constants.get_hermes_home`` honours; older hosts fall back to the env var."""
+    try:
+        from hermes_constants import get_hermes_home
+
+        return Path(get_hermes_home()).expanduser()
+    except Exception:
+        return Path(os.environ.get("HERMES_HOME", "") or Path.home() / ".hermes").expanduser()
+
+
+
 class GitError(Exception):
     """A git command failed or the path is not a work tree."""
 
@@ -315,7 +328,7 @@ def session_cwds(db_path: Path | None = None, limit: int = 15) -> list[str]:
 def session_cwd_rows(db_path: Path | None = None, limit: int = 15) -> tuple[str, ...]:
     """The most-used session cwds (a cheap read-only query, no discovery)."""
     if db_path is None:
-        home = Path(os.environ.get("HERMES_HOME", "") or Path.home() / ".hermes").expanduser()
+        home = hermes_home()
         db_path = home / "state.db"
     if not db_path.exists():
         return ()
@@ -527,7 +540,7 @@ MAX_SNAPSHOT_UNTRACKED_BYTES = 64 * 1024 * 1024
 
 
 def _snapshot_root() -> Path:
-    home = Path(os.environ.get("HERMES_HOME", "") or Path.home() / ".hermes").expanduser()
+    home = hermes_home()
     return home / "plugin-data" / "git-review" / "turn-snapshots"
 
 

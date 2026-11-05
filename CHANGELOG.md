@@ -6,6 +6,7 @@ All notable changes to this plugin. Versions follow [SemVer](https://semver.org)
 
 ### Fixed
 - **The agent can drive the pane again.** On current Hermes the `git_review_select` tool reached the agent with no description and no parameters, and its answer was rejected (`unsupported result type: dict`), so asking Hermes to show a change in git-review failed. The tool now registers a full function schema, takes its arguments the way Hermes passes them, and answers in text.
+- **A selection reaches the right profile's pane.** Under a gateway serving several profiles, the agent's request was written to the launch profile's plugin data, so the pane of the profile you were chatting in never moved. The plugin now reads the served profile's home, as Hermes resolves it.
 
 ### Changed
 - **⌘⌥G / Ctrl+Alt+G toggles the pane** ([#41](https://github.com/mister-ideas/git-review/issues/41)).
