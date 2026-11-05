@@ -1614,17 +1614,21 @@ function GitReview({ ctx }) {
     const patches = scope === "commits"
       ? (diff?.commits || []).map((c) => ({ sha: c.sha, patch: c.patch }))
       : null;
+    // Each commit's files group under git's own short hash, the one the commit list,
+    // the navigation bar and the commit toast show.
+    const shortOf = new Map(commits.map((c) => [c.sha, c.short]));
     if (patches) return patches.flatMap((entry) => {
       const sha = typeof entry === "object" ? entry.sha : undefined;
       const patch = typeof entry === "object" ? entry.patch : entry;
+      const label = sha ? (shortOf.get(sha) || sha.slice(0, 8)) : "";
       return fileSections(patch).map((s) => ({
-        ...s, filePath: s.path, path: sha ? `${sha.slice(0, 8)}/${s.path}` : s.path, sha,
+        ...s, filePath: s.path, path: sha ? `${label}/${s.path}` : s.path, sha,
       }));
     });
     // Same order as the file tree (folders first, then files, by name), so scrolling
     // the diff walks the tree top to bottom; git lists new files after the rest.
     return diff?.patch ? fileSections(diff.patch).sort((a, b) => treeOrder(a.path, b.path)) : [];
-  }, [diff, scope]);
+  }, [diff, scope, commits]);
 
   // One row per branch: a local branch and its remote counterpart are the same
   // branch to the reviewer, so the menu lists it once instead of twice under

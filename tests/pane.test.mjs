@@ -1,6 +1,7 @@
 // Effect-driven plugin tests; SDK is a Node test double, never SDK layout proof.
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { commits as fixtureCommits } from './fixtures.mjs'
 import { mount, gutterDown, byClass, byLabel, click, text, select, paths, latestDiff, hasClass, file } from './render-harness.mjs'
 import { files, treeFiles, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
@@ -646,6 +647,17 @@ test('the base control reads as a comparison, not as the checked-out branch', as
   const base = root.findAll(n => typeof n.props.title === 'string' && n.props.title.startsWith('Compare against '))
   assert.ok(base.length >= 1, 'base control carries a "Compare against …" title')
   assert.ok(base.some(n => n.findAll(c => c.props && c.props.name === 'git-compare').length), 'base control uses the compare icon')
+})
+
+
+test('commit history names each commit by the short hash the commit list uses', async (t) => {
+  // The toast, the navigation bar and the file groups must agree on one name per commit.
+  const { root } = await mount(t)
+  await select(root, 'Commits')
+  const shown = paths(root).map(p => p.split('/')[0])
+  assert.ok(shown.length > 0, 'commit files render')
+  const shorts = new Set(fixtureCommits.map(c => c.short))
+  assert.ok(shown.every(s => shorts.has(s)), `groups named ${[...new Set(shown)].join(', ')}`)
 })
 
 
