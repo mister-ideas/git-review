@@ -6,6 +6,7 @@ selection request into the shared store; the desktop pane polls and applies it.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from . import gitx, select_store
 
 TOOLSET = "git"
 
-SCHEMA = {
+PARAMETERS = {
     "type": "object",
     "properties": {
         "repo": {
@@ -45,9 +46,28 @@ SCHEMA = {
     "required": [],
 }
 
+# Hermes's tool contract: an OpenAI function schema. A bare JSON Schema here left the
+# agent with no description and no parameters.
+SCHEMA = {
+    "name": "git_review_select",
+    "description": (
+        "Point the git-review pane in Hermes Desktop at a repository and scope, so the user "
+        "sees the change there. Use it when the user asks to see, review or show changes "
+        "(optionally one file, via path)."
+    ),
+    "parameters": PARAMETERS,
+}
 
-def handle(repo: str = "", scope: str = "uncommitted", ref: str = "", path: str = "",
-           base: str = "", ignore_ws: bool = False, **kwargs) -> dict:
+
+def handle(args: dict | None = None, **context) -> str:
+    """Hermes calls ``handler(args, **context)`` and accepts a string result."""
+    args = args if isinstance(args, dict) else {}
+    known = ("repo", "scope", "ref", "path", "base", "ignore_ws")
+    return json.dumps(select(**{k: args[k] for k in known if k in args}))
+
+
+def select(repo: str = "", scope: str = "uncommitted", ref: str = "", path: str = "",
+           base: str = "", ignore_ws: bool = False) -> dict:
     repo = (repo or "").strip() or os.getcwd()
     try:
         normalized = gitx.normalize(Path(os.path.expanduser(repo)))

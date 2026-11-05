@@ -48,7 +48,7 @@ class BackendTests(unittest.TestCase):
 
     def test_agent_turn_scope_removed(self):
         self.assertNotIn('agent_turn', gitx.SCOPES)
-        self.assertEqual(select_tool.SCHEMA['properties']['scope']['enum'], list(gitx.SCOPES))
+        self.assertEqual(select_tool.SCHEMA['parameters']['properties']['scope']['enum'], list(gitx.SCOPES))
         with self.assertRaises(gitx.GitError):
             gitx.diff(self.repo, 'agent_turn')
         self.config(repos=str(self.repo))
@@ -651,7 +651,7 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(self.get('checkout', repo=str(self.repo)).status_code, 404)
 
     def test_selection_cross_process_route_authorization(self):
-        result = select_tool.handle(repo=str(self.repo), scope='commits', ignore_ws=True)
+        result = select_tool.select(repo=str(self.repo), scope='commits', ignore_ws=True)
         self.assertTrue(result['ok'], result)
         selected = self.get('pending-select', after=0).json()['request']
         self.assertEqual(selected['id'], result['request_id'])
@@ -665,9 +665,9 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(json.loads(raw)['id'], selected['id'])
 
     def test_tool_default_commit_invalid_does_not_push(self):
-        self.assertTrue(select_tool.handle(repo=str(self.repo), scope='uncommitted')['ok'])
+        self.assertTrue(select_tool.select(repo=str(self.repo), scope='uncommitted')['ok'])
         before = select_store.latest()['id']
-        self.assertFalse(select_tool.handle(repo=str(self.repo), scope='range', ref='--bad')['ok'])
+        self.assertFalse(select_tool.select(repo=str(self.repo), scope='range', ref='--bad')['ok'])
         self.assertEqual(select_store.latest()['id'], before)
 
     def test_sqlite_retention_ids_profile_isolation(self):
@@ -884,6 +884,25 @@ class BackendTests(unittest.TestCase):
         select_tool.register(ctx)
         ctx.register_tool.assert_called_once_with(name='git_review_select', toolset='git',
                                                  schema=select_tool.SCHEMA, handler=select_tool.handle)
+
+    def test_the_agent_sees_and_can_call_the_tool(self):
+        """Hermes's tool contract: an OpenAI function schema (name, description, parameters),
+        a handler called as handler(args, **context), and a string result. The tool used to
+        hand over a bare JSON Schema (the agent saw no description and no parameters) and
+        return a dict, which Hermes rejects ("unsupported result type: dict")."""
+        schema = select_tool.SCHEMA
+        self.assertEqual(schema['name'], 'git_review_select')
+        self.assertTrue(schema['description'].strip())
+        self.assertEqual(schema['parameters']['type'], 'object')
+        self.assertIn('path', schema['parameters']['properties'])
+        out = select_tool.handle({'repo': str(self.repo), 'scope': 'uncommitted', 'path': 'file.txt'},
+                                 task_id='t1')
+        self.assertIsInstance(out, str)
+        result = json.loads(out)
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(select_store.latest()['path'], 'file.txt')
+        bad = json.loads(select_tool.handle({'repo': str(self.repo), 'scope': 'nope'}))
+        self.assertFalse(bad['ok'])
 
 if __name__ == '__main__':
     unittest.main()

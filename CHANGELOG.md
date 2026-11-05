@@ -4,6 +4,9 @@ All notable changes to this plugin. Versions follow [SemVer](https://semver.org)
 
 ## Unreleased
 
+### Fixed
+- **The agent can drive the pane again.** On current Hermes the `git_review_select` tool reached the agent with no description and no parameters, and its answer was rejected (`unsupported result type: dict`), so asking Hermes to show a change in git-review failed. The tool now registers a full function schema, takes its arguments the way Hermes passes them, and answers in text.
+
 ### Changed
 - **⌘⌥G / Ctrl+Alt+G toggles the pane** ([#41](https://github.com/mister-ideas/git-review/issues/41)).
   Pressed while the pane is on screen, it minimizes the pane, which keeps its place and
