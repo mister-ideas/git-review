@@ -145,6 +145,7 @@ test('60 full SHAs are sent intact and history truncation remains visible beside
 
 test('branch picker picks a comparison base: never checks anything out, adds no scope of its own', async t => {
   const { root, requests } = await mount(t)
+  await select(root, 'Branch')
   const branchMenu = root.findAll(n => (n.props.className || '').includes('repo-menu') && text(n).includes('main'))[0]
   assert.ok(branchMenu, 'branch menu missing')
   assert.ok(!requests.some(r => /checkout|switch/.test(r.url)))
@@ -533,6 +534,7 @@ test('a hidden run renders one expander, never two stacked', async t => {
 
 test('menu rows share one label slot, and the churn colours survive the portal', async t => {
   const { root } = await mount(t)
+  await select(root, 'Branch')
   // A menu portals to document.body, outside .grd, so a menu surface has to
   // carry the class the stylesheet scopes its own content to — otherwise the
   // churn colours, group headers and scroll cap silently stop applying.
@@ -640,9 +642,26 @@ test('pane settings are scoped to profile and connection, never to the workspace
 
 test('the base control reads as a comparison, not as the checked-out branch', async (t) => {
   const { root } = await mount(t)
+  await select(root, 'Branch')
   const base = root.findAll(n => typeof n.props.title === 'string' && n.props.title.startsWith('Compare against '))
   assert.ok(base.length >= 1, 'base control carries a "Compare against …" title')
   assert.ok(base.some(n => n.findAll(c => c.props && c.props.name === 'git-compare').length), 'base control uses the compare icon')
+})
+
+
+test('the base control shows only in the scopes that compare against a base', async (t) => {
+  // Next to a feature branch, a bare "main" in Uncommitted read as the checked-out
+  // branch (seen in demo QA); those scopes never use the base.
+  const { root } = await mount(t)
+  const baseControls = () => root.findAll(n => typeof n.props.title === 'string' && n.props.title.startsWith('Compare against '))
+  for (const scope of ['Uncommitted', 'Staged', 'Unstaged', 'Last agent turn']) {
+    await select(root, scope)
+    assert.equal(baseControls().length, 0, `${scope} shows no base control`)
+  }
+  for (const scope of ['Branch', 'Commits']) {
+    await select(root, scope)
+    assert.ok(baseControls().length >= 1, `${scope} names the base it compares against`)
+  }
 })
 
 

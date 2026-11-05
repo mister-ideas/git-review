@@ -2161,7 +2161,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
           return out;
         })() })
       ] }),
-      jsxs(DropdownMenu, { children: [
+      // Only Branch and Commits compare against a base; elsewhere a bare "main" next to a
+      // feature branch read as the checked-out branch.
+      (scope === "branch" || scope === "commits") && jsxs(DropdownMenu, { children: [
         jsx(DropdownMenuTrigger, { asChild: true, children:
           // The base, named plainly — Cursor says "against main" only inside a
           // sentence, never on the control.
