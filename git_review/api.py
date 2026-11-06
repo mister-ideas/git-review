@@ -15,15 +15,27 @@ import os
 import threading
 import time
 from pathlib import Path
-try:  # core ships hermes_yaml (v0.21.6+); stock installs have no PyYAML
-    from hermes_yaml import safe_load as _yaml_load
+try:  # public plugin API (hermes_cli.config): the served profile's config.yaml, as written
+    from hermes_cli.config import read_raw_config_readonly as _hermes_config
 except ImportError:  # outside a Hermes checkout (CI, standalone tests)
-    from yaml import safe_load as _yaml_load
+    _hermes_config = None
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from . import gitwrite, gitx, select_store
+
+
+def _profile_config(home: Path) -> dict:
+    """The profile's config.yaml, read-only. Inside Hermes this is the public reader, which
+    follows the served profile; standalone (tests, CI) it parses the file in *home*."""
+    if _hermes_config is not None:
+        config = _hermes_config()
+    else:
+        from yaml import safe_load
+
+        config = safe_load((home / 'config.yaml').read_text(encoding='utf-8'))
+    return config if isinstance(config, dict) else {}
 
 router = APIRouter()
 
@@ -48,7 +60,7 @@ def settings() -> dict:
     """Only this plugin's explicit non-secret settings; never scan home implicitly."""
     home = gitx.hermes_home()
     try:
-        config = _yaml_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
+        config = _profile_config(home)
         entry = config.get('plugins', {}).get('entries', {}).get('git-review', {})
         value = entry.get('settings', entry.get('config', {})) or {}
         return value if isinstance(value, dict) else {}
@@ -65,7 +77,7 @@ def profile_workspace() -> str:
     """
     home = gitx.hermes_home()
     try:
-        config = _yaml_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
+        config = _profile_config(home)
         value = (config.get('terminal') or {}).get('cwd')
         return str(value).strip() if value and str(value).strip() not in ('', '.') else ''
     except Exception:  # unreadable or malformed config.yaml: fall back to defaults
