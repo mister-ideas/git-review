@@ -2,7 +2,7 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
-## 0.3.0 — unreleased
+## 0.3.0 — 2026-11-06
 
 The agent's turn, exactly; the agent drives the pane again; and the review-to-commit path is reliable end to end.
 
