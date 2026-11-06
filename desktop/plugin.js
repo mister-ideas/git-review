@@ -2008,7 +2008,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     if (reveal) setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
     scrollToPath(path);
   };
-  const scopeLabel = scope === "commits" ? (picked.size ? `Commits (${picked.size})` : "Commits")
+  // Browsing one commit at a time, the bar below says which one ("1/2"); a count of
+  // one picked commit next to it read as a contradiction.
+  const scopeLabel = scope === "commits" ? (navIndex >= 0 ? "Commits" : picked.size ? `Commits (${picked.size})` : "Commits")
     : scope === "agent_turn" ? "Last agent turn"
     : SCOPES.find((s) => s.id === scope)?.label;
   // Aggregate stats for the scope trigger (Cursor shows +N −N next to the scope).

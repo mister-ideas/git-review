@@ -738,3 +738,13 @@ test('a search that matches only the changes still lists those files in the tree
   assert.match(treeRows[0], /main\.ts/)
   await act(async () => search.props.onChange(''))
 })
+
+test('browsing one commit at a time, the scope names no count beside the position', async t => {
+  const { root } = await mount(t)
+  await select(root, 'Commits')
+  await select(root, 'Browse commit by commit')
+  const labels = root.findAll(n => typeof n.type === 'string' && (n.children || []).some(c => typeof c === 'string' && /^Commits\b/.test(c)))
+    .flatMap(n => n.children.filter(c => typeof c === 'string'))
+  assert.ok(labels.includes('Commits'), 'the scope still says Commits')
+  assert.ok(!labels.some(l => /^Commits \(1\)/.test(l)), 'no "(1)" next to "1/27"')
+})
