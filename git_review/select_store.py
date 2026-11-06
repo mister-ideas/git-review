@@ -8,7 +8,6 @@ and a request must survive a pane that is not open yet.
 
 from __future__ import annotations
 
-import os
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -28,8 +27,9 @@ CREATE TABLE IF NOT EXISTS pending_select (
 
 
 def data_root() -> Path:
-    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".hermes")
-    return Path(home).expanduser() / "plugin-data" / "git-review"
+    from .gitx import hermes_home
+
+    return hermes_home() / "plugin-data" / "git-review"
 
 
 @contextmanager

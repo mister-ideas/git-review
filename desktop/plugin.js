@@ -223,11 +223,6 @@ function countFiles(node) {
   return n;
 }
 
-function subtreeHas(node, q) {
-  if ((node.__files || []).some((f) => f.toLowerCase().includes(q))) return true;
-  return Object.keys(node).filter((k) => k !== "__files").some((k) => subtreeHas(node[k], q));
-}
-
 // Per-status codicon + tone (mirrors core review STATUS_GLYPH). Tones are the
 // pane's own classes, not Tailwind utilities: Desktop's CSS only contains the
 // utilities core itself uses, so `text-(--ui-blue)` (never used by core) left
@@ -333,7 +328,7 @@ const css = `
 .grd .search-field{flex:1 1 0;min-width:0;opacity:1;background:var(--ui-bg-quinary);color:var(--ui-text-primary);border:1px solid var(--ui-stroke-tertiary);border-radius:6px;padding:0 6px}
 .grd .search-field:hover{border-color:var(--ui-stroke-secondary)}
 .grd .search-field:focus-within{border-color:var(--ui-accent)}
-.grd .search-field input{width:0;min-width:0;flex:1 1 0;field-sizing:fixed;color:var(--ui-text-primary);background:transparent;font-size:12px}
+.grd .search-field input{width:0;min-width:0;flex:1 1 0;field-sizing:fixed;text-overflow:ellipsis;color:var(--ui-text-primary);background:transparent;font-size:12px}
 .grd .search-field input::placeholder{color:var(--ui-text-secondary);opacity:1}
 /* Churn counts sit immediately after the name, in the file tree as in the folders'
    file counts: the numbers describe the row they follow, not a right-hand column. */
@@ -459,21 +454,28 @@ const css = `
 .grd .af-head{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--ui-surface-background);z-index:2;border-bottom:1px solid var(--ui-stroke-tertiary)}
 .grd .af-head:hover{background:var(--ui-surface-background)}
 .grd .af-head{min-width:0}
-.grd .af-head .fname{flex:0 1 auto;min-width:min(9ch,100%)}
+/* No fixed minimum: a short name such as cli.py left a gap before its folder. The
+   folder has a zero basis, so it gives up its space before the name truncates. */
+.grd .af-head .fname{flex:0 1 auto;min-width:0}
 .grd .af-head > button{flex-shrink:0}
 .grd .af-head .file-toggle{min-width:0;flex:1;display:flex;align-items:center;gap:8px;border:0;padding:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
 .grd .af-head .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .af-copy{display:inline-flex;color:var(--ui-text-tertiary);cursor:pointer}
 .grd .af-copy:hover{color:var(--ui-text-secondary)}
-/* Stage / unstage / discard: quiet until the header is hovered or focused. */
-.grd .af-acts{display:inline-flex;justify-content:flex-end;flex:0 0 auto;width:calc(3 * var(--gr-act, 28px))}
-.grd .af-act{display:inline-flex;color:var(--ui-text-secondary);opacity:0;transition:opacity .12s;width:var(--gr-act, 28px);height:var(--gr-act, 28px)}
-.grd .af-head:hover .af-act,.grd .af-head:focus-within .af-act{opacity:1}
-.grd .af-act:hover{color:var(--ui-text-primary)}
-@media (hover:none){.grd .af-act{opacity:1}}
-/* Narrow docks: no reserved slot. The actions float over the counts while the header is
-   hovered, so the name keeps the room the rest of the time. */
-@media (hover:hover){@container(max-width:480px){.grd .af-acts{position:absolute;right:44px;top:50%;transform:translateY(-50%);width:auto;padding-left:6px;background:var(--ui-surface-background);visibility:hidden}.grd .af-head:hover .af-acts,.grd .af-head:focus-within .af-acts{visibility:visible}}}
+/* Stage / unstage / discard: always on screen, in the copy button's quiet colour, so a
+   file's actions are found without hunting for them. One spacing for every icon: the
+   actions and the copy button sit in one row, 2px apart, the same as Desktop's toolbars. */
+.grd .af-acts{display:inline-flex;align-items:center;justify-content:flex-end;gap:2px;flex:0 0 auto;min-width:calc(2 * var(--gr-act, 28px) + 2px)}
+.grd .af-act{display:inline-flex;color:var(--ui-text-tertiary);width:var(--gr-act, 28px);height:var(--gr-act, 28px)}
+.grd .af-act:hover,.grd .af-act:focus-visible{color:var(--ui-text-primary)}
+.grd .af-acts + .af-copy{margin-left:-6px}
+.grd .af-head .af-copy{width:var(--gr-act, 28px);height:var(--gr-act, 28px);justify-content:center}
+/* The last icon button carries its own 8px inset: the header ends 4px later, so the
+   icon sits 12px from the edge, as the chevron does on the left. */
+.grd .af-head{padding-right:4px}
+/* Narrow docks: no reserved slot, so a file with one action does not give up the
+   room of three. The counts then follow each file's own actions. */
+@container(max-width:480px){.grd .af-acts{min-width:0}}
 .grd .af-head .ftype{color:var(--ui-text-tertiary);flex-shrink:0}
 .grd .af-staged{flex-shrink:0;font-size:10.5px;line-height:1;padding:2px 5px;border-radius:4px;color:var(--ui-text-secondary);border:1px solid var(--ui-stroke-tertiary);white-space:nowrap}
 /* Narrow docks: the badge becomes a dot (full text in its tooltip), the name keeps the room. */
@@ -557,8 +559,8 @@ function CheckSlot({ on, size }) {
 // Repo/branch triggers share all available toolbar space via pure flex
 // (flex:1 1 0): equal widths when both labels are long, spare flows to the
 // short one, no JS measurement.
-const RepoButton = forwardRef(function RepoButton({ icon, label, ...props }, ref) {
-  return jsx(Button, { ...props, ref, variant: "ghost", size: "sm", className: cn("repo-name", props.className), title: label, children:
+const RepoButton = forwardRef(function RepoButton({ icon, label, title, ...props }, ref) {
+  return jsx(Button, { ...props, ref, variant: "ghost", size: "sm", className: cn("repo-name", props.className), title: title || label, "aria-label": title || label, children:
     jsxs("span", { className: "repo-label", children: [
       jsx(Codicon, { name: icon, size: "0.85rem" }),
       jsx("span", { className: "repo-text", children: label }),
@@ -635,7 +637,8 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot, flat = false,
       const path = prefix ? `${prefix}/${folder}` : folder;
       const subtree = node[key];
       const filesUnder = countFiles(subtree);
-      if (q && !subtreeHas(subtree, q)) continue;
+      // `tree` is already narrowed by the search (names and changes alike); while a
+      // search is on, every folder opens so its matches show.
       const isOpen = q ? true : open[path] !== false;
       rows.push(jsxs("div", { className: "folder", style: { paddingLeft: 10 + depth * 12 }, role: "button", tabIndex: 0, "aria-expanded": isOpen, onClick: () => setOpen((o) => ({ ...o, [path]: !(o[path] !== false) })), onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((o) => ({ ...o, [path]: !(o[path] !== false) })); } }, children: [
         jsx(Codicon, { name: isOpen ? "folder-opened" : "folder", size: "0.8rem" }),
@@ -645,7 +648,6 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot, flat = false,
       if (isOpen) rows.push(...renderNode(subtree, path, depth + 1));
     }
     for (const file of node.__files || []) {
-      if (q && !file.toLowerCase().includes(q)) continue;
       rows.push(fileRow(file, depth));
     }
     return rows;
@@ -953,7 +955,8 @@ const TURN_BASE_CAP = 8;
 
 function recordTurnBase(storage, cwd, snapshot) {
   const prev = storage.get(TURN_BASE_KEY, {});
-  if (prev[cwd]?.base === snapshot.base && JSON.stringify(prev[cwd]?.untracked) === JSON.stringify(snapshot.untracked)) return;
+  if (prev[cwd]?.base === snapshot.base && (prev[cwd]?.snapshot ?? null) === (snapshot.snapshot ?? null)
+    && JSON.stringify(prev[cwd]?.untracked) === JSON.stringify(snapshot.untracked)) return;
   const rest = Object.entries(prev).filter(([key]) => key !== cwd);
   while (rest.length >= TURN_BASE_CAP) rest.shift();
   rest.push([cwd, { ...snapshot, at: Date.now() }]);
@@ -970,13 +973,22 @@ function captureTurnBase(ctx, cwd) {
   ctx.rest("/turn-base", { method: "POST", body: { repo: cwd }, timeoutMs: 15000 })
     .then((r) => {
       if (!r) return;
-      recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [] });
+      recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [], snapshot: r.snapshot ?? null });
       for (const listener of turnBaseListeners) listener();
     })
     .catch(() => {});
 }
+// What starts a turn: a send. awaitingResponse rises on a send only; busy can also
+// come back on after a turn ends (Desktop's session resync), and a baseline taken
+// then would count the agent's new files as pre-existing. Hosts without the flag
+// fall back to busy.
+function turnStartAtom() {
+  const s = host.state || {};
+  const a = s.awaitingResponse;
+  return a && typeof a.get === "function" ? a : s.busy;
+}
 function watchTurns(ctx) {
-  const busy = host.state && host.state.busy;
+  const busy = turnStartAtom();
   const cwd = host.state && host.state.cwd;
   if (!busy || typeof busy.subscribe !== "function" || !cwd || typeof cwd.get !== "function") return;
   let prev = !!busy.get();
@@ -1039,6 +1051,7 @@ function GitReview({ ctx }) {
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
   const generation = useRef(0);
+  const diffView = useRef("");
   const focusGeneration = useRef(0);
   const chooseRepository = (repo) => {
     ++focusGeneration.current;
@@ -1488,7 +1501,7 @@ function GitReview({ ctx }) {
   // Last-agent-turn: capture a Hermes-native turn baseline. Watch the focused
   // session's busy flag; a false→true rising edge means a new agent turn began —
   // snapshot HEAD + untracked for that repo (read-only POST /turn-base).
-  const busyNow = useValue(host.state.busy || EMPTY_ATOM);
+  const busyNow = useValue(turnStartAtom() || EMPTY_ATOM);
   const turnBase = chosen ? turnBases[chosen] : null;
   const prevBusy = useRef(busyNow);
   useEffect(() => {
@@ -1503,7 +1516,7 @@ function GitReview({ ctx }) {
       ctx.rest("/turn-base", { method: "POST", body: { repo: cwd }, timeoutMs: 15000 })
         .then((r) => {
           if (gone || !r) return;
-          recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [] });
+          recordTurnBase(ctx.storage, r.repo || cwd, { base: r.base ?? null, untracked: r.untracked || [], snapshot: r.snapshot ?? null });
           setTurnBases(ctx.storage.get(TURN_BASE_KEY, {})); // re-render with the fresh baseline
         })
         .catch(() => {});
@@ -1526,6 +1539,8 @@ function GitReview({ ctx }) {
       try {
         const r = await ctx.rest("/turn-diff", { method: "POST", timeoutMs: 20000, body: {
           repo: chosen, base: turnBase.base ?? null, preexisting_untracked: turnBase.untracked || [], ignore_ws: ignoreWs,
+          // The working tree at turn start: only this turn's own edits are shown.
+          ...(turnBase.snapshot ? { snapshot: turnBase.snapshot } : {}),
         } });
         if (!gone && current === generation.current) { setDiff((prev) => (sameData(prev, r) ? prev : r)); setError(""); loaded = true; }
       } catch {
@@ -1553,6 +1568,12 @@ function GitReview({ ctx }) {
     if (scope === "agent_turn") return; // served by the /turn-diff effect above
     const live = LIVE_SCOPES.has(scope) || scope === "branch";
     const current = ++generation.current;
+    // A diff answers one question. When the question changes (another commit, scope,
+    // file filter...), the old answer must not stay on screen under the new header
+    // while the new one loads: clear it and let the loading state show. A refresh of
+    // the same view keeps it, so live polling never flickers.
+    const view = JSON.stringify([chosen, scope, base, ref, commitsRef, pathFilter, ignoreWs, showUntracked]);
+    if (diffView.current !== view) { diffView.current = view; setDiff(null); }
     let timer;
     let gone = false;
     let loaded = false;
@@ -1600,17 +1621,21 @@ function GitReview({ ctx }) {
     const patches = scope === "commits"
       ? (diff?.commits || []).map((c) => ({ sha: c.sha, patch: c.patch }))
       : null;
+    // Each commit's files group under git's own short hash, the one the commit list,
+    // the navigation bar and the commit toast show.
+    const shortOf = new Map(commits.map((c) => [c.sha, c.short]));
     if (patches) return patches.flatMap((entry) => {
       const sha = typeof entry === "object" ? entry.sha : undefined;
       const patch = typeof entry === "object" ? entry.patch : entry;
+      const label = sha ? (shortOf.get(sha) || sha.slice(0, 8)) : "";
       return fileSections(patch).map((s) => ({
-        ...s, filePath: s.path, path: sha ? `${sha.slice(0, 8)}/${s.path}` : s.path, sha,
+        ...s, filePath: s.path, path: sha ? `${label}/${s.path}` : s.path, sha,
       }));
     });
     // Same order as the file tree (folders first, then files, by name), so scrolling
     // the diff walks the tree top to bottom; git lists new files after the rest.
     return diff?.patch ? fileSections(diff.patch).sort((a, b) => treeOrder(a.path, b.path)) : [];
-  }, [diff, scope]);
+  }, [diff, scope, commits]);
 
   // One row per branch: a local branch and its remote counterpart are the same
   // branch to the reviewer, so the menu lists it once instead of twice under
@@ -1983,7 +2008,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     if (reveal) setCollapsedFiles((c) => (c[path] ? { ...c, [path]: false } : c));
     scrollToPath(path);
   };
-  const scopeLabel = scope === "commits" ? (picked.size ? `Commits (${picked.size})` : "Commits")
+  // Browsing one commit at a time, the bar below says which one ("1/2"); a count of
+  // one picked commit next to it read as a contradiction.
+  const scopeLabel = scope === "commits" ? (navIndex >= 0 ? "Commits" : picked.size ? `Commits (${picked.size})` : "Commits")
     : scope === "agent_turn" ? "Last agent turn"
     : SCOPES.find((s) => s.id === scope)?.label;
   // Aggregate stats for the scope trigger (Cursor shows +N −N next to the scope).
@@ -2147,11 +2174,15 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
           return out;
         })() })
       ] }),
-      jsxs(DropdownMenu, { children: [
+      // Only Branch and Commits compare against a base; elsewhere a bare "main" next to a
+      // feature branch read as the checked-out branch.
+      (scope === "branch" || scope === "commits") && jsxs(DropdownMenu, { children: [
         jsx(DropdownMenuTrigger, { asChild: true, children:
           // The base, named plainly — Cursor says "against main" only inside a
           // sentence, never on the control.
-          jsx(RepoButton, { icon: "git-branch", label: shortLabel(shownBase || "main") })
+          // A compare icon and a tooltip: with a branch icon the base read as the
+          // checked-out branch (seen in QA next to a feature branch).
+          jsx(RepoButton, { icon: "git-compare", label: shortLabel(shownBase || "main"), title: `Compare against ${shortLabel(shownBase || "main")}` })
         }),
         jsx(DropdownMenuContent, { className: "gr-menu", children: [
           // The label sits OUTSIDE the scrolling list. Inside it, the list's own
@@ -2243,7 +2274,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     (scope === "commits" && navIndex >= 0 && commits[navIndex]) && jsxs("div", { className: "notice commit-nav", role: "navigation", "aria-label": "Commit navigation", style: { display: "flex", alignItems: "center", gap: 6 }, children: [
       jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex <= 0, "aria-label": "Newer commit", onClick: () => goCommit(navIndex - 1), children: "◀" }),
       jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex >= commits.length - 1 && !hasMore, "aria-label": "Older commit", onClick: () => (navIndex >= commits.length - 1 ? loadOlder() : goCommit(navIndex + 1)), children: "▶" }),
-      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()}${wholeHistorySelected ? "" : ` (${navIndex + 1}/${commits.length}${hasMore ? "+" : ""})`}` }),
+      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()}` }),
+      // The position never shares the ellipsis: a long subject used to hide it.
+      !wholeHistorySelected && jsx("span", { className: "commit-pos", style: { flex: "0 0 auto", color: "var(--ui-text-tertiary)", fontVariantNumeric: "tabular-nums" }, children: `${navIndex + 1}/${commits.length}${hasMore ? "+" : ""}` }),
       jsx(Button, { size: "sm", variant: "ghost", onClick: () => { setNavIndex(-1); setPicked(new Set(commits.map((c) => c.sha))); }, children: "All commits" })
     ] }),
     (scope === "commits" && historyNote) && jsx("div", { className: "notice", role: "status", children: historyNote }),
@@ -2753,12 +2786,18 @@ const plugin_default = {
   name: "git-review",
   defaultEnabled: true,
   register(ctx) {
-    const reveal = () => host.revealPane("git-review:pane");
+    // A Desktop that can fold a plugin pane gets a toggle, like ⌘G for Review: on
+    // screen it puts the pane away (its place and settings kept), otherwise it brings
+    // it back. An older Desktop keeps the reveal-only shortcut.
+    const canToggle = typeof host.togglePane === "function";
+    const run = canToggle ? () => host.togglePane("git-review:pane") : () => host.revealPane("git-review:pane");
+    const label = canToggle ? "Toggle git review" : "Open git review";
     ctx.register({ id: "pane", area: "panes", title: "Git review", data: { placement: "right", dock: { pane: "workspace", pos: "right" }, width: "720px" }, render: () => jsx(GitReview, { ctx }) });
     // One action id wired to a rebindable shortcut and the palette row that shows it.
     // ⌘⌥G / Ctrl+Alt+G: ⌘G and ⌘⇧G are Desktop's own; ⌘⌥<letter> is the plugin space.
-    ctx.register({ id: "toggle", area: KEYBINDS, data: { id: "git-review.open", category: "view", defaults: ["mod+alt+g"], label: "Open git review", run: reveal } });
-    ctx.register({ id: "open", area: "palette", data: { id: "git-review.open", action: "git-review.open", label: "Open git review", keywords: ["git", "diff", "worktree", "review", "commit", "stage"], run: reveal } });
+    // The id stays `git-review.open` so a shortcut the user rebound keeps working.
+    ctx.register({ id: "toggle", area: KEYBINDS, data: { id: "git-review.open", category: "view", defaults: ["mod+alt+g"], label, run } });
+    ctx.register({ id: "open", area: "palette", data: { id: "git-review.open", action: "git-review.open", label, keywords: ["git", "diff", "worktree", "review", "commit", "stage", "toggle", "hide"], run } });
     ctx.register({ id: "changes", area: STATUSBAR_RIGHT, order: 79, render: () => jsx(ChangesChip, { ctx }) });
     watchTurns(ctx);
   }

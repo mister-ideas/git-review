@@ -218,6 +218,56 @@ for (const passValue of [true, false]) {
   })
 }
 
+test('a busy flag revived after a turn, with no new send, does not move the turn baseline', async t => {
+  // Seen live: Desktop's session resync can set busy again just after a turn ends.
+  // A baseline taken then counts the agent's new files as pre-existing.
+  const { host } = await import('@hermes/plugin-sdk')
+  const prev = host.state
+  const busy = store(false, true)
+  const awaiting = store(false, true)
+  host.state = { busy, awaitingResponse: awaiting, cwd: store(repo, true) }
+  const disposers = []
+  t.after(() => { host.state = prev; disposers.forEach(d => d()) })
+  const posts = []
+  const ctx = {
+    register() {}, onDispose: (d) => disposers.push(d),
+    storage: { get: (k, f) => f, set() {} },
+    rest: async (url, options) => { posts.push({ url, options }); return { repo, base: 'b'.repeat(40), untracked: [] } },
+  }
+  plugin.register(ctx)
+  // A real send: awaitingResponse and busy rise together.
+  awaiting.set(true); busy.set(true)
+  awaiting.set(false) // first token
+  busy.set(false)     // turn ends
+  busy.set(true)      // resync revives the row: no send
+  busy.set(false)
+  assert.equal(posts.filter(p => p.url === '/turn-base').length, 1, 'only the send starts a turn')
+  // The next real send records a new baseline.
+  awaiting.set(true); busy.set(true)
+  assert.equal(posts.filter(p => p.url === '/turn-base').length, 2)
+})
+
+test('each turn stores its own working-tree snapshot, even when nothing else changed', async t => {
+  const { host } = await import('@hermes/plugin-sdk')
+  const prev = host.state
+  const busy = store(false, true)
+  host.state = { busy, cwd: store(repo, true) }
+  const disposers = []
+  t.after(() => { host.state = prev; disposers.forEach(d => d()) })
+  const saved = {}
+  let n = 0
+  const ctx = {
+    register() {}, onDispose: (d) => disposers.push(d),
+    storage: { get: (k, f) => (k in saved ? saved[k] : f), set: (k, v) => { saved[k] = v } },
+    rest: async () => ({ repo, base: 'b'.repeat(40), untracked: [], snapshot: String(++n).repeat(32) }),
+  }
+  plugin.register(ctx)
+  busy.set(true); await new Promise(r => setImmediate(r)); busy.set(false)
+  assert.equal(saved['turnBase.v1'][repo].snapshot, '1'.repeat(32))
+  busy.set(true); await new Promise(r => setImmediate(r))
+  assert.equal(saved['turnBase.v1'][repo].snapshot, '2'.repeat(32), 'the second turn must not keep the first snapshot')
+})
+
 test('the plugin registers a rebindable shortcut, a palette row that shows it, and a status-bar count', () => {
   const regs = []
   plugin.register({ register: (r) => regs.push(r), storage: { get: (k, f) => f, set() {} }, rest: async () => ({}) })
@@ -225,6 +275,48 @@ test('the plugin registers a rebindable shortcut, a palette row that shows it, a
   assert.deepEqual(kb.data.defaults, ['mod+alt+g'])
   assert.equal(regs.find(r => r.area === 'palette').data.action, kb.data.id)
   assert.equal(typeof regs.find(r => r.area === 'statusBar.right').render, 'function')
+})
+
+// #41: on a Desktop whose SDK can fold a plugin pane, the shortcut is a toggle (pressed
+// while the pane is on screen it puts the pane away, pressed again it comes back), and
+// the palette row is the same action. An older Desktop keeps the reveal-only shortcut.
+function registrations(sdk) {
+  const { host } = sdk
+  const regs = []
+  plugin.register({ register: (r) => regs.push(r), storage: { get: (k, f) => f, set() {} }, rest: async () => ({}) })
+  return { keybind: regs.find(r => r.area === 'keybinds').data, palette: regs.find(r => r.area === 'palette').data, host }
+}
+
+test('the shortcut and the palette row toggle the pane where the Desktop can fold it', async t => {
+  const sdk = await import('@hermes/plugin-sdk')
+  const calls = []
+  sdk.host.togglePane = (id) => calls.push(['toggle', id])
+  const reveal = sdk.host.revealPane
+  sdk.host.revealPane = (id) => calls.push(['reveal', id])
+  t.after(() => { delete sdk.host.togglePane; sdk.host.revealPane = reveal })
+  const { keybind, palette } = registrations(sdk)
+  keybind.run()
+  palette.run()
+  assert.deepEqual(calls, [['toggle', 'git-review:pane'], ['toggle', 'git-review:pane']])
+  assert.equal(keybind.label, 'Toggle git review')
+  assert.equal(palette.label, keybind.label)
+  // Same action id as before, so a shortcut the user rebound keeps working.
+  assert.equal(keybind.id, 'git-review.open')
+  assert.deepEqual(keybind.defaults, ['mod+alt+g'])
+})
+
+test('an older Desktop without a fold keeps the reveal-only shortcut', async t => {
+  const sdk = await import('@hermes/plugin-sdk')
+  const calls = []
+  const reveal = sdk.host.revealPane
+  sdk.host.revealPane = (id) => calls.push(['reveal', id])
+  t.after(() => { sdk.host.revealPane = reveal })
+  assert.equal(typeof sdk.host.togglePane, 'undefined')
+  const { keybind, palette } = registrations(sdk)
+  keybind.run()
+  palette.run()
+  assert.deepEqual(calls, [['reveal', 'git-review:pane'], ['reveal', 'git-review:pane']])
+  assert.equal(keybind.label, 'Open git review')
 })
 
 test('files are reviewed in the file tree\'s order: folders first, new files in place', async t => {

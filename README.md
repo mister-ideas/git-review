@@ -8,7 +8,7 @@
 
 **Review the whole change in one scroll, next to the chat.** git-review is a review pane for Hermes Desktop. Every changed file is stacked in one continuous diff, so you read the agent's last turn, your uncommitted or staged work, the whole branch, or any range of commits the way you read a pull request, in unified or split layout, with syntax colours. Then it turns the lines you care about into `@line:` citations for your next message, and lets you stage, discard, commit, push and open the pull request without leaving the pane.
 
-![The agent's last turn in the unified layout](docs/screenshots/unified-agent-turn.png)
+![⌘⌥G opens git-review next to the chat; "Last agent turn" shows exactly what the turn changed; search looks inside the changes](docs/gifs/review.gif)
 
 ## Why it exists
 
@@ -18,19 +18,25 @@ git-review keeps the review next to the chat and makes its result usable. Click 
 
 ## See it work
 
-The agent's turn lands in the pane as the files change. Then fold the unchanged runs, expand the context you need, and cite the lines that matter.
+Select the lines that are wrong and cite them back: the agent fixes just those.
 
-![The agent's turn, folding, and a citation, end to end](docs/gifs/agent-turn.gif)
+![Select two lines, cite them into the message, and the agent fixes just that](docs/gifs/cite.gif)
+
+Ask Hermes to show you a change and it drives the pane. Then stage a file from its header, commit it with a generated message, commit and push the rest, and step through the branch one commit at a time.
+
+![The agent filters the pane to the README; stage, commit, commit and push; browse commit by commit](docs/gifs/ship.gif)
+
+These clips are recorded in Hermes Desktop with the plugin as released.
 
 ## Install
 
 Requires Hermes Agent `>=0.21.6` with Desktop, and `git` on your `PATH`.
 
 ```sh
-hermes plugins install mister-ideas/git-review
+hermes plugins install git-review
 ```
 
-Once the plugin is in the Hermes catalog, the bare name works too: `hermes plugins install git-review`.
+That installs the reviewed commit the Hermes plugin catalog pins. To track this repository instead, install it by URL: `hermes plugins install mister-ideas/git-review`.
 
 Hermes asks whether to install Node dependencies, because the repository declares a `package.json`. Answer **N**. That file belongs to the test tooling, and the plugin needs nothing from npm at runtime.
 
@@ -38,7 +44,7 @@ Then:
 
 1. Enable **git-review** under **Capabilities → Plugins**, or run `hermes plugins enable git-review`. Desktop copies the pane from the package into `$HERMES_HOME/desktop-plugins/git-review/` and loads it.
 2. Restart the backend, or quit and reopen Desktop, so the plugin's routes mount.
-3. Open the pane from the command palette (**Open git review**), with <kbd>⌘⌥G</kbd> / <kbd>Ctrl+Alt+G</kbd> (rebindable under keyboard shortcuts), from the changed-files count in the status bar, or by toggling **Git review** in the right dock.
+3. Open the pane from the command palette (**Toggle git review**), with <kbd>⌘⌥G</kbd> / <kbd>Ctrl+Alt+G</kbd> (rebindable under keyboard shortcuts), from the changed-files count in the status bar, or by toggling **Git review** in the right dock. Pressed again while the pane is on screen, the shortcut minimizes it and keeps its place and settings. This needs a Hermes Desktop with `host.togglePane` ([NousResearch/hermes-agent#147157](https://github.com/NousResearch/hermes-agent/pull/147157)). On an older Desktop the shortcut only opens the pane, and the palette row reads **Open git review**.
 
 Cloned it yourself? `hermes plugins adopt git-review` makes the directory a tracked install, so `check-updates` and `update` work on it.
 
@@ -59,14 +65,14 @@ Six scopes cover the ways you review work. The first control in the toolbar pick
 
 | Scope | What it shows | How it is computed |
 |---|---|---|
-| **Last agent turn** | Everything the agent changed in this repository during its latest turn: committed and uncommitted edits, terminal edits, new files. | When a turn starts, the plugin records `HEAD` and the untracked-file list, even while the pane is closed. Changes are diffed against that baseline. |
+| **Last agent turn** | Everything the agent changed in this repository during its latest turn: committed and uncommitted edits, terminal edits, new files. | When you send a message, the plugin records a snapshot of the working tree, even while the pane is closed. The turn is the diff from that snapshot to the working tree now. |
 | **Uncommitted** | All work not yet committed: staged, unstaged and new files. | The working-tree diff against `HEAD`, plus new files. |
 | **Staged** | Only what is in the index. | `git diff --cached`. |
 | **Unstaged** | Working-tree edits not yet staged, and new files. | `git diff` on the working tree, plus new files. |
 | **Branch** | The net change of your branch since it left the default branch: what its pull request will show. | `git diff <merge-base> HEAD`. The branch menu picks another branch to compare against. |
 | **Commits** | The commits your branch added since it left the base (`origin/main`, for example). | Commit range since the merge base. Pick a subset, or browse one commit at a time. |
 
-Uncommitted edits made before a turn still appear in that turn's scope. Git cannot tell who wrote a line, so the pane shows what changed since the baseline. It does not guess.
+Edits you left uncommitted before the turn are part of the snapshot, so they do not show as the agent's. An untracked file the agent edits shows only the agent's lines. When a snapshot cannot be recorded (untracked files above 64 MiB in total, or a snapshot already pruned), the turn falls back to comparing against the commit the turn started from, and earlier uncommitted edits then show too.
 
 New files that are not staged yet appear in Uncommitted and Unstaged with their content. Turn **Show new files** off in the display menu to hide them.
 
@@ -77,7 +83,7 @@ New files that are not staged yet appear in Uncommitted and Unstaged with their 
 ### Commits
 
 - The list starts with every commit your branch added, all selected. **Select all** selects the whole list again after you have narrowed it, and **Load older commits** fetches more history, up to 250 commits per load.
-- **Browse commit by commit** steps through one commit at a time with the Newer and Older buttons. The navigator shows the commit, its subject, author, date and position, for example `4f16d57 · Document tax handling — mister-ideas, 10/23/2026 (1/5)`. **All commits** returns to the full selection.
+- **Browse commit by commit** steps through one commit at a time with the Newer and Older buttons. The navigator shows the commit, its subject, author, date and position, for example `4f16d57 · Document tax handling — mister-ideas, 10/23/2026` followed by `1/5`. The position keeps its own place, so a long subject never hides it. **All commits** returns to the full selection.
 - The branch menu lists your local and remote branches. Pick one to show only the commits since it.
 - A shallow clone has only the history it fetched, and the pane says so. Plugin installs from Hermes are shallow. To see the full history, run `git -C <plugin directory> fetch --unshallow`.
 
@@ -87,7 +93,7 @@ New files that are not staged yet appear in Uncommitted and Unstaged with their 
 
 ### Stage, discard, commit, push, pull request
 
-In the Uncommitted, Staged and Unstaged scopes, each file header carries its actions, shown on hover:
+In the Uncommitted, Staged and Unstaged scopes, each file header carries its actions, always on screen:
 
 - **Stage** and **Unstage** follow where the file's changes are. A file with changes on both sides offers both, and Uncommitted marks it **partly staged**.
 - **Discard changes** restores the file to `HEAD`, staged and unstaged edits included. On a new file it becomes **Delete new file**. Both ask first, in Desktop's own confirmation dialog. A renamed file gets both of its names back.
@@ -104,7 +110,7 @@ Under the diff, the commit box:
 - **Create pull request** pushes and runs `gh pr create --fill` (or `glab mr create --fill` on GitLab), then opens the result. If the branch already has one, the button opens it.
 - **Stage all**, **Unstage all**, **Discard all changes…** and **Ask Hermes to commit and open a PR** are in the ⋯ menu. The last one puts the same request Desktop's own Review pane uses into the chat.
 
-![A file's actions on hover, and the commit box](docs/screenshots/commit-box.png)
+![Stage, unstage and discard in every file header, a staged file, and the commit box](docs/screenshots/commit-box.png)
 
 The Last agent turn, Branch and Commits scopes stay read-only: they describe history, not the index. To keep the whole pane read-only, turn on `read_only` in the settings.
 
@@ -130,14 +136,14 @@ Unchanged runs are folded. Every change keeps three lines of context on each sid
 ### Files
 
 - A file tree on the right shows each file's status and churn. Folders roll up their totals. **Files: List** in the display menu shows every file on one level, with its folder beside it.
-- Search covers file paths and the changed lines themselves.
+- Search covers file paths and the changed lines themselves. The tree keeps exactly the files the search found, so a match inside a file's changes lists that file even when its name does not match.
 - The **Deleted files** and **Test files** filters hide what you are not looking for.
 - Click a file to jump to its diff. Collapse one file, or use **Collapse all** and **Expand all**.
 - **Review next file** steps through the changed files in order.
 - **Copy path** copies the repository-relative path.
 - Drag a file from the tree into the composer to insert its absolute path.
 
-![File search and filtering in the tree](docs/screenshots/file-search.png)
+![Searching "feet" keeps the files whose changes mention it](docs/screenshots/file-search.png)
 
 ### Citing lines
 
@@ -153,7 +159,7 @@ Lines are citable in every scope, so you can cite from the last turn, from the c
 
 ### The agent can drive the pane
 
-The agent tool `git_review_select` points the pane at a repository and scope. For example, when you ask "show me what changed in the parser", the agent can open the right view for you. It takes `repo`, `scope` (`uncommitted` by default, or `staged`, `unstaged`, `branch` or `commits`), `ref` for specific commits, `base` for a range, `path` to filter to one file, and `ignore_ws`. The tool validates the request before the pane applies it.
+The agent tool `git_review_select` points the pane at a repository and scope. For example, when you ask "show me what changed in the parser", the agent can open the right view for you. It takes `repo`, `scope` (`uncommitted` by default, or `staged`, `unstaged`, `branch` or `commits`), `ref` for specific commits, `base` for a range, `path` to filter to one file, and `ignore_ws`. The tool validates the request before the pane applies it. A request with `path` shows a **File: README.md ×** chip in the toolbar; click it to see every file again. With several profiles on one gateway, the request reaches the pane of the profile you are chatting in.
 
 ### Pull and merge requests
 
@@ -197,14 +203,14 @@ Hermes Desktop ships its own **Review** pane. The two answer different reading s
 | Syntax colours | Built-in tokenizer with theme hues | Shiki |
 | Read-only switch | `read_only` setting | — |
 | Changed-files count | Status bar, any workspace | — |
-| Shortcut | <kbd>⌘⌥G</kbd>, rebindable | <kbd>⌘G</kbd> |
+| Shortcut | <kbd>⌘⌥G</kbd> toggles, rebindable | <kbd>⌘G</kbd> toggles |
 | Change list in the chat | — | "N files changed" card under the agent's turn |
 
 Native still has two things git-review does not: Shiki's grammar-exact highlighting, and the card under an agent's turn. Neither is reachable from a plugin today: Desktop's plugin SDK does not export its highlighter, and has no slot under a turn.
 
 ## Privacy and disclosure
 
-- **Shell commands, reading.** To show changes the backend runs `git` as a subprocess: `rev-parse`, `status`, `diff`, `log`, `show`, `cat-file`, `ls-files`, `for-each-ref`, `branch`, `remote`, `merge-base`, `rev-list`, `config` (to read the repository's own program settings) and `hash-object` (without `-w`, to compute the empty tree). External diff and textconv drivers are disabled, and every call overrides `core.fsmonitor`, `core.hooksPath` and `log.showSignature`. It also blanks the clean, smudge and process filter drivers that the repository itself defines, so a checkout cannot make the pane run its programs. Filters from your global and system git configuration, such as git-lfs, are left alone. Every call has a timeout and an output cap.
+- **Shell commands, reading.** To show changes the backend runs `git` as a subprocess: `rev-parse`, `status`, `diff`, `log`, `show`, `cat-file`, `ls-files`, `for-each-ref`, `branch`, `remote`, `merge-base`, `rev-list`, `config` (to read the repository's own program settings) and `hash-object` (without `-w`, to compute the empty tree). For the Last agent turn snapshot it also runs `add -A` and `write-tree` with `GIT_INDEX_FILE` and `GIT_OBJECT_DIRECTORY` pointed at the plugin's own data directory, so the repository's index and object database are never written. External diff and textconv drivers are disabled, and every call overrides `core.fsmonitor`, `core.hooksPath` and `log.showSignature`. It also blanks the clean, smudge and process filter drivers that the repository itself defines, so a checkout cannot make the pane run its programs. Filters from your global and system git configuration, such as git-lfs, are left alone. Every call has a timeout and an output cap.
 - **Shell commands, writing.** Only when you press a button: `add`, `reset`/`restore`/`rm --cached` (unstage), `restore --source=HEAD` plus deleting the named new files (discard, after you confirm), `commit`, `push`, and `gh pr create` / `glab mr create`. Unless `run_repo_programs` is on, these run with hooks off and `core.fsmonitor` off, and are refused when the repository's own config names a program they would run. Paths are passed as literal pathspecs. `read_only` refuses all of them in the backend.
 - **Network.** For the pull or merge request lookup, the backend runs your local `gh pr list` or `glab mr list` for the checked-out branch; for **Push** and **Create pull request**, `git push` and `gh`/`glab` contact your remote with your existing login. `gh` and `glab` get only your `GH_*`, `GITHUB*`, `GLAB_*` and `GITLAB_*` environment, with prompts disabled. **Generate commit message** sends the diff of what you are about to commit, and your ten latest commit subjects, to the model of the focused chat through Hermes, the same request Desktop's own Review pane makes. The plugin itself contacts nothing else.
 - **Reads outside its own data.**
@@ -213,8 +219,8 @@ Native still has two things git-review does not: Shiki's grammar-exact highlight
   - The `cwd` column of the `sessions` table in this profile's `state.db`, opened read-only, so that recent chat workspaces appear without configuration.
   - A caller-supplied path never grants access to a repository.
 - **Discovery scope.** Repositories are found by scanning, at most two levels deep, the focused workspace and the working directories of recent chats, plus any configured `repos`/`roots`. A scan visits at most 256 directories and returns at most 128 repositories. It never follows symlinks and skips hidden directories, so credential and config directories are never entered. A filesystem root is never scanned, and a home directory is scanned only when it is the declared workspace: a chat that merely ran in your home directory does not expose every repository beneath it.
-- **Plugin data.** `$HERMES_HOME/plugin-data/git-review/select.sqlite3` holds agent selection requests. Desktop plugin storage holds display settings and turn baselines. Your repositories change only through the write actions above.
-- **Background activity.** While the pane is open it polls the local backend: every 3 seconds for agent selections, every 5 seconds for the diff on live scopes, and every 15 seconds for the branch's push state. The status-bar count polls `git status` for the focused workspace every 15 seconds while Desktop is visible. When a chat turn starts, the plugin records the turn baseline. There are no background processes.
+- **Plugin data.** `$HERMES_HOME/plugin-data/git-review/select.sqlite3` holds agent selection requests. `$HERMES_HOME/plugin-data/git-review/turn-snapshots/` holds the Last agent turn snapshots: a copy of the working tree's tracked and untracked (not ignored) files, as git objects, taken when you send a message. The newest 16 are kept, none older than three days. Desktop plugin storage holds display settings and turn baselines. Your repositories change only through the write actions above.
+- **Background activity.** While the pane is open it polls the local backend: every 3 seconds for agent selections, every 5 seconds for the diff on live scopes, and every 15 seconds for the branch's push state. The status-bar count polls `git status` for the focused workspace every 15 seconds while Desktop is visible. When you send a message, the plugin records the turn's snapshot (git hashes only files that changed since the previous one). There are no background processes.
 - **Credentials and telemetry.** None. The plugin stores no credentials and reports no usage.
 - **Sensitive code.** Diffs stay in the pane. The only way code reaches the chat is a citation or drag that you make yourself.
 
@@ -227,7 +233,8 @@ Native still has two things git-review does not: Shiki's grammar-exact highlight
 - Display state is per workspace and profile, not per chat (see [What the pane remembers](#what-the-pane-remembers)).
 - Syntax colours come from a line tokenizer, not a grammar: a block comment or a multi-line string is coloured only on the lines that show its delimiters. Files over 3,000 diff rows and lines over 1,000 characters stay plain.
 - Writes act on the whole file. Staging or discarding single hunks or lines is not supported.
-- The screenshots and videos here were captured from the plugin's own code, running against a real backend and real repositories, in a Chromium harness that stands in for the Desktop window. They are not captures of the Desktop app itself.
+- The animated clips and the commit-by-commit, search and commit-box screenshots are captured in Hermes Desktop. The other screenshots were captured from the plugin's own code, running against a real backend and real repositories, in a Chromium harness that stands in for the Desktop window.
+- A turn snapshot records untracked files up to 64 MiB in total. Above that, Last agent turn compares against the commit the turn started from.
 
 ## Settings
 

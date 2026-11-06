@@ -48,7 +48,7 @@ class BackendTests(unittest.TestCase):
 
     def test_agent_turn_scope_removed(self):
         self.assertNotIn('agent_turn', gitx.SCOPES)
-        self.assertEqual(select_tool.SCHEMA['properties']['scope']['enum'], list(gitx.SCOPES))
+        self.assertEqual(select_tool.SCHEMA['parameters']['properties']['scope']['enum'], list(gitx.SCOPES))
         with self.assertRaises(gitx.GitError):
             gitx.diff(self.repo, 'agent_turn')
         self.config(repos=str(self.repo))
@@ -106,6 +106,82 @@ class BackendTests(unittest.TestCase):
         body = self.post('turn-diff', repo=str(self.repo), base=self.git('rev-parse', 'HEAD'),
                          preexisting_untracked=['pre.txt', 'new dir/brand new.txt'], ignore_ws=True).json()
         self.assertEqual(body['patch'], '')
+
+    def test_turn_diff_with_a_snapshot_shows_only_this_turns_changes(self):
+        # Seen in Desktop QA: a turn after an earlier, uncommitted one listed the earlier
+        # turn's edits too, because the baseline was HEAD.
+        self.config(repos=str(self.repo))
+        (self.repo / 'other.txt').write_text('a\n', newline='\n')
+        self.commit('other')
+        (self.repo / 'file.txt').write_text('one\ntwo\nleftover\n', newline='\n')
+        (self.repo / 'pre.txt').write_text('pre-existing\n', newline='\n')
+        snap = self.post('turn-base', repo=str(self.repo)).json()
+        self.assertRegex(snap['snapshot'], r'^[0-9a-f]{32}$')
+        # The agent turn: edit a dirty file, a pre-existing untracked file, commit, add a file.
+        (self.repo / 'file.txt').write_text('one\ntwo\nleftover\nin turn\n', newline='\n')
+        (self.repo / 'pre.txt').write_text('pre-existing\nchanged during turn\n', newline='\n')
+        (self.repo / 'other.txt').write_text('a\ncommitted\n', newline='\n')
+        self.git('add', 'other.txt')
+        self.git('commit', '-m', 'turn commit')
+        (self.repo / 'new dir').mkdir()
+        (self.repo / 'new dir' / 'brand new.txt').write_text('fresh\n', newline='\n')
+        index_after_turn = (self.repo / '.git' / 'index').read_bytes()
+        objects_after_turn = self.git('count-objects', '-v')
+        body = self.post('turn-diff', repo=str(self.repo), base=snap['base'], preexisting_untracked=snap['untracked'],
+                         snapshot=snap['snapshot']).json()
+        patch = body['patch']
+        for line in ('+in turn', '+changed during turn', '+committed', '+fresh'):
+            self.assertIn(line, patch)
+        self.assertNotIn('+leftover', patch)
+        self.assertNotIn('+pre-existing', patch)
+        self.assertIn('diff --git a/new dir/brand new.txt b/new dir/brand new.txt', patch)
+        self.assertEqual((body['added'], body['removed']), (4, 0))
+        # The repository was not written by either call; only the plugin's data dir was.
+        self.assertEqual((self.repo / '.git' / 'index').read_bytes(), index_after_turn)
+        self.assertEqual(self.git('count-objects', '-v'), objects_after_turn)
+        store = self.home / 'plugin-data' / 'git-review' / 'turn-snapshots' / snap['snapshot']
+        self.assertTrue((store / 'manifest.json').is_file())
+        # A second poll answers the same.
+        again = self.post('turn-diff', repo=str(self.repo), base=snap['base'], snapshot=snap['snapshot']).json()
+        self.assertEqual(again['patch'], patch)
+
+    def test_turn_base_writes_nothing_into_the_repository(self):
+        self.config(repos=str(self.repo))
+        (self.repo / 'file.txt').write_text('dirty\n', newline='\n')
+        (self.repo / 'u.txt').write_text('u\n', newline='\n')
+        index = (self.repo / '.git' / 'index').read_bytes()
+        objects = self.git('count-objects', '-v')
+        snap = self.post('turn-base', repo=str(self.repo)).json()
+        self.assertTrue(snap['snapshot'])
+        self.post('turn-diff', repo=str(self.repo), base=snap['base'], snapshot=snap['snapshot'])
+        self.assertEqual((self.repo / '.git' / 'index').read_bytes(), index)
+        self.assertEqual(self.git('count-objects', '-v'), objects)
+        self.assertIn('?? u.txt', self.git('status', '--porcelain'))
+
+    def test_turn_diff_falls_back_when_the_snapshot_is_gone_or_from_another_repo(self):
+        self.config(repos=str(self.repo))
+        snap = self.post('turn-base', repo=str(self.repo)).json()
+        (self.repo / 'file.txt').write_text('one\ntwo\nthree\n', newline='\n')
+        unknown = self.post('turn-diff', repo=str(self.repo), base=snap['base'], snapshot='0' * 32).json()
+        self.assertIn('+three', unknown['patch'])
+        self.assertEqual(self.post('turn-diff', repo=str(self.repo), base=snap['base'],
+                                   snapshot='../../etc').status_code, 400)
+        other = self.make_repo(self.root / 'other-repo')
+        (other / 'x.txt').write_text('x\n', newline='\n')
+        foreign = gitx._load_snapshot(other, snap['snapshot'])
+        self.assertIsNone(foreign)
+
+    def test_turn_snapshots_are_pruned_and_large_trees_fall_back(self):
+        self.config(repos=str(self.repo))
+        with patch.object(gitx, 'SNAPSHOT_KEEP', 3):
+            ids = [self.post('turn-base', repo=str(self.repo)).json()['snapshot'] for _ in range(5)]
+        root = self.home / 'plugin-data' / 'git-review' / 'turn-snapshots'
+        kept = {d.name for d in root.iterdir()}
+        self.assertLessEqual(len(kept), 3)
+        self.assertIn(ids[-1], kept)
+        (self.repo / 'big.bin').write_bytes(b'x' * 2048)
+        with patch.object(gitx, 'MAX_SNAPSHOT_UNTRACKED_BYTES', 1024):
+            self.assertIsNone(self.post('turn-base', repo=str(self.repo)).json()['snapshot'])
 
     def test_detached_head_reports_short_sha_and_skips_pr_lookup(self):
         self.repo = self.make_repo(self.root / 'detached')
@@ -575,7 +651,7 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(self.get('checkout', repo=str(self.repo)).status_code, 404)
 
     def test_selection_cross_process_route_authorization(self):
-        result = select_tool.handle(repo=str(self.repo), scope='commits', ignore_ws=True)
+        result = select_tool.select(repo=str(self.repo), scope='commits', ignore_ws=True)
         self.assertTrue(result['ok'], result)
         selected = self.get('pending-select', after=0).json()['request']
         self.assertEqual(selected['id'], result['request_id'])
@@ -589,9 +665,9 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(json.loads(raw)['id'], selected['id'])
 
     def test_tool_default_commit_invalid_does_not_push(self):
-        self.assertTrue(select_tool.handle(repo=str(self.repo), scope='uncommitted')['ok'])
+        self.assertTrue(select_tool.select(repo=str(self.repo), scope='uncommitted')['ok'])
         before = select_store.latest()['id']
-        self.assertFalse(select_tool.handle(repo=str(self.repo), scope='range', ref='--bad')['ok'])
+        self.assertFalse(select_tool.select(repo=str(self.repo), scope='range', ref='--bad')['ok'])
         self.assertEqual(select_store.latest()['id'], before)
 
     def test_sqlite_retention_ids_profile_isolation(self):
@@ -808,6 +884,43 @@ class BackendTests(unittest.TestCase):
         select_tool.register(ctx)
         ctx.register_tool.assert_called_once_with(name='git_review_select', toolset='git',
                                                  schema=select_tool.SCHEMA, handler=select_tool.handle)
+
+    def test_the_agent_sees_and_can_call_the_tool(self):
+        """Hermes's tool contract: an OpenAI function schema (name, description, parameters),
+        a handler called as handler(args, **context), and a string result. The tool used to
+        hand over a bare JSON Schema (the agent saw no description and no parameters) and
+        return a dict, which Hermes rejects ("unsupported result type: dict")."""
+        schema = select_tool.SCHEMA
+        self.assertEqual(schema['name'], 'git_review_select')
+        self.assertTrue(schema['description'].strip())
+        self.assertEqual(schema['parameters']['type'], 'object')
+        self.assertIn('path', schema['parameters']['properties'])
+        out = select_tool.handle({'repo': str(self.repo), 'scope': 'uncommitted', 'path': 'file.txt'},
+                                 task_id='t1')
+        self.assertIsInstance(out, str)
+        result = json.loads(out)
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(select_store.latest()['path'], 'file.txt')
+        bad = json.loads(select_tool.handle({'repo': str(self.repo), 'scope': 'nope'}))
+        self.assertFalse(bad['ok'])
+
+class ProfileHomeTest(unittest.TestCase):
+    def test_plugin_data_follows_the_served_profile_not_the_process_env(self):
+        """A multiplexed gateway serves several profiles from one process whose HERMES_HOME
+        is the launch profile; the served profile is a context-local override. The agent's
+        selection must land in the served profile's data, where its pane polls (seen live:
+        it went to the launch profile and the pane never moved)."""
+        import types
+        stub = types.ModuleType('hermes_constants')
+        stub.get_hermes_home = lambda: Path('/homes/served')
+        with patch.dict(sys.modules, {'hermes_constants': stub}), \
+             patch.dict(os.environ, {'HERMES_HOME': '/homes/launch'}):
+            self.assertEqual(select_store.data_root(), Path('/homes/served/plugin-data/git-review'))
+            self.assertEqual(gitx.hermes_home(), Path('/homes/served'))
+        with patch.dict(sys.modules, {'hermes_constants': None}), \
+             patch.dict(os.environ, {'HERMES_HOME': '/homes/launch'}):
+            self.assertEqual(gitx.hermes_home(), Path('/homes/launch'))
+
 
 if __name__ == '__main__':
     unittest.main()

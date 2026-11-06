@@ -1,6 +1,7 @@
 // Effect-driven plugin tests; SDK is a Node test double, never SDK layout proof.
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { commits as fixtureCommits } from './fixtures.mjs'
 import { mount, gutterDown, byClass, byLabel, click, text, select, paths, latestDiff, hasClass, file } from './render-harness.mjs'
 import { files, treeFiles, repo, makeContext, commits } from './fixtures.mjs'
 import { act } from './render-harness.mjs'
@@ -145,6 +146,7 @@ test('60 full SHAs are sent intact and history truncation remains visible beside
 
 test('branch picker picks a comparison base: never checks anything out, adds no scope of its own', async t => {
   const { root, requests } = await mount(t)
+  await select(root, 'Branch')
   const branchMenu = root.findAll(n => (n.props.className || '').includes('repo-menu') && text(n).includes('main'))[0]
   assert.ok(branchMenu, 'branch menu missing')
   assert.ok(!requests.some(r => /checkout|switch/.test(r.url)))
@@ -533,6 +535,7 @@ test('a hidden run renders one expander, never two stacked', async t => {
 
 test('menu rows share one label slot, and the churn colours survive the portal', async t => {
   const { root } = await mount(t)
+  await select(root, 'Branch')
   // A menu portals to document.body, outside .grd, so a menu surface has to
   // carry the class the stylesheet scopes its own content to — otherwise the
   // churn colours, group headers and scroll cap silently stop applying.
@@ -635,4 +638,113 @@ test('pane settings are scoped to profile and connection, never to the workspace
   assert.equal(A, settingsKeyFor(JSON.stringify(['conn', 'default'])), 'the same scope is stable across renders')
   assert.equal(A, `display.v1:${JSON.stringify(['conn', 'default'])}`, 'the key carries profile and connection only')
   assert.ok(A.startsWith('display.v1:'), 'the key stays versioned so a future shape can migrate')
+})
+
+
+test('the base control reads as a comparison, not as the checked-out branch', async (t) => {
+  const { root } = await mount(t)
+  await select(root, 'Branch')
+  const base = root.findAll(n => typeof n.props.title === 'string' && n.props.title.startsWith('Compare against '))
+  assert.ok(base.length >= 1, 'base control carries a "Compare against …" title')
+  assert.ok(base.some(n => n.findAll(c => c.props && c.props.name === 'git-compare').length), 'base control uses the compare icon')
+})
+
+
+test('commit history names each commit by the short hash the commit list uses', async (t) => {
+  // The toast, the navigation bar and the file groups must agree on one name per commit.
+  const { root } = await mount(t)
+  await select(root, 'Commits')
+  const shown = paths(root).map(p => p.split('/')[0])
+  assert.ok(shown.length > 0, 'commit files render')
+  const shorts = new Set(fixtureCommits.map(c => c.short))
+  assert.ok(shown.every(s => shorts.has(s)), `groups named ${[...new Set(shown)].join(', ')}`)
+})
+
+
+test('the base control shows only in the scopes that compare against a base', async (t) => {
+  // Next to a feature branch, a bare "main" in Uncommitted read as the checked-out
+  // branch (seen in demo QA); those scopes never use the base.
+  const { root } = await mount(t)
+  const baseControls = () => root.findAll(n => typeof n.props.title === 'string' && n.props.title.startsWith('Compare against '))
+  for (const scope of ['Uncommitted', 'Staged', 'Unstaged', 'Last agent turn']) {
+    await select(root, scope)
+    assert.equal(baseControls().length, 0, `${scope} shows no base control`)
+  }
+  for (const scope of ['Branch', 'Commits']) {
+    await select(root, scope)
+    assert.ok(baseControls().length >= 1, `${scope} names the base it compares against`)
+  }
+})
+
+
+test('file headers and the search field do not clip or pad short labels', () => {
+  const css = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(css, /\.af-head \.fname\{[^}]*min-width:min\(9ch/, 'a short file name gets no forced minimum width')
+  assert.match(css, /\.search-field input\{[^}]*text-overflow:ellipsis/, 'a narrow pane ends the placeholder with an ellipsis')
+})
+
+test('stage and discard stay on screen in every file header, not only on hover', async t => {
+  const { root } = await mount(t)
+  const css = root.findAll(n => n.type === 'style').map(n => (n.children || []).join('')).join('')
+  const rule = css.match(/\.grd \.af-act\{[^}]*\}/)
+  assert.ok(rule, 'the header action rule must exist')
+  assert.ok(!/opacity:0[;}]/.test(rule[0]), 'header actions must not be invisible until hover')
+  assert.ok(!/\.af-acts\{[^}]*visibility:hidden/.test(css), 'narrow docks must not hide the actions until hover')
+  assert.ok(!/af-head:hover \.af-acts?\b/.test(css), 'no header action may depend on hover to appear')
+})
+
+test('stepping to another commit never shows the previous commit under the new header', async t => {
+  // Seen live: after "Older commit" the bar named the docs commit while the diff still
+  // showed the previous commit's files, for as long as the new diff took to load.
+  const one = (path) => [`diff --git a/${path} b/${path}`, `--- a/${path}`, `+++ b/${path}`, '@@ -1,1 +1,2 @@', ' a', '+b'].join('\n')
+  const second = deferred()
+  const { root } = await instrument(t, (u, fallback) => {
+    if (u.pathname !== '/diff' || u.searchParams.get('scope') !== 'commits') return fallback()
+    const ref = u.searchParams.get('ref') || ''
+    if (ref === commits[1].sha) return second.promise
+    return Promise.resolve({ commits: ref.split(',').filter(Boolean).map(sha => ({ sha, patch: one(sha === commits[0].sha ? 'newest.ts' : 'other.ts') })), added: 1, removed: 0 })
+  })
+  await select(root, 'Commits')
+  await select(root, 'Browse commit by commit')
+  assert.deepEqual(paths(root).map(p => p.split('/').at(-1)), ['newest.ts'])
+  await click(byLabel(root, 'Older commit'))
+  assert.match(text(root.findAll(n => n.props['aria-label'] === 'Commit navigation')[0]), new RegExp(commits[1].short))
+  assert.deepEqual(paths(root).map(p => p.split('/').at(-1)), [], 'the newest commit must not stay on screen under the older commit')
+  await act(async () => second.resolve({ commits: [{ sha: commits[1].sha, patch: one('older.ts') }], added: 1, removed: 0 }))
+  assert.deepEqual(paths(root).map(p => p.split('/').at(-1)), ['older.ts'])
+})
+
+test('the commit position stays visible however long the subject is', async t => {
+  const long = commits.map((c, i) => i === 0 ? { ...c, subject: 'feat: ' + 'a very long subject '.repeat(12) } : c)
+  const { root } = await instrument(t, (u, fallback) => u.pathname === '/commits' ? Promise.resolve({ commits: long, base: 'origin/main' }) : fallback())
+  await select(root, 'Commits')
+  await select(root, 'Browse commit by commit')
+  const nav = root.findAll(n => n.props['aria-label'] === 'Commit navigation')[0]
+  const pos = nav.findAll(n => n.props.className === 'commit-pos')[0]
+  assert.ok(pos, 'the position has its own slot')
+  assert.equal(text(pos), `1/${long.length}`)
+  assert.equal(pos.props.style.flex, '0 0 auto', 'it never shrinks into the ellipsis')
+})
+
+test('a search that matches only the changes still lists those files in the tree', async t => {
+  // Seen live: "feet" narrowed the diff to the files whose changes say "feet", while
+  // the folder tree went empty because it filtered the names a second time.
+  const { root } = await mount(t)
+  const search = root.findAll(n => n.props['aria-label'] === 'Search files' && typeof n.props.onChange === 'function')[0]
+  await act(async () => search.props.onChange('new-second'))
+  assert.deepEqual(paths(root), [files[0]], 'the diff keeps the file whose changes match')
+  const treeRows = root.findAll(n => n.type === 'button' && hasClass(n, 'file')).map(n => text(n))
+  assert.equal(treeRows.length, 1, 'the tree lists it too')
+  assert.match(treeRows[0], /main\.ts/)
+  await act(async () => search.props.onChange(''))
+})
+
+test('browsing one commit at a time, the scope names no count beside the position', async t => {
+  const { root } = await mount(t)
+  await select(root, 'Commits')
+  await select(root, 'Browse commit by commit')
+  const labels = root.findAll(n => typeof n.type === 'string' && (n.children || []).some(c => typeof c === 'string' && /^Commits\b/.test(c)))
+    .flatMap(n => n.children.filter(c => typeof c === 'string'))
+  assert.ok(labels.includes('Commits'), 'the scope still says Commits')
+  assert.ok(!labels.some(l => /^Commits \(1\)/.test(l)), 'no "(1)" next to "1/27"')
 })

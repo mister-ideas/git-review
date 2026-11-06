@@ -2,6 +2,32 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
+## 0.3.0 — unreleased
+
+The agent's turn, exactly; the agent drives the pane again; and the review-to-commit path is reliable end to end.
+
+### Fixed
+- **"Last agent turn" shows only the turn's own changes.** The baseline was the commit the turn started from, so edits an earlier turn left uncommitted showed again, and an untracked file the agent edited did not show at all. When you send a message the plugin now records a snapshot of the working tree, into its own data directory with a throwaway index (the repository's index and objects are never written), and the turn is the diff from it. Snapshots are pruned (16 kept, three days); untracked files above 64 MiB in total, a pruned snapshot or an older client fall back to the previous behaviour. The turn starts on a send, not on any rise of Desktop's busy state, which a session resync could set after the turn had ended.
+- **The new commit is named with git's own abbreviation**, and the Commits scope groups each commit's files under the same short hash the commit list shows.
+- **The base control reads as a comparison** ("Compare against main"), not as the checked-out branch, and shows only in Branch and Commits, the scopes that use it.
+- **Short file names sit next to their folder**, and the search placeholder ends in an ellipsis instead of being clipped.
+- **Reads its settings through Hermes's public plugin API.** The backend parsed `config.yaml` with an undocumented core module, which `hermes plugins validate` flags under catalog rule 9. It now uses `hermes_cli.config`, which also follows the served profile.
+- **Search shows its matches in the folder tree.** A search that matched a file's changes but not its name narrowed the diff correctly, but the folder tree filtered the names again and went empty. The tree now lists exactly the files the search found (the flat list already did).
+- **Stepping through commits never shows the wrong commit.** After Older or Newer commit, the previous commit's diff stayed on screen under the new commit's header until the new diff loaded (seconds, the first time). Changing the commit, scope or file filter now shows the loading state instead; a refresh of the same view still never flickers.
+- **The commit position stays visible.** A long subject no longer pushes "1/2" into the ellipsis, and the scope no longer reads "Commits (1)" beside it.
+- **Stage, Unstage and Discard stay on screen.** They appeared only while the pointer was over a file header (and on narrow docks were hidden outright), so they were easy to miss. They now sit in every header in the copy button's quiet colour, brightening on hover. The header icons share one rhythm: 18px apart, 16px after the counts, 12px from either edge.
+- **The agent can drive the pane again.** On current Hermes the `git_review_select` tool reached the agent with no description and no parameters, and its answer was rejected (`unsupported result type: dict`), so asking Hermes to show a change in git-review failed. The tool now registers a full function schema, takes its arguments the way Hermes passes them, and answers in text.
+- **A selection reaches the right profile's pane.** Under a gateway serving several profiles, the agent's request was written to the launch profile's plugin data, so the pane of the profile you were chatting in never moved. The plugin now reads the served profile's home, as Hermes resolves it.
+
+### Changed
+- **⌘⌥G / Ctrl+Alt+G toggles the pane** ([#41](https://github.com/mister-ideas/git-review/issues/41)).
+  Pressed while the pane is on screen, it minimizes the pane, which keeps its place and
+  settings. Pressed again, the pane comes back. The palette row is the same action and
+  reads **Toggle git review**. The action id stays `git-review.open`, so a shortcut
+  you rebound keeps working. This needs `host.togglePane` in Hermes Desktop
+  ([NousResearch/hermes-agent#147157](https://github.com/NousResearch/hermes-agent/pull/147157)).
+  An older Desktop keeps the open-only shortcut and the **Open git review** label.
+
 ## 0.2.2 — 2026-10-27
 
 ### Fixed

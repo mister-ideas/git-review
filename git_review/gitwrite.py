@@ -254,7 +254,9 @@ def commit(repo: str, message: str, *, push: bool = False, trusted: bool = False
                 raise gitx.GitError("nothing to commit")
         _git(repo, "commit", "-q", "-m", text, trusted=trusted)
     sha = gitx._commit_sha(repo, "HEAD")
-    result = {"ok": True, "sha": sha, "short": sha[:8], "subject": text.splitlines()[0][:120]}
+    # git's own abbreviation, the one the commit list shows (%h), so both name it alike.
+    short = gitx._run(repo, "rev-parse", "--short", sha).strip() or sha[:8]
+    result = {"ok": True, "sha": sha, "short": short, "subject": text.splitlines()[0][:120]}
     if push:
         result["push"] = push_branch(repo, trusted=trusted)
     return result
