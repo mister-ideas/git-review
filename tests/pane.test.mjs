@@ -682,3 +682,13 @@ test('file headers and the search field do not clip or pad short labels', () => 
   assert.doesNotMatch(css, /\.af-head \.fname\{[^}]*min-width:min\(9ch/, 'a short file name gets no forced minimum width')
   assert.match(css, /\.search-field input\{[^}]*text-overflow:ellipsis/, 'a narrow pane ends the placeholder with an ellipsis')
 })
+
+test('stage and discard stay on screen in every file header, not only on hover', async t => {
+  const { root } = await mount(t)
+  const css = root.findAll(n => n.type === 'style').map(n => (n.children || []).join('')).join('')
+  const rule = css.match(/\.grd \.af-act\{[^}]*\}/)
+  assert.ok(rule, 'the header action rule must exist')
+  assert.ok(!/opacity:0[;}]/.test(rule[0]), 'header actions must not be invisible until hover')
+  assert.ok(!/\.af-acts\{[^}]*visibility:hidden/.test(css), 'narrow docks must not hide the actions until hover')
+  assert.ok(!/af-head:hover \.af-acts?\b/.test(css), 'no header action may depend on hover to appear')
+})

@@ -5,6 +5,7 @@ All notable changes to this plugin. Versions follow [SemVer](https://semver.org)
 ## Unreleased
 
 ### Fixed
+- **Stage, Unstage and Discard stay on screen.** They appeared only while the pointer was over a file header (and on narrow docks were hidden outright), so they were easy to miss. They now sit in every header in the copy button's quiet colour, brightening on hover. The header icons share one rhythm: 18px apart, 16px after the counts, 12px from either edge.
 - **The agent can drive the pane again.** On current Hermes the `git_review_select` tool reached the agent with no description and no parameters, and its answer was rejected (`unsupported result type: dict`), so asking Hermes to show a change in git-review failed. The tool now registers a full function schema, takes its arguments the way Hermes passes them, and answers in text.
 - **A selection reaches the right profile's pane.** Under a gateway serving several profiles, the agent's request was written to the launch profile's plugin data, so the pane of the profile you were chatting in never moved. The plugin now reads the served profile's home, as Hermes resolves it.
 

@@ -467,15 +467,20 @@ const css = `
 .grd .af-head .fdir{flex:1 1 0;color:var(--ui-text-tertiary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grd .af-copy{display:inline-flex;color:var(--ui-text-tertiary);cursor:pointer}
 .grd .af-copy:hover{color:var(--ui-text-secondary)}
-/* Stage / unstage / discard: quiet until the header is hovered or focused. */
-.grd .af-acts{display:inline-flex;justify-content:flex-end;flex:0 0 auto;width:calc(3 * var(--gr-act, 28px))}
-.grd .af-act{display:inline-flex;color:var(--ui-text-secondary);opacity:0;transition:opacity .12s;width:var(--gr-act, 28px);height:var(--gr-act, 28px)}
-.grd .af-head:hover .af-act,.grd .af-head:focus-within .af-act{opacity:1}
-.grd .af-act:hover{color:var(--ui-text-primary)}
-@media (hover:none){.grd .af-act{opacity:1}}
-/* Narrow docks: no reserved slot. The actions float over the counts while the header is
-   hovered, so the name keeps the room the rest of the time. */
-@media (hover:hover){@container(max-width:480px){.grd .af-acts{position:absolute;right:44px;top:50%;transform:translateY(-50%);width:auto;padding-left:6px;background:var(--ui-surface-background);visibility:hidden}.grd .af-head:hover .af-acts,.grd .af-head:focus-within .af-acts{visibility:visible}}}
+/* Stage / unstage / discard: always on screen, in the copy button's quiet colour, so a
+   file's actions are found without hunting for them. One spacing for every icon: the
+   actions and the copy button sit in one row, 2px apart, the same as Desktop's toolbars. */
+.grd .af-acts{display:inline-flex;align-items:center;justify-content:flex-end;gap:2px;flex:0 0 auto;min-width:calc(2 * var(--gr-act, 28px) + 2px)}
+.grd .af-act{display:inline-flex;color:var(--ui-text-tertiary);width:var(--gr-act, 28px);height:var(--gr-act, 28px)}
+.grd .af-act:hover,.grd .af-act:focus-visible{color:var(--ui-text-primary)}
+.grd .af-acts + .af-copy{margin-left:-6px}
+.grd .af-head .af-copy{width:var(--gr-act, 28px);height:var(--gr-act, 28px);justify-content:center}
+/* The last icon button carries its own 8px inset: the header ends 4px later, so the
+   icon sits 12px from the edge, as the chevron does on the left. */
+.grd .af-head{padding-right:4px}
+/* Narrow docks: no reserved slot, so a file with one action does not give up the
+   room of three. The counts then follow each file's own actions. */
+@container(max-width:480px){.grd .af-acts{min-width:0}}
 .grd .af-head .ftype{color:var(--ui-text-tertiary);flex-shrink:0}
 .grd .af-staged{flex-shrink:0;font-size:10.5px;line-height:1;padding:2px 5px;border-radius:4px;color:var(--ui-text-secondary);border:1px solid var(--ui-stroke-tertiary);white-space:nowrap}
 /* Narrow docks: the badge becomes a dot (full text in its tooltip), the name keeps the room. */
