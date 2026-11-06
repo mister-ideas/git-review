@@ -223,11 +223,6 @@ function countFiles(node) {
   return n;
 }
 
-function subtreeHas(node, q) {
-  if ((node.__files || []).some((f) => f.toLowerCase().includes(q))) return true;
-  return Object.keys(node).filter((k) => k !== "__files").some((k) => subtreeHas(node[k], q));
-}
-
 // Per-status codicon + tone (mirrors core review STATUS_GLYPH). Tones are the
 // pane's own classes, not Tailwind utilities: Desktop's CSS only contains the
 // utilities core itself uses, so `text-(--ui-blue)` (never used by core) left
@@ -642,7 +637,8 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot, flat = false,
       const path = prefix ? `${prefix}/${folder}` : folder;
       const subtree = node[key];
       const filesUnder = countFiles(subtree);
-      if (q && !subtreeHas(subtree, q)) continue;
+      // `tree` is already narrowed by the search (names and changes alike); while a
+      // search is on, every folder opens so its matches show.
       const isOpen = q ? true : open[path] !== false;
       rows.push(jsxs("div", { className: "folder", style: { paddingLeft: 10 + depth * 12 }, role: "button", tabIndex: 0, "aria-expanded": isOpen, onClick: () => setOpen((o) => ({ ...o, [path]: !(o[path] !== false) })), onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((o) => ({ ...o, [path]: !(o[path] !== false) })); } }, children: [
         jsx(Codicon, { name: isOpen ? "folder-opened" : "folder", size: "0.8rem" }),
@@ -652,7 +648,6 @@ function Tree({ tree, filter, selected, onSelect, stats, repoRoot, flat = false,
       if (isOpen) rows.push(...renderNode(subtree, path, depth + 1));
     }
     for (const file of node.__files || []) {
-      if (q && !file.toLowerCase().includes(q)) continue;
       rows.push(fileRow(file, depth));
     }
     return rows;

@@ -5,6 +5,7 @@ All notable changes to this plugin. Versions follow [SemVer](https://semver.org)
 ## Unreleased
 
 ### Fixed
+- **Search shows its matches in the folder tree.** A search that matched a file's changes but not its name narrowed the diff correctly, but the folder tree filtered the names again and went empty. The tree now lists exactly the files the search found (the flat list already did).
 - **Stepping through commits never shows the wrong commit.** After Older or Newer commit, the previous commit's diff stayed on screen under the new commit's header until the new diff loaded (seconds, the first time). Changing the commit, scope or file filter now shows the loading state instead; a refresh of the same view still never flickers.
 - **The commit position stays visible.** A long subject no longer pushes "1/2" into the ellipsis.
 - **Stage, Unstage and Discard stay on screen.** They appeared only while the pointer was over a file header (and on narrow docks were hidden outright), so they were easy to miss. They now sit in every header in the copy button's quiet colour, brightening on hover. The header icons share one rhythm: 18px apart, 16px after the counts, 12px from either edge.

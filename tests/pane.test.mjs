@@ -725,3 +725,16 @@ test('the commit position stays visible however long the subject is', async t =>
   assert.equal(text(pos), `1/${long.length}`)
   assert.equal(pos.props.style.flex, '0 0 auto', 'it never shrinks into the ellipsis')
 })
+
+test('a search that matches only the changes still lists those files in the tree', async t => {
+  // Seen live: "feet" narrowed the diff to the files whose changes say "feet", while
+  // the folder tree went empty because it filtered the names a second time.
+  const { root } = await mount(t)
+  const search = root.findAll(n => n.props['aria-label'] === 'Search files' && typeof n.props.onChange === 'function')[0]
+  await act(async () => search.props.onChange('new-second'))
+  assert.deepEqual(paths(root), [files[0]], 'the diff keeps the file whose changes match')
+  const treeRows = root.findAll(n => n.type === 'button' && hasClass(n, 'file')).map(n => text(n))
+  assert.equal(treeRows.length, 1, 'the tree lists it too')
+  assert.match(treeRows[0], /main\.ts/)
+  await act(async () => search.props.onChange(''))
+})
