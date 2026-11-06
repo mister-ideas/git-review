@@ -2,9 +2,15 @@
 
 All notable changes to this plugin. Versions follow [SemVer](https://semver.org); each release is a `vX.Y.Z` tag with a GitHub Release.
 
-## Unreleased
+## 0.3.0 — unreleased
+
+The agent's turn, exactly; the agent drives the pane again; and the review-to-commit path is reliable end to end.
 
 ### Fixed
+- **"Last agent turn" shows only the turn's own changes.** The baseline was the commit the turn started from, so edits an earlier turn left uncommitted showed again, and an untracked file the agent edited did not show at all. When you send a message the plugin now records a snapshot of the working tree, into its own data directory with a throwaway index (the repository's index and objects are never written), and the turn is the diff from it. Snapshots are pruned (16 kept, three days); untracked files above 64 MiB in total, a pruned snapshot or an older client fall back to the previous behaviour. The turn starts on a send, not on any rise of Desktop's busy state, which a session resync could set after the turn had ended.
+- **The new commit is named with git's own abbreviation**, and the Commits scope groups each commit's files under the same short hash the commit list shows.
+- **The base control reads as a comparison** ("Compare against main"), not as the checked-out branch, and shows only in Branch and Commits, the scopes that use it.
+- **Short file names sit next to their folder**, and the search placeholder ends in an ellipsis instead of being clipped.
 - **Reads its settings through Hermes's public plugin API.** The backend parsed `config.yaml` with an undocumented core module, which `hermes plugins validate` flags under catalog rule 9. It now uses `hermes_cli.config`, which also follows the served profile.
 - **Search shows its matches in the folder tree.** A search that matched a file's changes but not its name narrowed the diff correctly, but the folder tree filtered the names again and went empty. The tree now lists exactly the files the search found (the flat list already did).
 - **Stepping through commits never shows the wrong commit.** After Older or Newer commit, the previous commit's diff stayed on screen under the new commit's header until the new diff loaded (seconds, the first time). Changing the commit, scope or file filter now shows the loading state instead; a refresh of the same view still never flickers.
