@@ -1056,6 +1056,7 @@ function GitReview({ ctx }) {
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
   const generation = useRef(0);
+  const diffView = useRef("");
   const focusGeneration = useRef(0);
   const chooseRepository = (repo) => {
     ++focusGeneration.current;
@@ -1572,6 +1573,12 @@ function GitReview({ ctx }) {
     if (scope === "agent_turn") return; // served by the /turn-diff effect above
     const live = LIVE_SCOPES.has(scope) || scope === "branch";
     const current = ++generation.current;
+    // A diff answers one question. When the question changes (another commit, scope,
+    // file filter...), the old answer must not stay on screen under the new header
+    // while the new one loads: clear it and let the loading state show. A refresh of
+    // the same view keeps it, so live polling never flickers.
+    const view = JSON.stringify([chosen, scope, base, ref, commitsRef, pathFilter, ignoreWs, showUntracked]);
+    if (diffView.current !== view) { diffView.current = view; setDiff(null); }
     let timer;
     let gone = false;
     let loaded = false;
@@ -2270,7 +2277,9 @@ const CITABLE_SCOPES = new Set(["uncommitted", "unstaged", "staged", "agent_turn
     (scope === "commits" && navIndex >= 0 && commits[navIndex]) && jsxs("div", { className: "notice commit-nav", role: "navigation", "aria-label": "Commit navigation", style: { display: "flex", alignItems: "center", gap: 6 }, children: [
       jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex <= 0, "aria-label": "Newer commit", onClick: () => goCommit(navIndex - 1), children: "◀" }),
       jsx(Button, { size: "icon", variant: "ghost", disabled: navIndex >= commits.length - 1 && !hasMore, "aria-label": "Older commit", onClick: () => (navIndex >= commits.length - 1 ? loadOlder() : goCommit(navIndex + 1)), children: "▶" }),
-      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()}${wholeHistorySelected ? "" : ` (${navIndex + 1}/${commits.length}${hasMore ? "+" : ""})`}` }),
+      jsx("span", { style: { flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: commits[navIndex].subject, children: `${commits[navIndex].short} · ${commits[navIndex].subject} — ${commits[navIndex].author}, ${new Date(commits[navIndex].at * 1000).toLocaleDateString()}` }),
+      // The position never shares the ellipsis: a long subject used to hide it.
+      !wholeHistorySelected && jsx("span", { className: "commit-pos", style: { flex: "0 0 auto", color: "var(--ui-text-tertiary)", fontVariantNumeric: "tabular-nums" }, children: `${navIndex + 1}/${commits.length}${hasMore ? "+" : ""}` }),
       jsx(Button, { size: "sm", variant: "ghost", onClick: () => { setNavIndex(-1); setPicked(new Set(commits.map((c) => c.sha))); }, children: "All commits" })
     ] }),
     (scope === "commits" && historyNote) && jsx("div", { className: "notice", role: "status", children: historyNote }),

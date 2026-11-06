@@ -692,3 +692,36 @@ test('stage and discard stay on screen in every file header, not only on hover',
   assert.ok(!/\.af-acts\{[^}]*visibility:hidden/.test(css), 'narrow docks must not hide the actions until hover')
   assert.ok(!/af-head:hover \.af-acts?\b/.test(css), 'no header action may depend on hover to appear')
 })
+
+test('stepping to another commit never shows the previous commit under the new header', async t => {
+  // Seen live: after "Older commit" the bar named the docs commit while the diff still
+  // showed the previous commit's files, for as long as the new diff took to load.
+  const one = (path) => [`diff --git a/${path} b/${path}`, `--- a/${path}`, `+++ b/${path}`, '@@ -1,1 +1,2 @@', ' a', '+b'].join('\n')
+  const second = deferred()
+  const { root } = await instrument(t, (u, fallback) => {
+    if (u.pathname !== '/diff' || u.searchParams.get('scope') !== 'commits') return fallback()
+    const ref = u.searchParams.get('ref') || ''
+    if (ref === commits[1].sha) return second.promise
+    return Promise.resolve({ commits: ref.split(',').filter(Boolean).map(sha => ({ sha, patch: one(sha === commits[0].sha ? 'newest.ts' : 'other.ts') })), added: 1, removed: 0 })
+  })
+  await select(root, 'Commits')
+  await select(root, 'Browse commit by commit')
+  assert.deepEqual(paths(root).map(p => p.split('/').at(-1)), ['newest.ts'])
+  await click(byLabel(root, 'Older commit'))
+  assert.match(text(root.findAll(n => n.props['aria-label'] === 'Commit navigation')[0]), new RegExp(commits[1].short))
+  assert.deepEqual(paths(root).map(p => p.split('/').at(-1)), [], 'the newest commit must not stay on screen under the older commit')
+  await act(async () => second.resolve({ commits: [{ sha: commits[1].sha, patch: one('older.ts') }], added: 1, removed: 0 }))
+  assert.deepEqual(paths(root).map(p => p.split('/').at(-1)), ['older.ts'])
+})
+
+test('the commit position stays visible however long the subject is', async t => {
+  const long = commits.map((c, i) => i === 0 ? { ...c, subject: 'feat: ' + 'a very long subject '.repeat(12) } : c)
+  const { root } = await instrument(t, (u, fallback) => u.pathname === '/commits' ? Promise.resolve({ commits: long, base: 'origin/main' }) : fallback())
+  await select(root, 'Commits')
+  await select(root, 'Browse commit by commit')
+  const nav = root.findAll(n => n.props['aria-label'] === 'Commit navigation')[0]
+  const pos = nav.findAll(n => n.props.className === 'commit-pos')[0]
+  assert.ok(pos, 'the position has its own slot')
+  assert.equal(text(pos), `1/${long.length}`)
+  assert.equal(pos.props.style.flex, '0 0 auto', 'it never shrinks into the ellipsis')
+})
